@@ -1,0 +1,143 @@
+package ABO::FilterNoaccruals;
+
+use ABO::Base;
+use ABO::TransSource;
+@ISA = qw(
+	ABO::Base
+	ABO::TransSource
+);
+
+use Carp qw(confess);
+
+# Transform a set of transactions to remove all accounts receivable,
+# thereby converting to cash-based income rather than accrual-based
+# income.  If a receivable account has been overcredited, then the
+# credit is retained under that account so it shows up as a payable.
+
+sub init
+{
+	my ($self, $ts) = @_;
+	confess "not a TransSource" unless UNIVERSAL::isa($ts, ABO::TransSource);
+	$self->{'ts'} = $ts;
+	return $self;
+}
+
+sub _ts { shift->{'ts'} }
+
+sub handle
+{
+	my $self = shift;
+	return 'filter.noaccruals='.$self->_ts->handle;
+}
+
+sub mtime
+{
+	my $self = shift;
+	return $self->_ts->mtime;
+}
+
+sub unsorted_transactions
+{
+	my $self = shift;
+	my %acc = ();
+	my %adb = ();
+	my %acr = ();
+	my @ret = ();
+
+	$self->blah("remove accruals");
+
+	for my $t ($self->_ts->transactions(@_))
+	{
+		my $dd = $t->debit->is_receivable;
+		my $dc = $t->credit->is_receivable;
+
+		if (!$dd && !$dc)
+		{
+			push @ret, $t;
+		}
+		if ($dd)
+		{
+			push @{$adb{$t->debit}}, $t;
+			$acc{$t->debit} = 1;
+		}
+		if ($dc)
+		{
+			push @{$acr{$t->credit}}, $t;
+			$acc{$t->credit} = 1;
+		}
+	}
+	my $ac;
+	for $ac (keys %acc)
+	{
+		my @cr = $acr{$ac} ? @{$acr{$ac}} : ();
+		my @db = $acr{$ac} ? @{$adb{$ac}} : ();
+		while (@cr)
+		{
+			my $cr = shift @cr;
+			my $amt = $cr->amount->clone;
+
+			while ($amt > 0 && @db)
+			{
+				my $db = shift @db;
+				if ($amt >= $db->amount)
+				{
+					my $t = $self->make(
+						ABO::Transaction,
+						-date => $cr->date, 
+						-cdate => $cr->cdate, 
+						-debit => $cr->debit, 
+						-credit => $db->credit, 
+						-amount=> $db->amount, 
+						-who => $cr->who, 
+						-what => $cr->what
+					) or return ();
+					push @ret, $t;
+					$amt -= $db->amount;
+				}
+				else
+				{
+					my $t = $self->make(
+						ABO::Transaction,
+						-date => $cr->date, 
+						-cdate => $cr->cdate, 
+						-debit => $cr->debit, 
+						-credit => $db->credit, 
+						-amount => $amt,
+						-who => $cr->who, 
+						-what => $cr->what
+					) or return ();
+					push @ret, $t;
+					$t = $self->make(
+						ABO::Transaction,
+						-date => $db->date, 
+						-cdate => $db->cdate, 
+						-debit => $db->debit, 
+						-credit => $db->credit, 
+						-amount => $db->amount - $amt,
+						-who => $db->who, 
+						-what => $db->what
+					) or return ();
+					unshift @db, $t;
+					$amt = $self->make_money(0);
+				}
+			}
+			if ($amt > 0)
+			{
+				my $t = $self->make(
+					ABO::Transaction,
+					-date => $cr->date, 
+					-cdate => $cr->cdate, 
+					-debit => $cr->debit, 
+					-credit => $cr->credit, 
+					-amount => $amt,
+					-who => $cr->who, 
+					-what => $cr->what
+				) or return ();
+				push @ret, $t;
+			}
+		}
+	}
+	return @ret;
+}
+
+1;

@@ -1,0 +1,109 @@
+#!/usr/bin/perl
+
+# Filter to calculate the .Total and .GST (and optionally .TotalGST) items by
+# summing the .Price, .GST, and .PriceGST items in an invoice.
+
+$GST_FACTOR = .1;
+
+$total_price = 0;
+$total_gst = 0;
+$total_price_gst = 0;
+
+$commas = 0;
+$error = 0;
+
+my @input = <>;
+my @output = ();
+
+$in_item = 0;
+for (@input) {
+	if (/^\.Item\b/o) {
+		item() if $in_item;
+		$in_item = 1;
+	}
+	elsif (/^\.Total\b/o) {
+		item() if $in_item;
+	}
+	elsif (/^\.Price\s+"?([\d,]+(\.\d*)?)/o) {
+		$price = unfmt($1);
+	}
+	elsif ($in_item && /^\.GST\s+"?([\d,]+(\.\d*)?)/o) {
+		$gst = unfmt($1);
+	}
+	elsif (/^\.PriceGST\s+"?([\d,]+(\.\d*)?)/o) {
+		$price_gst = unfmt($1);
+	}
+	push @output, $_;
+}
+item() if $in_item;
+
+sub item
+{
+	if (!defined $price_gst) {
+		if (!defined $price) {
+			push @output, '.\\" XXX missing .Price or .PriceGST', "\n";
+			$error = 1;
+		}
+		else {
+			$gst = $price * $GST_FACTOR unless defined $gst;
+			$price_gst = $price + $gst;
+		}
+	}
+	else {
+		if (defined $price) {
+			if (defined $gst && $price + $gst != $price_gst) {
+				push @output, '.\\" XXX error: Price + GST != PriceGST', "\n";
+				$error = 1;
+			}
+			else {
+				$gst = $price_gst - $price;
+			}
+		}
+		else {
+			$price = $price_gst - $gst;
+		}
+	}
+	if (!$error) {
+		$total_price_gst += $price_gst;
+		$total_price += $price;
+		$total_gst += $gst;
+	}
+	undef $price;
+	undef $gst;
+	undef $price_gst;
+	$in_item = 0;
+}
+
+$in_total = 0;
+for (@output) {
+	if (/^\.Total\b/o) {
+		print ".Total ", $error ? '""' : fmt($total_price), "\n";
+		$in_total = 1;
+	}
+	elsif ($in_total && /^\.GST\b/o) {
+		print ".GST ", $error ? '""' : fmt($total_gst), "\n";
+	}
+	elsif (/^\.TotalGST\b/o) {
+		print ".TotalGST ", $error ? '""' : fmt($total_price_gst), "\n";
+	}
+	else {
+		print;
+	}
+}
+
+sub unfmt
+{
+	my $arg = $_[0];
+	$commas = -1 if !$commas && $arg =~ /^[^.]*\d{4}/o;
+	$commas = 1 if $arg =~ s/,//og;
+	return sprintf("%.2f", $arg);
+}
+
+sub fmt
+{
+	my $arg = sprintf "%.2f", $_[0];
+	if ($commas >= 0) {
+		1 while $arg =~ s/(\d)(\d\d\d)(?=[.,])/\1,\2/og;
+	}
+	return $arg;
+}

@@ -1,0 +1,52 @@
+#!/usr/bin/perl
+
+require 5;
+use lib '/home/andrewb/lib';
+use lib '/home/andrewb/ABO/lib';
+use ABO;
+use File::Basename;
+
+($Myname = $0) =~ s!.*/!!o;
+
+my $abo = new ABO(-error => \&error);
+
+my $arg;
+for $arg (@ARGV)
+{
+	my ($doc, $handle, $file);
+	if (-f $arg)
+	{
+		$file = $arg;
+		$doc = $abo->docbase->make_document($file) or next;
+		$handle = $doc->handle;
+	}
+	else
+	{
+		$handle = $abo->docbase->make_handle($arg) or next;
+		$doc = $abo->docbase->get_document($handle) or next;
+		$file = "$handle";
+		$file =~ s,[/\s],_,og;
+	}
+
+	my $tfn = dirname($file).'/,'.basename($file);
+	open BAK, ">$tfn" or error("cannot create `$tfn' - $!"), next;
+	(print BAK $doc->body and close BAK)
+		or error("cannot write to `$tfn' - $!"), next;
+
+	$abo->docbase->delete_document($handle) or next;
+
+	unlink $file;
+	if (link $tfn, $file)
+	{
+		unlink $tfn;
+	}
+	else
+	{
+		error("cannot link `$tfn' to `$file' - $!");
+	}
+}
+
+sub error
+{
+	print STDERR "$Myname: ", @_, "\n";
+}

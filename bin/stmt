@@ -1,0 +1,338 @@
+#!/usr/bin/perl -w
+
+require 5;
+use lib '/home/andrewb/lib';
+use lib '/home/andrewb/ABO/lib';
+use feature 'unicode_strings';
+
+use Getopt::Long;
+use ABO;
+use ABO::Utils qw(:format :array max empty);
+use ABO::Paginator;
+
+$width_default = pick $ENV{'COLUMNS'}, 80;
+$width_min = 50;
+$lines_default = 0;
+
+($Myname = $0) =~ s!.*/!!o;
+sub Usage
+{
+        print STDERR
+"Usage: $Myname [-help] [<options> ...] [ <account-name> ]
+
+Print a statement of the named account, or the default account for the
+current directory if no account arg given.
+
+   -from <date>  Omit transactions before <date>, bringing forward the
+                 balance of all asset/liability accounts.
+   -to <date>    Omit transactions after <date>.
+   -file <f>     Read transactions from the named file (a file of -
+                 means standard input) instead of the ABO document base.
+   -force        Force re-compilation of all source documents.
+   -wrap         Wrap long descriptions onto following lines instead of
+                 truncating them to a single line.
+   -width N      Fit output into N columns [default $width_default, minimum $width_min].
+   -lines N      Page output into pages of N lines each [default $lines_default].
+   -ff           Eject pages using ASCII FF character instead of blank
+                 lines.
+   -crff         Eject pages using ASCII CR FF sequence instead of blank
+                 lines.
+   -troff        Produce output for input to GNU troff.
+   -notempty     Only produce output if there are one or more transactions.
+   -ext          Produce output in `external' format suitable to show to
+                 clients or suppliers.
+   -cash         Convert accrual accounts into cash accounts.
+   -verbose      Whistle as you work.
+";
+}
+
+# Parse command-line options and arguments.
+
+$opt_help = 0;
+$opt_from = '';
+$opt_to = '';
+$opt_force = 0;
+$opt_cash = 0;
+$opt_verbose = 0;
+$opt_notempty = 0;
+$opt_file = '';
+undef $opt_width;
+$opt_lines = $lines_default;
+$opt_wrap = 0;
+$opt_ff = 0;
+$opt_crff = 0;
+if (!GetOptions(
+                'help',
+                'from=s', 'to=s', 'file=s', 'force', 'cash', 'notempty',
+                'troff', 'wrap', 'width=i', 'lines=i', 'ff', 'crff', 'ext',
+                'verbose',
+        )
+)
+{
+        &Usage;
+        exit 1;
+}
+if ($opt_help)
+{
+        &Usage;
+        exit 0;
+}
+
+my $width = 0 + pick $opt_width, $ENV{'COLUMNS'}, $width_default;
+$width = $width_min if $width < $width_min;
+my $lines = $opt_lines;
+
+# Initialise accounting system.
+
+my $Abo = new ABO (
+                -error => \&error,
+                -source => $opt_file eq '-'
+                        ? \*STDIN
+                        : length($opt_file) ? $opt_file : undef,
+                -regenerate_cache => $opt_force,
+                -cash => $opt_cash,
+                -verbose => $opt_verbose,
+        ) or exit 1;
+
+# Parse -from and -to arguments.
+
+my $from = $Abo->parse_from_date($opt_from) or exit 1;
+my $to = $Abo->parse_to_date($opt_to) or exit 1;
+
+# Parse account-name argument.
+
+my $Acc = $Abo->account_list;
+my $account = @ARGV ? shift : $Abo->var('account');
+my $ac = $Acc->get_account_byname($account) or
+        error("no such account `$account'"), exit 1;
+my $is_asset = $ac->is_asset;
+my $is_receivable = $ac->is_receivable;
+my $is_payable = $ac->is_payable;
+
+# Scan through transactions.
+
+my @t = $Abo->transactions($from, $to) or exit 1;
+my @trans = ();
+for my $t (@t)
+{
+        push @trans, $t if grep { $_->account eq $account } $t->entries;
+}
+
+# If we only print non-empty statements, exit now if there are no
+# transactions.
+
+exit 0 if $opt_notempty && !@trans;
+
+# Print the report.
+
+my $dfmt = $opt_troff ? '%-d-%b-%Y' : '%_d-%b-%Y';
+my $head = $Abo->var('heading');
+my $fromto = fromtostr($from, $to);
+my $shorttitle = '';
+my $headings = '';
+my $pagenum = 0;
+
+my $ostdout;
+my $pager;
+if (!$opt_troff)
+{
+        # Set up paginated output.
+
+        open OSTDOUT, ">&STDOUT" or die "cannot dup STDOUT - $!";
+        $ostdout = \*OSTDOUT;
+        $pager = tie *STDOUT, ABO::Paginator, $ostdout or die;
+        $pager->lines_per_page($lines);
+        $pager->ff_str($opt_crff ? "\r\f" : $opt_ff ? "\f" : undef);
+        $pager->header(sub {
+                        if (++$pagenum > 1)
+                        {
+                                my $s = "Page $pagenum";
+                                my $n = $width - length($s) - 1;
+                                printf "%-${n}.${n}s $s\n", $shorttitle;
+                                print "\n";
+                                print $headings if length($headings);
+                        }
+                });
+        $pager->footer(2, sub {
+                        print "\n";
+                        printf "%${width}s\n", 'Continued...';
+                });
+}
+
+# Initialise running totals.
+
+my $td = $Abo->make_money(0);
+my $tc = $Abo->make_money(0);
+my $bal = $Abo->make_money(0);
+my $cbal = $Abo->make_money(0);
+my ($nw, $pw, $fmt);
+
+print centrestr($width, uc $head), "\n" if !$opt_troff && !empty $head;
+
+my $contr = 0;
+my $title = ($is_payable ? 'Payable: ' : $is_receivable ? 'Receivable: ' : '').
+                $ac->title;
+my $title_who = $ac->title;
+if ($opt_troff)
+{
+        print ".mso tmac.statement\n";
+        print_troff('.Statement', $opt_ext ? ('external') : ());
+        print_troff('.Account', $account, 0);
+        print_troff('.Title', $title) if length $title;
+        print_troff('.From', $from->format('%-d-%b-%Y')) if $from;
+        print_troff('.To', $to->format('%-d-%b-%Y')) if $to;
+}
+else
+{
+        print &centrestr($width,
+                'STATEMENT OF '.
+                ($is_asset ? 'ASSET-LIABILITY' : 'PROFIT-LOSS').
+                ' ACCOUNT'
+        ), "\n";
+        print &centrestr($width, $fromto), "\n" if length $fromto;
+        print "\n", &centrestr($width, uc($title)." ($account)"), "\n";
+        print "\n";
+        $shorttitle = uc($title)." ($account) ".$fromto;
+        $nw = $Abo->colwid_unsigned;
+        $bw = max(11, $Abo->colwid_signed);
+        $pw = $width - 16 - $nw -$nw - $bw;
+        $fmt = "%-11.11s  %-$pw.${pw}s %${nw}s %${nw}s %${bw}s\n";
+        $headings = sprintf($fmt,
+                'Date',
+                'Particulars',
+                $opt_ext ? ($is_asset ? ($is_receivable ? 'Invoiced' : 'Remitted')
+				      : 'Expense')
+                         : 'Debit',
+                $opt_ext ? ($is_asset ? ($is_receivable ? 'Received' : 'Billed')
+				      : 'Income')
+                        : 'Credit',
+                $opt_ext ? ($is_asset ? 'Balance due' : 'Net income') : 'Balance'
+                ).
+                sprintf($fmt, '-'x11, '-'x$pw, '-'x$nw, '-'x$nw, '-'x$bw);
+        print $headings;
+}
+my $ti;
+for ($ti = 0; $ti <= $#trans; $ti++)
+{
+        my $t = $trans[$ti];
+        my @ents = grep { $_->account eq $account } $t->entries;
+        for ($ei = 0; $ei <= $#ents; $ei++)
+        {
+                my $e = $ents[$ei];
+                my $date = $e->date;
+                my $cdate = $e->cdate;
+                my $who = $e->who;
+                my $what = $e->what;
+                my $amt = $e->amount;
+                my $nextdate = $ei != $#ents ? $ents[$ei + 1]->date
+                        : $ti != $#trans ? $trans[$ti + 1]->date
+                        : undef;
+                $contr = 1 if $date != $cdate;
+                if (!$to || $cdate <= $to)
+                {
+                        $cbal += $amt if $e->dbcr eq 'cr';
+                        $cbal -= $amt if $e->dbcr eq 'db';
+                }
+                $bal += $amt if $e->dbcr eq 'cr';
+                $bal -= $amt if $e->dbcr eq 'db';
+                if (!$from || $date >= $from)
+                {
+                        $tc += $amt if $e->dbcr eq 'cr';
+                        $td += $amt if $e->dbcr eq 'db';
+                }
+                $who = '' if similar($who, $title_who);
+                $desc = join '; ', grep { length } ($who, $what);
+                $desc = join ', ', grep { length } ($desc, $e->detail);
+                $desc .= ' due '.$cdate->format('%-d-%b-%Y') if
+                        ($is_receivable || $is_payable) && $cdate != $date;
+                my $da = $from && $date < $from ? '' : $date->format($dfmt);
+                my $db = $e->dbcr eq 'db' ? $amt : '',
+                my $cr = $e->dbcr eq 'cr' ? $amt : '',
+                my $obal = defined $nextdate && $date == $nextdate ? ''
+                        : $opt_ext && $is_receivable ? -$bal
+                        : $bal;
+                if ($opt_troff)
+                {
+                        print_troff('.Line',
+                                $da,
+                                $desc,
+                                $db,
+                                $cr,
+                                $obal
+                        );
+                }
+                else
+                {
+                        my ($part, @part) = $opt_wrap ? &wrap($desc, $pw) : ($desc);
+                        $pager->need_lines(@part + 1);
+                        printf $fmt,
+                                $da,
+                                $part,
+                                length $db ? fmtwamt($db, $nw) : '',
+                                length $cr ? fmtwamt($cr, $nw) : '',
+                                length $obal ? fmtwamt($obal, $bw) : '';
+                        printf $fmt, '', $_, '', '', '' foreach @part;
+                }
+        }
+}
+$bal = -$bal if $opt_ext && $is_receivable;
+$cbal = -$cbal if $opt_ext && $is_receivable;
+my $ou = $is_asset && $bal > 0;
+my $ov = $is_asset && $contr && (!$opt_ext || $cbal > 0);
+if ($opt_troff)
+{
+        print_troff('.Endline',
+                '',
+                $td, $tc, $bal,
+                $opt_ext && $ou ? ('outstanding') : ()
+        );
+        print_troff($opt_ext ? '.Overdue' : '.Control', $cbal) if $ov;
+}
+else
+{
+        $pager->footer(0, undef);
+        $pager->need_lines($ov ? 4 : 3);
+        printf $fmt, '', '', '-'x$nw, '-'x$nw, '-'x$bw;
+        printf $fmt, '',
+                'Totals for period',
+                fmtwamt($td, $nw), fmtwamt($tc, $nw), '';
+        printf $fmt, '',
+                'Balance'.($opt_ext && $ou ? ' outstanding' : ''),
+                '', '', fmtwamt($bal, $bw);
+        printf $fmt, '', $opt_ext ? 'Balance overdue' : 'Control balance',
+                '', '', fmtwamt($cbal, $bw) if $ov;
+}
+
+if (!$opt_troff)
+{
+        undef $pager;
+        close STDOUT;
+        untie *STDOUT;
+        *STDOUT = $ostdout;
+}
+close STDOUT;
+exit 0;
+
+sub print_troff
+{
+        print shift;
+        my @a = @_;
+        for (@a)
+        {
+                s/"/""/g;
+                print " \"$_\"";
+        }
+        print "\n";
+}
+
+sub fulltitle
+{
+        return 'Payable: '.$ac->title if $is_payable;
+        return 'Receivable: '.$ac->title if $is_receivable;
+        return $ac->title;
+}
+
+sub error
+{
+        print STDERR "$Myname: ", @_, "\n";
+}

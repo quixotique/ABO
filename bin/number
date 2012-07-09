@@ -1,0 +1,80 @@
+#!/usr/bin/perl
+
+for (@ARGV)
+{
+	if (/^\d+$/o)
+	{
+		print &number($_ + 0), "\n";
+	}
+	elsif (/^\$(\d*)(?:\.(\d\d))?$/o)
+	{
+		my ($d, $c) = ($1, $2);
+		print &number($d + 0), " dollars";
+		print " and ", &number($c + 0), " cents" if length $c;
+		print "\n";
+	}
+	elsif (/^(\d*)(?:\.(\d+))$/o)
+	{
+		my ($i, $f) = ($1, $2);
+		print &number($i + 0);
+		if (length $f)
+		{
+			print " point";
+			for (split //, $f)
+			{
+				print " ", &number($_ + 0);
+			}
+		}
+		print "\n";
+	}
+	else
+	{
+		print "$_\n";
+	}
+}
+
+sub number
+{
+	my $n = shift;
+	my $s = '';
+	my $sign = '';
+	if ($n < 0)
+	{
+		$sign .= 'minus ';
+		$n = -$n;
+	}
+	if ($n >= 1000000)
+	{
+		$s .= ' ' if length $s;
+		$s .= &number($n / 1000000).' million';
+		$n %= 1000000;
+	}
+	if ($n >= 1000)
+	{
+		$s .= ' ' if length $s;
+		$s .= &number($n / 1000).' thousand';
+		$n %= 1000;
+	}
+	if ($n >= 100)
+	{
+		$s .= ' ' if length $s;
+		$s .= &number($n / 100).' hundred';
+		$n %= 100;
+	}
+	return $sign.$s if $n == 0 && length $s;
+	$s .= ' and ' if length $s;
+	if ($n >= 20)
+	{
+		$s .= (	'twenty', 'thirty', 'forty', 'fifty', 'sixty',
+			'seventy', 'eighty', 'ninety')[$n / 10 - 2];
+		$n %= 10;
+		$s .= '-' if $n;
+	}
+	die "\$n = $n" if $n >= 20;
+	return $sign.$s if $n == 0 && length $s;
+	$s .= (	'zero', 'one', 'two', 'three', 'four', 'five', 'six',
+		'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+		'thirteen', 'fourteen', 'fifteen', 'sixteen',
+		'seventeen', 'eighteen', 'nineteen')[$n];
+	return $sign.$s;
+}

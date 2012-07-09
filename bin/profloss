@@ -1,0 +1,357 @@
+#!/usr/bin/perl -w
+
+require 5;
+use lib '/home/andrewb/lib';
+use lib '/home/andrewb/ABO/lib';
+use Getopt::Long;
+use ABO;
+use ABO::Utils qw(:all);
+
+($Myname = $0) =~ s!.*/!!o;
+$width_default = pick $ENV{'COLUMNS'}, 80;
+sub usage
+{
+	my $fh = shift;
+	print $fh "Usage: $Myname [-total] [-cash] [-verbose] [from start|<date>] [to now|<date>] ...\n";
+}
+
+sub printac ($\@\@&);
+sub difference (\@\@);
+sub total (\@\@);
+sub sum (@);
+
+# Parse command-line options and arguments.
+
+$opt_cashflow = $Myname =~ /cash/o;
+$opt_file = '';
+$opt_force = 0;
+$opt_cash = 0;
+$opt_total = 0;
+$opt_verbose = 0;
+if (!GetOptions('file=s', 'total', 'cash', 'force', 'verbose'))
+{
+	usage(*STDERR);
+	exit 1;
+}
+
+# Initialise accounting system.
+
+my $Abo = new ABO (
+		-error => sub { print STDERR "$Myname: ", @_, "\n"; },
+		-source => $opt_file eq '-'
+			? \*STDIN
+			: length($opt_file) ? $opt_file : undef,
+		-regenerate_cache => $opt_force,
+		-cash => $opt_cash,
+		-verbose => $opt_verbose,
+	) or exit 1;
+
+# Parse date arguments.
+
+my @period = ();
+my $from;
+my $to;
+while (@ARGV)
+{
+	my $word = shift;
+	my $date = shift;
+	if ($word eq 'from')
+	{
+		if (!defined $date)
+		{
+			print STDERR "$Myname: `from' missing date\n";
+			usage(*STDERR);
+			exit 1;
+		}
+		my $prev_from = $from;
+		$from = $Abo->parse_from_date($date) or exit 1;
+		push @period, [$prev_from, $from ne '.' ? $from - 1 : $Abo->today]
+			if $prev_from;
+		undef $to;
+	}
+	elsif ($word eq 'to')
+	{
+		if (!defined $date)
+		{
+			print STDERR "$Myname: `to' missing date\n";
+			usage(*STDERR);
+			exit 1;
+		}
+		$from = $to ? $to eq '.' ? $to : $to + 1 : $Abo->default_from
+			if !defined $from;
+		$to = $Abo->parse_to_date($date) or exit 1;
+		if (!defined $from)
+		{
+			print STDERR "$Myname: `to' missing 'from'\n";
+			usage(*STDERR);
+			exit 1;
+		}
+		push @period, [$from, $to];
+		undef $from;
+	}
+	else
+	{
+		print STDERR "$Myname: unrecognised word `$word'\n";
+		usage(*STDERR);
+		exit 1;
+	}
+}
+if (defined $from || @period == 0)
+{
+	push @period, [$from, $Abo->today];
+}
+
+sub all
+{
+	return 1;
+}
+
+sub deductable
+{
+	my $ac = shift;
+	return $ac->is_profit && $ac->category ne 'nd' && $ac->category ne 'tax';
+}
+
+sub tax_paid
+{
+	my $ac = shift;
+	return $ac->is_profit && $ac->category eq 'tax';
+}
+
+sub non_deductable
+{
+	my $ac = shift;
+	return $ac->is_profit && $ac->category eq 'nd';
+}
+
+sub cash
+{
+	my $ac = shift;
+	return $ac->category ne 'cash';
+}
+
+# Calculate total debits and credits for specified period(s).
+
+my @bf = ();
+my @db = ();
+my @cr = ();
+for my $p (@period)
+{
+	my $from = $p->[0] || undef;
+	my $to = $p->[1];
+	if ($opt_cashflow) {
+		my $flow = $Abo->get_period_flow($from, $to, sub { $_[0]->category eq 'cash' });
+		push @bf, -$flow->{''}->{bf};
+		push @db, { map { $_ => $flow->{$_}->{db} } keys %$flow };
+		push @cr, { map { $_ => $flow->{$_}->{cr} } keys %$flow };
+	}
+	else {
+		my $summ = $Abo->get_period_summary($from, $to);
+		my @accs = grep { $Abo->account_list->get_account_byname($_)->is_profit } keys %$summ;
+		push @db, { map { $_ => $summ->{$_}->{db} } @accs };
+		push @cr, { map { $_ => $summ->{$_}->{cr} } @accs };
+	}
+}
+
+# Print the report.
+
+my $w = max(12, $Abo->colwid_unsigned + 2) + 1;
+my $cols = @period + ($opt_total ? 1 : 0);
+my $cwid = $w * $cols;
+my $u = max(40, $width_default - $cwid);
+my $wid = $u + $w * $cols;
+my $fmt1 = "%-${u}.${u}s";
+my $fmt1r = "%${u}.${u}s";
+my $fmt2 = "%${w}.${w}s";
+my $head = $Abo->var('heading');
+my $nl = 0;
+print &centrestr($wid, uc $head), "\n" if defined($head) && length($head);
+print &centrestr($wid, $opt_cashflow ? 'CASH FLOW STATEMENT' : 'PROFIT AND LOSS STATEMENT'), "\n";
+print "\n";
+if (@period > 1 || $period[0]->[0])
+{
+	printf $fmt1r, 'FROM ';
+	my $i;
+	for $i ($[ .. $#period)
+	{
+		printf $fmt2, $period[$i]->[0] ne '.'
+			? $period[$i]->[0]->format('%d-%b-%Y').' '
+			: 'Start ';
+	}
+	print "\n";
+}
+if (@period > 0)
+{
+	printf $fmt1r, 'TO ';
+	my $i;
+	for $i ($[ .. $#period)
+	{
+		printf $fmt2, $period[$i]->[1] ne '.'
+			? $period[$i]->[1]->format('%d-%b-%Y').' '
+			: 'Start ';
+	}
+	printf $fmt2, 'TOTAL ' if $opt_total;
+	print "\n";
+}
+print '-'x$wid, "\n";
+if ($opt_cashflow)
+{
+	my @in = printac('INCOMINGS', @cr, @db, \&all);
+	space(1);
+	my @out = printac('OUTGOINGS', @db, @cr, \&all);
+	space(1);
+	my @net = difference(@in, @out);
+	my @end = total(@bf, @net);
+	oneline('SUMMARY');
+	oneline('At start of period', @bf);
+	oneline('Net incomings (outgoings)', @net, sum @net);
+	oneline('At end of period', @end);
+	rule('', '=');
+}
+else
+{
+	my @taxable_income = printac('TAXABLE INCOME', @cr, @db, \&deductable);
+	space(1);
+	my @deductable_expenses = printac('DEDUCTABLE EXPENSES', @db, @cr, \&deductable);
+	my @net_taxable_income = difference(@taxable_income, @deductable_expenses);
+	rule('', '-');
+	oneline('NET TAXABLE INCOME', @net_taxable_income);
+	rule('', '=');
+	space(1);
+	my @non_taxable_income = printac('NON-TAXABLE INCOME', @cr, @db, \&non_deductable);
+	space(1);
+	my @tax_paid = printac('INCOME TAX PAID OR WITHHELD', @db, @cr, \&tax_paid);
+	my @income_after_tax = difference(@net_taxable_income, @tax_paid);
+	space(1);
+	oneline('NET INCOME AFTER TAX', @income_after_tax);
+	rule('', '=');
+	space(1);
+	my @income = total(@income_after_tax, @non_taxable_income);
+	my @expenses = printac('NON-DEDUCTABLE EXPENSES', @db, @cr, \&non_deductable);
+	my @profit = difference(@income, @expenses);
+	rule('', '-');
+	oneline('NET PROFIT(LOSS)', @profit);
+	rule('', '=');
+}
+
+sub zero
+{
+	my @tot;
+	my $i;
+	for $i ($[ .. $#period)
+	{
+		$zero[$i] = $Abo->make_money(0);
+	}
+	return @zero;
+}
+
+sub difference (\@\@)
+{
+	my ($a, $b) = @_;
+	my @dif;
+	my $i;
+	for $i ($[ .. $#period)
+	{
+		$dif[$i] = $a->[$i] - $b->[$i];
+	}
+	return @dif;
+}
+
+sub total (\@\@)
+{
+	my ($a, $b) = @_;
+	my @tot;
+	my $i;
+	for $i ($[ .. $#period)
+	{
+		$tot[$i] = $a->[$i] + $b->[$i];
+	}
+	return @tot;
+}
+
+sub printac ($\@\@&)
+{
+	my ($head, $plus, $minus, $selector) = @_;
+	my $donehead = 0;
+
+	my @tot = zero();
+	for my $ac (sort { $a->title cmp $b->title } $Abo->account_list->accounts)
+	{
+		next unless $selector->($ac);
+		my $total = $Abo->make_money(0);
+		my $s = '';
+		my $i;
+		my $show = 0;
+		for $i ($[ .. $#period)
+		{
+			my $pl = $plus->[$i]->{$ac->name} || 0;
+			my $mi = $minus->[$i]->{$ac->name} || 0;
+			my $b =	 $pl - $mi;
+			$s .= sprintf $fmt2, $b > 0 ? &fmtpar($b) : '-  ';
+			if ($b > 0) {
+				$show |= 1;
+				$total += $b;
+				$tot[$i] += $b;
+			}
+		}
+		if ($show) {
+			$s .= sprintf $fmt2, &fmtpar($total) if $opt_total;
+			emitsp();
+			printf "$fmt1\n", $head if $head ne '' && !$donehead;
+			$donehead = 1;
+			printf "$fmt1%s\n", $ac->title, $s;
+		}
+	}
+	if ($donehead) {
+		rule('', '-');
+		oneline('TOTAL '.$head, @tot, sum @tot);
+	}
+	return @tot;
+}
+
+sub oneline
+{
+	my $head = $_[0];
+	emitsp();
+	printf $fmt1, $head;
+	my $i;
+	for $i (1 .. $cols)
+	{
+		last unless defined $_[$i];
+		printf $fmt2, &fmtpar($_[$i]);
+	}
+	print "\n";
+}
+
+sub sum (@)
+{
+	my $sum = $Abo->make_money(0);
+	$sum += $_ foreach @_;
+	return $sum;
+}
+
+sub rule
+{
+	my $c1 = shift;
+	my $c2 = @_ ? shift : $c1;
+	emitsp();
+	printf $fmt1, $c1;
+	my $i;
+	for $i (1 .. $cols)
+	{
+		printf $fmt2, $c2 x ($w-1);
+	}
+	print "\n";
+}
+
+sub space
+{
+	my $sp = shift;
+	$nl  = $sp if $sp > $nl;
+}
+
+sub emitsp
+{
+	print "\n" while $nl--;
+	$nl = 0;
+}

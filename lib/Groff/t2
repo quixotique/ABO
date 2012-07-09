@@ -1,0 +1,34 @@
+#!/usr/bin/perl -w
+
+use lib '/home/andrewb/ABO/lib';
+use Groff::Parser;
+
+my $p;
+
+sub text
+{
+	my ($text) = @_;
+	print 'x'.$text;
+}
+
+sub comment_line
+{
+	my ($text) = @_;
+	print '.\"'.$text."\n";
+}
+
+sub request
+{
+	my ($dot, $req, @args) = @_;
+	my $com = $p->comment;
+	print $dot, "$req ".join(' ', map { s/"/""/og; "\"$_\"" } @args);
+	print '\\"'.$com if defined $com;
+	print "\n";
+}
+
+$p = new Groff::Parser (
+		text => \&text,
+		comment => \&comment_line,
+		request => \&request,
+	);
+$p->parse_file($ARGV[0]);

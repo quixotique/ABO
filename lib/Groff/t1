@@ -1,0 +1,33 @@
+#!/usr/bin/perl -w
+
+use lib '/home/andrewb/ABO/lib';
+use Groff::Parser;
+
+{
+	package Tester;
+	@ISA = qw(Groff::Parser);
+
+	sub text
+	{
+		my ($self, $text) = @_;
+		print 'x'.$text;
+	}
+
+	sub comment_line
+	{
+		my ($self, $text) = @_;
+		print '.\"'.$text."\n";
+	}
+
+	sub request
+	{
+		my ($self, $dot, $req, @args) = @_;
+		my $com = $self->comment;
+		print $dot, "$req ".join(' ', map { s/"/""/og; "\"$_\"" } @args);
+		print '\\"'.$com if defined $com;
+		print "\n";
+	}
+}
+
+$p = new Tester;
+$p->parse_file($ARGV[0]);

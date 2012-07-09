@@ -1,0 +1,176 @@
+#!/usr/bin/perl -w
+
+# Command-line interface to the functions of ABO module.
+
+require 5;
+use lib '/home/andrewb/lib';
+use lib '/home/andrewb/ABO/lib';
+use ABO;
+
+($Myname = $0) =~ s!.*/!!o;
+
+my %actions = (
+	'vars' => "\tprint all configuration variables",
+	'var' => "[ <varname> ... ]\tprint named configuration variables",
+	'rd' => "<file>\tregister document contained in file",
+	'lacc' => "\tlist all account names",
+	'compa' => "\tcomplete account names for Bash",
+	'ai' => "\tallocate invoice id",
+	'li' => "\tlist all registered invoice files",
+	'lih' => "\tlist all registered invoice handles",
+	'lir' => "\tlist all registered and allocated invoice refs",
+	'di' => "<id>\tdelete registered invoice file",
+	'ar' => "\tallocate receipt id",
+	'lr' => "\tlist all registered receipt files",
+	'dr' => "<id>\tdelete registered receipt file",
+	'aj' => "\tallocate journal id",
+	'lj' => "\tlist all registered journal files",
+	'dj' => "<id>\tdelete registered journal file",
+);
+
+my $action = shift;
+if (!defined $action)
+{
+	print "Usage: $Myname <action> [ args ... ]\n";
+	my $t = 'Actions:';
+	for (sort keys %actions)
+	{
+		my ($a, $d) = split "\t", $actions{$_};
+		printf "%-8s %-25s %s\n", $t, "$_ $a", $d;
+		$t = '';
+	}
+	exit 0;
+}
+
+if (!defined $actions{$action})
+{
+	print STDERR "$Myname: unknown action `$action'\n";
+	exit 1;
+}
+my $sub = "act_$action";
+if (!defined &$sub)
+{
+	print STDERR "$Myname: BUG: action `$action' missing subroutine!\n";
+	exit 1;
+}
+
+my $abo = new ABO (
+	-error => sub { print STDERR "$Myname: ", @_, "\n"; }
+) or exit 1;
+
+exit &$sub(@ARGV);
+
+# Action subroutines.
+
+sub act_vars
+{
+	my $v = $abo->vars;
+	for (sort keys %$v)
+	{
+		print "$_ ", $v->{$_}, "\n";
+	}
+}
+sub act_var
+{
+	my $var;
+	while (defined ($var = shift))
+	{
+		print $abo->var($var), "\n";
+	}
+}
+sub act_rd
+{
+	my $file = shift;
+
+	if (!defined $file)
+	{
+		print "Usage: $Myname rd <file>\n";
+		exit 1;
+	}
+	if (!open FILE, $file)
+	{
+		&error("cannot open `$file' - $!");
+	}
+	my $doc = new ABO::Doc(*FILE, sub { print STDERR "$Myname: @_\n"; });
+	close FILE;
+	exit 1 unless defined $doc;
+	if (defined $abo->filename($doc))
+	{
+		print "$Myname: document is already registered\n";
+		exit 0;
+	}
+	my $f = $abo->register($doc) or exit 1;
+	print $f, "\n";
+}
+sub act_lacc
+{
+	for my $ac ($abo->account_list->accounts)
+	{
+		print $ac->name, "\n";
+	}
+}
+sub act_compa
+{
+	my ($cmd, $word, $preword) = @_;
+	if ($preword !~ /^(-from|-to|-file|-width|-lines)/)
+	{
+		for my $ac ($abo->account_list->accounts)
+		{
+			my $name = $ac->name;
+			if (substr($name, 0, length $word) eq $word)
+			{
+				print $name, "\n";
+			}
+		}
+	}
+}
+
+# Invoices
+
+sub act_ai { &allocref_generic('invoice', @_); }
+sub act_li { print map { "$_\n" } $abo->docbase->files('invoice'); }
+sub act_lih { print map { "$_\n" } $abo->docbase->handles('invoice'); }
+sub act_lir { print map { "$_\n" } $abo->docbase->refs('invoice'); }
+sub act_di { &delete_generic('di', 'invoice', @_); }
+
+# Receipts
+
+sub act_ar { &allocref_generic('receipt', @_); }
+sub act_lr { print map { "$_\n" } $abo->docbase->files('receipt'); }
+sub act_dr { &delete_generic('dr', 'receipt', @_); }
+
+# Journals
+
+sub act_aj { &allocref_generic('journal', @_); }
+sub act_lj { print map { "$_\n" } $abo->docbase->files('journal'); }
+sub act_dj { &delete_generic('dj', 'journal', @_); }
+
+########################################################################
+
+# Utilities
+
+sub allocref_generic
+{
+	my $ref = $abo->docbase->allocref(shift);
+	die "no ref" unless defined $ref;
+	print $ref, "\n";
+}
+
+sub delete_generic
+{
+	my $cmdname = shift;
+	my $doctype = shift;
+	my $ref = shift;
+	if (!length $ref)
+	{
+		print "Usage: $Myname $cmdname <ref>\n";
+		exit 1;
+	}
+	$abo->docbase->delete($doctype, $ref);
+}
+
+sub error
+{
+	print STDERR "$Myname: @_\n";
+	exit 1;
+}

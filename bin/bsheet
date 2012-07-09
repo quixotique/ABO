@@ -1,0 +1,310 @@
+#!/usr/bin/perl -w
+
+require 5;
+use lib '/home/andrewb/lib';
+use lib '/home/andrewb/ABO/lib';
+use Getopt::Long;
+use ABO;
+use ABO::Utils qw(:all);
+
+($Myname = $0) =~ s!.*/!!o;
+sub usage
+{
+	my $fh = shift;
+	printf $fh
+"Usage: $Myname [-file F] [-cash] [-force] [-verbose] [DATE ...]
+
+Print a balance sheet for the given DATEs, or for today if no DATE is
+given.  If the -file option is given, read transactions from the named
+file (a file of - means standard input) instead of the ABO document
+base.
+
+   -file F       Read transactions from the named file F (a file of -
+		 means standard input) instead of the ABO document base.
+   -force        Force re-compilation of all source documents.
+   -cash         Convert accrual accounts into cash accounts.
+   -verbose      Whistle as you work.
+";
+}
+
+# Parse command-line options and arguments.
+
+$opt_file = '';
+$opt_force = 0;
+$opt_cash = 0;
+$opt_verbose = 0;
+if (!GetOptions('file=s', 'cash', 'force', 'verbose'))
+{
+	usage(*STDERR);
+	exit 1;
+}
+
+# Initialise accounting system.
+
+my $Abo = new ABO (
+		-error => sub { print STDERR "$Myname: ", @_, "\n"; },
+		-source => $opt_file eq '-'
+			? \*STDIN
+			: length($opt_file) ? $opt_file : undef,
+		-regenerate_cache => $opt_force,
+		-cash => $opt_cash,
+		-verbose => $opt_verbose,
+	) or exit 1;
+
+# Parse date arguments.
+
+my @dates = ();
+my $date;
+for $date (@ARGV)
+{
+	my $to = $date eq 'now' ? $Abo->today : $Abo->make_date($date)
+		or exit 1;
+	push @dates, $to;
+}
+@dates = ($Abo->today) unless @dates;
+
+# Calculate total debits and credits for specified period(s).
+
+my $i;
+for $i ($[ .. $#dates)
+{
+	# We let the "brought forward" filter do most of the work for
+	# us.
+	for my $t ($Abo->unsorted_transactions($dates[$i] + 1, $dates[$i]))
+	{
+		for my $e ($t->entries)
+		{
+			my $ac = $e->account;
+			my $c = $ac->category;
+			$cat[$i]->{$c} = [$Abo->make_money(0), $Abo->make_money(0)]
+				unless defined $cat[$i]->{$c};
+			$cat[$i]->{$c}->[0] += $e->amount if $e->dbcr eq 'db';
+			$cat[$i]->{$c}->[1] += $e->amount if $e->dbcr eq 'cr';
+		}
+	}
+}
+
+# Print the report.
+
+my $u = 40;
+my $w = max(12, $Abo->colwid_unsigned + 2) + 1;
+my $wid = $u + @dates * $w;
+my $fmt1 = "%-${u}.${u}s";
+my $fmt1r = "%${u}.${u}s";
+my $fmt2 = "%${w}.${w}s";
+my $head = $Abo->var('heading');
+print &centrestr($wid, uc $head), "\n" if defined($head) && length($head);
+print &centrestr($wid, 'BALANCE SHEET'), "\n";
+print "\n";
+printf $fmt1r, 'AT  ';
+for $i ($[ .. $#dates)
+{
+	printf $fmt2, $dates[$i]->format('%d-%b-%Y').' ';
+}
+print "\n";
+print '-'x($wid), "\n";
+
+my @tota = ();
+my @totl = ();
+for $i ($[ .. $#dates)
+{
+	$tota[$i] = $totl[$i] = $Abo->make_money(0);
+}
+&section('CURRENT ASSETS',
+		{
+			'-cash' => 'Cash',
+			'--loans' => 'Debtors and lendings',
+			'--rec' => 'Receivables',
+			'--gstdue' => 'GST refunds receivable',
+			'--taxdue' => 'Tax refunds receivable',
+			'--pay' => 'Prepaid expenses refundable',
+			'-prov' => 'Provisions',
+		},
+		\@tota
+	);
+printf "\n";
+&section('NON-CURRENT ASSETS',
+		{
+			'-invest' => 'Investments',
+			'-property' => 'Property',
+			'-material' => 'Material assets',
+			'-ppe' => 'Plant, property and equipment',
+			'--bonds' => 'Bonds paid',
+			'-intangibles' => 'Intangibles',
+			'-ltloans' => 'Long-term lendings',
+			'-super' => 'Superannuation funds',
+		},
+		\@tota
+	);
+&rule('', '-');
+&oneline('TOTAL ASSETS', @tota);
+&rule('-');
+&section('CURRENT LIABILITIES',
+		{
+			'+cash' => 'Overdrafts',
+			'++loans' => 'Creditors and borrowings',
+			'++pay' => 'Payables',
+			'++gstdue' => 'GST due',
+			'++taxdue' => 'Tax due',
+			'++rec' => 'Overpaid receivables',
+			'+prov' => 'Provisions',
+		},
+		\@totl
+	);
+printf "\n";
+&section('NON-CURRENT LIABILITIES',
+		{
+			'+invest' => 'Investments',
+			'+property' => 'Property',
+			'+material' => 'Material assets',
+			'+ppe' => 'Plant, property and equipment',
+			'++bonds' => 'Bonds held',
+			'+intangibles' => 'Intangibles',
+			'+ltloans' => 'Long-term borrowings',
+			'+super' => 'Superannuation debt',
+		},
+		\@totl
+	);
+&rule('', '-');
+&oneline('TOTAL LIABILITIES', @totl);
+&rule('-');
+my @net = ();
+for $i ($[ .. $#dates)
+{
+	$net[$i] = $tota[$i] - $totl[$i];
+}
+&oneline('NET ASSETS (LIABILITIES)', @net);
+&rule('', '=');
+&section("SHAREHOLDERS' EQUITY",
+		{
+			'shares' => 'Share capital',
+			'equity' => 'Equity capital',
+			'(profit)' => 'Retained profits (losses)',
+			'(nd)' => 'Retained profits (losses)',
+		}
+	);
+&rule('-', '=');
+
+sub section
+{
+	my $head = shift;
+	my $fields = shift;
+	my $tot = shift;
+	my @total = ();
+	my %ctot = ();
+	my %cfmt = ();
+	my $i;
+	for $i ($[ .. $#dates)
+	{
+		$total[$i] = $Abo->make_money(0);
+	}
+	for (keys %$fields)
+	{
+		my $desc = $fields->{$_};
+		my ($s, undef, $c, $p) = (/^(\+|-|\+\+|--|)(\(?)(\w*)([\-\)]?)$/o);
+		for $i ($[ .. $#dates)
+		{
+			$ctot{$desc}->[$i] = $Abo->make_money(0) if !defined $ctot{$desc}->[$i];
+			next unless defined $cat[$i]->{$c};
+			my ($db, $cr) = @{$cat[$i]->{$c}};
+			my $val;
+			if ($s eq '-')
+			{
+				$val = $db - $cr;
+			}
+			elsif ($s eq '+' || $s eq '')
+			{
+				$val = $cr - $db;
+			}
+			elsif ($s eq '--')
+			{
+				$val = $db;
+			}
+			elsif ($s eq '++')
+			{
+				$val = $cr;
+			}
+			else
+			{
+				die "oops";
+			}
+			if (length($s) == 0 || $val > 0)
+			{
+				$total[$i] += $val;
+				$ctot{$desc}->[$i] += $val;
+				$cfmt{$desc} = $p;
+			}
+		}
+	}
+	my $s = '';
+	my $show = 0;
+	for (sort keys %ctot)
+	{
+		my $cshow = 0;
+		my $t = '';
+		for $i ($[ .. $#dates)
+		{
+			my $val = $ctot{$_}->[$i];
+			$cshow |= $val != 0;
+			if ($val > 0)
+			{
+				$t .= sprintf $fmt2, "$val ";
+			}
+			elsif ($val < 0)
+			{
+				my $f = -$val;
+				$t .= sprintf $fmt2,
+					$cfmt{$_} eq ')' ? "($f)" :
+					$cfmt{$_} eq '-' ? "$f-" : "-$f";
+			}
+			else
+			{
+				$t .= sprintf $fmt2, '-   ';
+			}
+		}
+		if ($cshow)
+		{
+			$show = 1;
+			$s .= sprintf "$fmt1%s\n", $_, $t;
+		}
+	}
+	if ($show)
+	{
+		print $head, "\n";
+		print $s;
+		&rule('', '-');
+	}
+	&oneline('TOTAL '.$head, @total);
+	if (defined $tot)
+	{
+		for $i ($[ .. $#dates)
+		{
+			$tot->[$i] += $total[$i];
+		}
+	}
+	return @total;
+}
+
+sub oneline
+{
+	my $head = shift;
+	printf $fmt1, $head;
+	for (@_)
+	{
+		printf $fmt2, &fmtpar($_);
+	}
+	print "\n";
+}
+
+sub rule
+{
+	my $c1 = shift;
+	my $c2 = @_ ? shift : $c1;
+	printf $fmt1, $c1 x $u;
+	my $i;
+	for $i ($[ .. $#dates)
+	{
+		printf $fmt2, $c2 x ($w-1);
+	}
+	print "\n";
+}

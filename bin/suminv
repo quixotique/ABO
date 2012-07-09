@@ -1,0 +1,99 @@
+#!/usr/bin/perl -w
+
+require 5;
+use lib '/home/andrewb/lib';
+use lib '/home/andrewb/ABO/lib';
+use Getopt::Long;
+use DayDate qw(time_to_day dmy_to_day date_to_day);
+use ABO;
+use ABO::Utils qw(:all);
+
+($Myname = $0) =~ s!.*/!!o;
+$opt_from = '';
+$opt_to = '';
+$opt_file = '';
+$opt_force = 0;
+$opt_cash = 0;
+$opt_verbose = 0;
+$opt_all = 0;
+undef $opt_width;
+if (!GetOptions('from=s', 'to=s', 'file=s', 'width=i',
+		'all', 'force', 'cash', 'verbose',
+	)
+)
+{
+	exit 1;
+}
+
+# Initialise accounting system.
+
+my $Abo = new ABO (
+		-error => sub { print STDERR "$Myname: ", @_, "\n"; },
+		-source => $opt_file eq '-'
+			? \*STDIN
+			: length($opt_file) ? $opt_file : undef,
+		-regenerate_cache => $opt_force,
+		-cash => $opt_cash,
+		-verbose => $opt_verbose,
+	) or exit 1;
+
+# Parse date arguments.
+
+my $from = $Abo->parse_from_date($opt_from) or exit 1;
+my $to = $Abo->parse_to_date($opt_to) or exit 1;
+
+my $width = 0 + pick $opt_width, $ENV{'COLUMNS'}, 80;
+$width = 50 if $width < 50;
+
+my $head = $Abo->var('heading');
+my $ex = $Abo->get_period_summary($from, $to);
+
+print centrestr($width, uc $head), "\n" if !empty $head;
+print centrestr($width, 'SUMMARY OF RECEIVABLES AND PAYABLES'), "\n";
+print centrestr($width, fromtostr($from, $to)), "\n";
+print "\n";
+&printsum('r', $ex, 'Receivable', 'Invoiced', 'Received', 'Outstanding');
+print "\n";
+&printsum('p', $ex, 'Payable', 'Billed', 'Remitted', 'Outstanding');
+print "\n";
+&printsum('l', $ex, 'Loans receivable', 'Lent', 'Repaid', 'Owing');
+print "\n";
+&printsum('b', $ex, 'Loans payable', 'Borrowed', 'Repaid', 'Owing');
+
+exit 0;
+
+sub printsum
+{
+	my ($type, $ex, $h1, $h2, $h3, $h4) = @_;
+	my $w = max($Abo->colwid_signed, 11);
+	my $aw = $width - 4 * $w - 4;
+	my $fmt = "%-$aw.${aw}s %$w.${w}s %$w.${w}s %$w.${w}s %$w.${w}s\n";
+	printf $fmt, $h1, $h2, $h3, $h4, 'Overdue';
+	printf $fmt, '-'x$aw, '-'x$w, '-'x$w, '-'x$w, '-'x$w;
+	my $ta = $Abo->make_money(0);
+	my $tb = $Abo->make_money(0);
+	my $tc = $Abo->make_money(0);
+	for my $ac (sort { $a->title cmp $b->title } $Abo->account_list->accounts)
+	{
+		my $e = $ex->{$ac->name};
+		my $a = $e->{db};
+		my $b = $e->{bf} + $e->{cr};
+		next unless
+			$type eq 'r' ? $ac->is_receivable :
+			$type eq 'p' ? $ac->is_payable :
+			($ac->is_asset && $ac->category eq 'loans' && (
+				$type eq 'l' ? ($a > $b || $a == $b && !$ac->is_liability) :
+				$type eq 'b' ? ($a < $b || $a == $b && $ac->is_liability) :
+				1
+			));
+		my $c = $e->{c_db} - $e->{c_bf} - $e->{c_cr};
+		next unless $opt_all || $a != $b || $c;
+		($a, $b, $c) = ($b, $a, -$c) if $type eq 'p' || $type eq 'b';
+		printf $fmt, $ac->title, $a, $b, $a - $b, $c ? $c : '-  ';
+		$ta += $a;
+		$tb += $b;
+		$tc += $c;
+	}
+	printf $fmt, '-'x$aw, '-'x$w, '-'x$w, '-'x$w, '-'x$w;
+	printf $fmt, 'TOTAL', $ta, $tb, $ta - $tb, $tc;
+}

@@ -1,0 +1,74 @@
+#!/usr/bin/perl -w
+
+use File::Spec;
+use File::Find;
+
+sub shellargs (@);
+
+my $mvcmd = shellargs 'mv', '--verbose', @ARGV;
+my @mvout = `$mvcmd`;
+exit $? if $?;
+
+chomp @mvout;
+for (@mvout)
+{
+	next unless m/ -> /o;
+	my ($src, $dst) = ($`, $');
+	$src =~ s/^`(.*)'$/$1/o;
+	$dst =~ s/^`(.*)'$/$1/o;
+	fixlinks(fixpath($src), fixpath($dst));
+}
+
+exit 0;
+
+sub shellargs (@)
+{
+	my @r = ();
+	my $a;
+	for $a (@_)
+	{
+		if ($a =~ /[^A-Za-z0-9_.\-]/o)
+		{
+			local $_ = $a;
+			s/'/'\\''/og;
+			push @r, "'$_'";
+		}
+		else
+		{
+			push @r, $a;
+		}
+	}
+	return "@r";
+}
+
+sub fixpath
+{
+	my $path = shift;
+	$path = File::Spec->canonpath(File::Spec->rel2abs($path));
+	1 while $path =~ s,/(?!\.\./)[^/]+/\.\.(?=/|$),,o;
+	return File::Spec->canonpath($path);
+}
+
+sub fixlinks
+{
+	my ($src, $dst) = @_;
+	my ($vol, $dir, $file) = File::Spec->splitpath($src);
+	my @dirs = ('', grep { length } File::Spec->splitdir($dir));
+	my $base;
+	for my $i (0 .. $#dirs)
+	{
+		$dir = join '/', @dirs[0 .. $i];
+		$base = $dir, last if -f "$dir/.aborc";
+	}
+	return unless defined $base;
+	find(sub {
+		return unless -l;
+		my $lnk = fixpath(readlink);
+		if ($lnk eq $src)
+		{
+			print "relink ", $File::Find::name, "\n";
+			unlink $_;
+			symlink $dst, $_ or warn $!;
+		}
+	}, $base);
+}
