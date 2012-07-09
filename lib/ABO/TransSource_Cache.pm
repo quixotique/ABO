@@ -1,4 +1,5 @@
 package ABO::TransSource_Cache;
+use feature 'unicode_strings';
 
 use ABO::Base;
 use ABO::TransSource;

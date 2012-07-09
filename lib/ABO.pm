@@ -1,5 +1,4 @@
 package ABO;
-
 use feature 'unicode_strings';
 
 require ABO::Base;

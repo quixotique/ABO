@@ -1,4 +1,5 @@
 package ABO::TransBase;
+use feature 'unicode_strings';
 
 use ABO::TransSource;
 @ISA = qw(

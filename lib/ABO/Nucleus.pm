@@ -1,4 +1,5 @@
 package ABO::Nucleus;
+use feature 'unicode_strings';
 
 # Most objects in the ABO universe carry a reference to one of these
 # "nucleus" objects.  This is how the ABO configuration, error reporter,

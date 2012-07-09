@@ -1,4 +1,5 @@
 # Utilities for ABO programming.
+use feature 'unicode_strings';
 
 package ABO::Utils;
 

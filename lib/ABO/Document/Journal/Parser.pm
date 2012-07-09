@@ -272,6 +272,7 @@ sub parse_file
 	unless (ref($file) || $file =~ /^\*[\w:]+$/) {
 		# Assume $file is a filename
 		open(F, $file) || die "Can't open $file: $!";
+                binmode(F, ':encoding(UTF-8)') || die "Can't set utf-8 encoding of $file: $!";
 		$file = \*F;
 	}
 	my $chunk = '';

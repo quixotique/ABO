@@ -1,4 +1,5 @@
 package ABO::Account;
+use feature 'unicode_strings';
 
 use ABO::Base;
 @ISA = qw(

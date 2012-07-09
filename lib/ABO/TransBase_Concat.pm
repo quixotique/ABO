@@ -1,4 +1,5 @@
 package ABO::TransBase_Concat;
+use feature 'unicode_strings';
 
 use ABO::Base;
 use ABO::TransBase;

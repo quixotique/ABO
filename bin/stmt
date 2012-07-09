@@ -196,8 +196,17 @@ else
         $nw = $Abo->colwid_unsigned;
         $bw = max(11, $Abo->colwid_signed);
         $pw = $width - 16 - $nw -$nw - $bw;
+        sub ljust($$) {
+            my ($str, $wid) = @_;
+            utf8::upgrade($str);
+            #print STDERR length($str), "\n";
+            return substr($str, 0, $wid).(' ' x ($wid - length $str));
+        }
+        sub fmt($$$$$) {
+            return &ljust($_[0], 11).'  '.&ljust($_[1], $pw).' '.&ljust($_[2], $nw).' '.&ljust($_[3], $nw).' '.&ljust($_[4], $bw)."\n";
+        }
         $fmt = "%-11.11s  %-$pw.${pw}s %${nw}s %${nw}s %${bw}s\n";
-        $headings = sprintf($fmt,
+        $headings = &fmt(
                 'Date',
                 'Particulars',
                 $opt_ext ? ($is_asset ? ($is_receivable ? 'Invoiced' : 'Remitted')
@@ -208,7 +217,7 @@ else
                         : 'Credit',
                 $opt_ext ? ($is_asset ? 'Balance due' : 'Net income') : 'Balance'
                 ).
-                sprintf($fmt, '-'x11, '-'x$pw, '-'x$nw, '-'x$nw, '-'x$bw);
+                &fmt('-'x11, '-'x$pw, '-'x$nw, '-'x$nw, '-'x$bw);
         print $headings;
 }
 my $ti;
@@ -245,6 +254,7 @@ for ($ti = 0; $ti <= $#trans; $ti++)
                 $desc = join ', ', grep { length } ($desc, $e->detail);
                 $desc .= ' due '.$cdate->format('%-d-%b-%Y') if
                         ($is_receivable || $is_payable) && $cdate != $date;
+                utf8::upgrade($desc);
                 my $da = $from && $date < $from ? '' : $date->format($dfmt);
                 my $db = $e->dbcr eq 'db' ? $amt : '',
                 my $cr = $e->dbcr eq 'cr' ? $amt : '',
@@ -265,13 +275,15 @@ for ($ti = 0; $ti <= $#trans; $ti++)
                 {
                         my ($part, @part) = $opt_wrap ? &wrap($desc, $pw) : ($desc);
                         $pager->need_lines(@part + 1);
-                        printf $fmt,
+                        #print STDERR utf8::is_utf8($part), "\n";
+                        utf8::upgrade($part);
+                        print &fmt(
                                 $da,
                                 $part,
                                 length $db ? fmtwamt($db, $nw) : '',
                                 length $cr ? fmtwamt($cr, $nw) : '',
-                                length $obal ? fmtwamt($obal, $bw) : '';
-                        printf $fmt, '', $_, '', '', '' foreach @part;
+                                length $obal ? fmtwamt($obal, $bw) : '');
+                        print &fmt('', $_, '', '', '') foreach @part;
                 }
         }
 }
@@ -292,15 +304,10 @@ else
 {
         $pager->footer(0, undef);
         $pager->need_lines($ov ? 4 : 3);
-        printf $fmt, '', '', '-'x$nw, '-'x$nw, '-'x$bw;
-        printf $fmt, '',
-                'Totals for period',
-                fmtwamt($td, $nw), fmtwamt($tc, $nw), '';
-        printf $fmt, '',
-                'Balance'.($opt_ext && $ou ? ' outstanding' : ''),
-                '', '', fmtwamt($bal, $bw);
-        printf $fmt, '', $opt_ext ? 'Balance overdue' : 'Control balance',
-                '', '', fmtwamt($cbal, $bw) if $ov;
+        print &fmt('', '', '-'x$nw, '-'x$nw, '-'x$bw);
+        print &fmt('', 'Totals for period', fmtwamt($td, $nw), fmtwamt($tc, $nw), '');
+        print &fmt('', 'Balance'.($opt_ext && $ou ? ' outstanding' : ''), '', '', fmtwamt($bal, $bw));
+        print &fmt('', $opt_ext ? 'Balance overdue' : 'Control balance', '', '', fmtwamt($cbal, $bw)) if $ov;
 }
 
 if (!$opt_troff)

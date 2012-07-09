@@ -1,4 +1,5 @@
 package ABO::Date;
+use feature 'unicode_strings';
 
 use strict;
 

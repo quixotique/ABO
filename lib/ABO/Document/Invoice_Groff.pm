@@ -1,4 +1,5 @@
 package ABO::Document::Invoice_Groff;
+use feature 'unicode_strings';
 
 use ABO::Document::Invoice_Common;
 use ABO::Document::Parser;

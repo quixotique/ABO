@@ -1,4 +1,5 @@
 package ABO::Paginator;
+use feature 'unicode_strings';
 
 # Tie to a file handle to get support for paginated output.
 

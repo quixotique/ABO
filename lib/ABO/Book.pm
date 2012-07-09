@@ -1,4 +1,5 @@
 package ABO::Book;
+use feature 'unicode_strings';
 
 use ABO::Base;
 use ABO::TransSource;

@@ -1,4 +1,5 @@
 package ABO::FilterAutoSpend;
+use feature 'unicode_strings';
 
 use ABO::Base;
 use ABO::TransSource;

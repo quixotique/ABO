@@ -1,4 +1,5 @@
 package ABO::Document::Common_Groff;
+use feature 'unicode_strings';
 
 sub _parser { shift->{'parser'} }
 

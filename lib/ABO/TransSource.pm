@@ -1,4 +1,5 @@
 package ABO::TransSource;
+use feature 'unicode_strings';
 
 use Carp qw(confess);
 

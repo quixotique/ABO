@@ -1,4 +1,5 @@
 package ABO::DocBase;
+use feature 'unicode_strings';
 
 use ABO::Base;
 use ABO::TransBase;

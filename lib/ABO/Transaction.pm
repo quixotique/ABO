@@ -1,4 +1,5 @@
 package ABO::Transaction;
+use feature 'unicode_strings';
 
 use ABO::Base;
 @ISA = qw(
@@ -34,6 +35,8 @@ sub init
 		$self->{'date'} = $self->make_date(shift @m) or return undef;
 		$self->{'cdate'} = $self->make_date(shift @m) or return undef;
 		@{$self}{'who', 'what'} = splice @m, 0, 2;
+                utf8::upgrade($self->{'who'});
+                utf8::upgrade($self->{'what'});
 		for my $se (@m)
 		{
 			my $e = $self->make(ABO::Entry,
@@ -173,11 +176,15 @@ sub entries
 sub serialize
 {
 	my $self = shift;
+        my $who = $self->{'who'};
+        my $what = $self->{'what'};
+        utf8::downgrade($who);
+        utf8::downgrade($what);
 	return join "\001",
 		$self->{'date'}->serialize,
 		$self->{'cdate'}->serialize,
-		$self->{'who'},
-		$self->{'what'},
+		$who,
+		$what,
 		map { $_->serialize } $self->entries;
 }
 

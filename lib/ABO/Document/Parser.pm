@@ -1,4 +1,5 @@
 package ABO::Document::Parser;
+use feature 'unicode_strings';
 
 # This class is solely intended to be sub-classed by the various
 # document parser classes.

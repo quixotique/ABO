@@ -1,4 +1,5 @@
 package ABO::Document::Journal_Text;
+use feature 'unicode_strings';
 
 use ABO::Entry;
 use ABO::Document::Parser;

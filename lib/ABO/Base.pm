@@ -1,4 +1,5 @@
 package ABO::Base;
+use feature 'unicode_strings';
 
 use ABO::Nucleus;
 use Carp;

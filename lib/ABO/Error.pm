@@ -1,4 +1,5 @@
 package ABO::DestroyCallback;
+use feature 'unicode_strings';
 
 # This object simply executes a function when it is destroyed.
 

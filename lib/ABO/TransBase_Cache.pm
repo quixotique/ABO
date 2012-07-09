@@ -1,3 +1,4 @@
+use feature 'unicode_strings';
 ##############################################################################
 package ABO::TransBase_Cache::Handle;
 

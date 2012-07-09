@@ -1,4 +1,5 @@
 package ABO::Document::Receipt_Common;
+use feature 'unicode_strings';
 
 use ABO::Transaction;
 use ABO::Utils qw(empty);

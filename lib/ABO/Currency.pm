@@ -1,4 +1,5 @@
 package ABO::Currency;
+use feature 'unicode_strings';
 
 use strict;
 
