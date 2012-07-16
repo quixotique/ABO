@@ -165,7 +165,7 @@ my $td = $Abo->make_money(0);
 my $tc = $Abo->make_money(0);
 my $bal = $Abo->make_money(0);
 my $cbal = $Abo->make_money(0);
-my ($nw, $pw, $fmt);
+my ($nw, $pw);
 
 print centrestr($width, uc $head), "\n" if !$opt_troff && !empty $head;
 
@@ -199,13 +199,16 @@ else
         sub ljust($$) {
             my ($str, $wid) = @_;
             utf8::upgrade($str);
-            #print STDERR length($str), "\n";
             return substr($str, 0, $wid).(' ' x ($wid - length $str));
         }
-        sub fmt($$$$$) {
-            return &ljust($_[0], 11).'  '.&ljust($_[1], $pw).' '.&ljust($_[2], $nw).' '.&ljust($_[3], $nw).' '.&ljust($_[4], $bw)."\n";
+        sub rjust($$) {
+            my ($str, $wid) = @_;
+            utf8::upgrade($str);
+            return (' ' x ($wid - length $str)).substr($str, 0, $wid);
         }
-        $fmt = "%-11.11s  %-$pw.${pw}s %${nw}s %${nw}s %${bw}s\n";
+        sub fmt($$$$$) {
+            return &rjust($_[0], 11).'  '.&ljust($_[1], $pw).' '.&rjust($_[2], $nw).' '.&rjust($_[3], $nw).' '.&rjust($_[4], $bw)."\n";
+        }
         $headings = &fmt(
                 'Date',
                 'Particulars',
