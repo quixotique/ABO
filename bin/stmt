@@ -108,6 +108,8 @@ my $ac = $Acc->get_account_byname($account) or
 my $is_asset = $ac->is_asset;
 my $is_receivable = $ac->is_receivable;
 my $is_payable = $ac->is_payable;
+my $is_loan = $ac->is_loan && !$ac->is_liability;
+my $is_borrow = $ac->is_loan && $ac->is_liability;
 
 # Scan through transactions.
 
@@ -209,19 +211,23 @@ else
         sub fmt($$$$$) {
             return &rjust($_[0], 11).'  '.&ljust($_[1], $pw).' '.&rjust($_[2], $nw).' '.&rjust($_[3], $nw).' '.&rjust($_[4], $bw)."\n";
         }
-        $headings = &fmt(
-                'Date',
-                'Particulars',
-                $opt_ext ? ($is_asset ? ($is_receivable ? 'Invoiced' : 'Remitted')
-				      : 'Expense')
-                         : 'Debit',
-                $opt_ext ? ($is_asset ? ($is_receivable ? 'Received' : 'Billed')
-				      : 'Income')
-                        : 'Credit',
-                $opt_ext ? ($is_asset ? 'Balance due' : 'Net income') : 'Balance'
-                ).
-                &fmt('-'x11, '-'x$pw, '-'x$nw, '-'x$nw, '-'x$bw);
-        print $headings;
+        if ($opt_ext) {
+            if ($is_asset) {
+                if ($is_loan) {
+                    $headings = &fmt('Date', 'Particulars', 'Lent', 'Recovered', 'Owing');
+                } elsif ($is_borrow) {
+                    $headings = &fmt('Date', 'Particulars', 'Repaid', 'Borrowed', 'Owed');
+                } elsif ($is_receivable) {
+                    $headings = &fmt('Date', 'Particulars', 'Invoiced', 'Received', 'Balance due');
+                } elsif ($is_payable) {
+                    $headings = &fmt('Date', 'Particulars', 'Paid', 'Billed', 'Balance due');
+                }
+            } else {
+                $headings = &fmt('Date', 'Particulars', 'Expense', 'Income', 'Net income');
+            }
+        }
+        $headings = &fmt('Date', 'Particulars', 'Debit', 'Credit', 'Balance') unless $headings;
+        print $headings.&fmt('-'x11, '-'x$pw, '-'x$nw, '-'x$nw, '-'x$bw);
 }
 my $ti;
 for ($ti = 0; $ti <= $#trans; $ti++)
@@ -262,7 +268,7 @@ for ($ti = 0; $ti <= $#trans; $ti++)
                 my $db = $e->dbcr eq 'db' ? $amt : '',
                 my $cr = $e->dbcr eq 'cr' ? $amt : '',
                 my $obal = defined $nextdate && $date == $nextdate ? ''
-                        : $opt_ext && $is_receivable ? -$bal
+                        : $opt_ext && ($is_receivable || $is_loan) ? -$bal
                         : $bal;
                 if ($opt_troff)
                 {
@@ -290,8 +296,8 @@ for ($ti = 0; $ti <= $#trans; $ti++)
                 }
         }
 }
-$bal = -$bal if $opt_ext && $is_receivable;
-$cbal = -$cbal if $opt_ext && $is_receivable;
+$bal = -$bal if $opt_ext && ($is_receivable || $is_loan);
+$cbal = -$cbal if $opt_ext && ($is_receivable || $is_loan);
 my $ou = $is_asset && $bal > 0;
 my $ov = $is_asset && $contr && (!$opt_ext || $cbal > 0);
 if ($opt_troff)

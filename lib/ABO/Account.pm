@@ -123,6 +123,12 @@ sub is_accrue
 	return $self->is_payable || $self->is_receivable;
 }
 
+sub is_loan
+{
+	my $self = shift;
+	return $self->is_asset && $self->category eq 'loans';
+}
+
 sub due_date
 {
 	my $self = shift;
