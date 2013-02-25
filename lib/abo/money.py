@@ -1,3 +1,5 @@
+# vim: sw=4 sts=4 et fileencoding=utf8 nomod
+
 """A Money object represents an exact amount of a single currency.
 """
 
@@ -5,11 +7,16 @@ import re
 import decimal
 import pycountry
 
+class RegistryError(Exception):
+    pass
+
+class Currencies(object):
+    pass
+
 class Currency(object):
 
-    amount_regex = re.compile(r'\d+(\.\d+)?|\.\d+')
-
-    _singletons = {}
+    _registry = Currencies
+    _amount_regex = re.compile(r'\d+(\.\d+)?|\.\d+')
 
     def __new__(cls, code, local_frac_digits=0, local_symbol=None, local_symbol_precedes=False, local_symbol_separated_by_space=False, ):
         try:
@@ -19,14 +26,14 @@ class Currency(object):
         if not currency:
             raise ValueError('invalid ISO 4217 currency code: %r' % (code,))
         code = str(code)
-        singleton = cls._singletons.get(code)
+        singleton = getattr(cls._registry, code, None)
         if singleton:
             assert singleton.code == code
-            assert singleton.local_frac_digits == local_frac_digits
-            assert singleton.local_symbol == local_symbol
-            assert singleton.local_symbol_precedes == local_symbol_precedes
-            assert singleton.local_symbol_separated_by_space == local_symbol_separated_by_space
-            return singleton
+            if (    singleton.local_frac_digits == local_frac_digits
+                and singleton.local_symbol == local_symbol
+                and singleton.local_symbol_precedes == local_symbol_precedes
+                and singleton.local_symbol_separated_by_space == local_symbol_separated_by_space):
+                return singleton
         self = super(Currency, cls).__new__(cls)
         self.code = code
         self.local_frac_digits = local_frac_digits
@@ -37,13 +44,42 @@ class Currency(object):
                 prec=self.local_frac_digits,
                 rounding=decimal.ROUND_HALF_UP,
                 traps=(decimal.DivisionByZero, decimal.InvalidOperation, decimal.Inexact))
-        self._singletons[code] = self
         return self
+
+    def register(self, registry=None):
+        r'''Register this Currency object in the registry, to make it available globally.
+        >>> Currency('USD')
+        Currency('USD')
+        >>> Currency('USD').register()
+        Currencies.USD
+        >>> Currency('USD')
+        Currencies.USD
+        >>> del Currencies.USD
+        >>> Currency('USD')
+        Currency('USD')
+        '''
+        if registry is None:
+            registry = self._registry
+        singleton = getattr(registry, self.code, None)
+        if not singleton:
+            setattr(registry, self.code, self)
+            return self
+        assert singleton.code == self.code
+        if (    singleton.local_frac_digits == self.local_frac_digits
+            and singleton.local_symbol == self.local_symbol
+            and singleton.local_symbol_precedes == self.local_symbol_precedes
+            and singleton.local_symbol_separated_by_space == self.local_symbol_separated_by_space):
+            return singleton
+        else:
+            raise RegistryError("%s.%s already set" % (registry.__name__, singleton.code))
 
     def __str__(self):
         return self.code
 
     def __repr__(self):
+        singleton = getattr(self._registry, self.code, None)
+        if singleton is self:
+            return '%s.%s' % (self._registry.__name__, self.code)
         r = []
         for attr in ('local_frac_digits', 'local_symbol', 'local_symbol_precedes', 'local_symbol_separated_by_space'):
             value = getattr(self, attr)
@@ -80,60 +116,87 @@ class Currency(object):
     @classmethod
     def extract_currency(cls, text):
         r'''Extract an ISO 4217 currency code prefix or suffix from the given text,
-        and return the corresponsing Currency object.
-        >>> Currency('AUD', 2, '$', True)
-        Currency('AUD')
+        and return the corresponding Currency object.
         >>> Currency.extract_currency('AUD 27.30')
-        (Currency('AUD'), '27.30')
+        (Currencies.AUD, '27.30')
         >>> Currency.extract_currency('1AUD')
-        (Currency('AUD'), '1')
+        (Currencies.AUD, '1')
         >>> Currency.extract_currency('USD 18.45')
         (None, 'USD 18.45')
         '''
-        try:
-            return cls._singletons[text[:3]], text[3:].lstrip()
-        except KeyError:
-            pass
-        try:
-            return cls._singletons[text[-3:]], text[:-3].rstrip()
-        except KeyError:
-            pass
+        code, rest = cls.extract_code(text)
+        if code:
+            try:
+                return getattr(cls._registry, code), rest
+            except AttributeError:
+                pass
         return None, text
 
-    def parse_amount(self, text):
-        r'''Parse given text as a decimal amount of this currency.
-        >>> Currency('AUD', 2).parse_amount('123')
-        Decimal('123')
-        >>> Currency('AUD', 2).parse_amount('AUD 123')
-        Decimal('123')
-        >>> Currency('AUD', 2).parse_amount('USD 123')
+    @classmethod
+    def parse_amount_code(cls, text, default_currency=None):
+        r'''Parse given text as a Decimal and a currency code.
+        >>> Currency.parse_amount_code('123')
         Traceback (most recent call last):
-        ValueError: invalid amount: 'USD 123'
-        >>> Currency('USD')
-        Currency('USD')
-        >>> Currency('AUD', 2).parse_amount('USD 123')
+        ValueError: missing currency code in '123'
+        >>> Currency.parse_amount_code('AUD 123')
+        (Currencies.AUD, Decimal('123'))
+        >>> Currency.parse_amount_code('123AUD')
+        (Currencies.AUD, Decimal('123'))
+        >>> Currency.parse_amount_code('AUD 1.2.3')
         Traceback (most recent call last):
-        ValueError: currency code of 'USD 123' should be 'AUD' 
+        ValueError: invalid amount: '1.2.3'
+        >>> Currency.parse_amount_code('123 USD')
+        Traceback (most recent call last):
+        ValueError: unknown currency 'USD' in '123 USD'
         '''
-        currency, amount = self.extract_currency(text)
-        if currency is not None and currency is not self:
-            raise ValueError('currency code of %r should be %r' % (text, self.code))
-        m = self.amount_regex.search(amount)
+        code, amount = cls.extract_code(text)
+        if code is None:
+            if default_currency is None:
+                raise ValueError('missing currency code in %r' % (text,))
+            currency = default_currency
+        else:
+            currency = getattr(cls._registry, code, None)
+            if currency is None:
+                raise ValueError('unknown currency %r in %r' % (code, text,))
+        m = cls._amount_regex.search(amount)
         if not m:
             raise ValueError('invalid amount: %r' % (amount,))
         pre = amount[:m.start(0)]
         numeric = m.group(0)
         post = amount[m.end(0):]
-        if self.local_symbol:
-            if self.local_symbol_precedes:
-                if pre.startswith(self.local_symbol):
-                    pre = pre[len(self.local_symbol):].lstrip()
+        if currency.local_symbol:
+            if currency.local_symbol_precedes:
+                if pre.startswith(currency.local_symbol):
+                    pre = pre[len(currency.local_symbol):].lstrip()
             else:
-                if post.endswith(self.local_symbol):
-                    post = post[:-len(self.local_symbol)].rstrip()
+                if post.endswith(currency.local_symbol):
+                    post = post[:-len(currency.local_symbol)].rstrip()
         if pre or post:
             raise ValueError('invalid amount: %r' % (amount,))
-        return decimal.Decimal(numeric, context=self.decimal_context)
+        return currency, decimal.Decimal(numeric, context=currency.decimal_context)
+
+    def parse_amount(self, text):
+        r'''Parse given text as a decimal amount of this currency.
+        >>> Currencies.AUD.parse_amount('123')
+        Decimal('123')
+        >>> Currencies.AUD.parse_amount('AUD 123')
+        Decimal('123')
+        >>> Currencies.AUD.parse_amount('123 AUD')
+        Decimal('123')
+        >>> Currencies.AUD.parse_amount('EUR 123')
+        Traceback (most recent call last):
+        ValueError: currency code of 'EUR 123' should be 'AUD'
+        >>> Currencies.AUD.parse_amount('EUR 123')
+        Traceback (most recent call last):
+        ValueError: currency code of 'EUR 123' should be 'AUD'
+        >>> Currencies.AUD.parse_amount('AUD 1.2.3')
+        Traceback (most recent call last):
+        ValueError: invalid amount: '1.2.3'
+        '''
+        currency, amount = self.parse_amount_code(text, default_currency=self)
+        if currency is not self:
+            raise ValueError('currency code of %r should be %r' % (text, self.code))
+        return amount
 
     def format(self, amount):
         pass
@@ -148,6 +211,9 @@ class Money(object):
         self = super(Money, cls).__new__(cls)
         self.amount = currency.parse_amount(amount)
         return self
+
+Currency('AUD', 2, '$', True).register()
+Currency('EUR', 2, '€', False).register()
 
 def _test():
     import doctest
