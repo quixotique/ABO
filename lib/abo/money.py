@@ -41,9 +41,10 @@ class Currency(object):
         self.local_symbol_precedes = local_symbol_precedes
         self.local_symbol_separated_by_space = local_symbol_separated_by_space
         self.decimal_context = decimal.Context(
-                prec=self.local_frac_digits,
-                rounding=decimal.ROUND_HALF_UP,
-                traps=(decimal.DivisionByZero, decimal.InvalidOperation, decimal.Inexact))
+                prec= 15,
+                rounding= decimal.ROUND_HALF_UP,
+                traps= (decimal.DivisionByZero, decimal.InvalidOperation, decimal.Inexact))
+        self.zero = decimal.Decimal(10, context=self.decimal_context) ** -self.local_frac_digits
         return self
 
     def register(self, registry=None):
@@ -65,13 +66,18 @@ class Currency(object):
             setattr(registry, self.code, self)
             return self
         assert singleton.code == self.code
-        if (    singleton.local_frac_digits == self.local_frac_digits
-            and singleton.local_symbol == self.local_symbol
-            and singleton.local_symbol_precedes == self.local_symbol_precedes
-            and singleton.local_symbol_separated_by_space == self.local_symbol_separated_by_space):
+        if singleton == self:
             return singleton
-        else:
-            raise RegistryError("%s.%s already set" % (registry.__name__, singleton.code))
+        raise RegistryError("%s.%s already set" % (registry.__name__, singleton.code))
+
+    def __eq__(self, other):
+        if not isinstance(other, Currency):
+            return NotImplemented
+        return (other.code == self.code
+            and other.local_frac_digits == self.local_frac_digits
+            and other.local_symbol == self.local_symbol
+            and other.local_symbol_precedes == self.local_symbol_precedes
+            and other.local_symbol_separated_by_space == self.local_symbol_separated_by_space)
 
     def __str__(self):
         return self.code
@@ -178,11 +184,16 @@ class Currency(object):
     def parse_amount(self, text):
         r'''Parse given text as a decimal amount of this currency.
         >>> Currencies.AUD.parse_amount('123')
-        Decimal('123')
+        Decimal('123.00')
         >>> Currencies.AUD.parse_amount('AUD 123')
-        Decimal('123')
+        Decimal('123.00')
         >>> Currencies.AUD.parse_amount('123 AUD')
-        Decimal('123')
+        Decimal('123.00')
+        >>> Currencies.AUD.parse_amount('70.45')
+        Decimal('70.45')
+        >>> Currencies.AUD.parse_amount('70.456')
+        Traceback (most recent call last):
+        ValueError: invalid literal for Currencies.AUD: '70.456'
         >>> Currencies.AUD.parse_amount('EUR 123')
         Traceback (most recent call last):
         ValueError: currency code of 'EUR 123' should be 'AUD'
@@ -196,24 +207,73 @@ class Currency(object):
         currency, amount = self.parse_amount_code(text, default_currency=self)
         if currency is not self:
             raise ValueError('currency code of %r should be %r' % (text, self.code))
-        return amount
+        try:
+            return self.quantize(amount)
+        except ValueError:
+            raise ValueError('invalid literal for %r: %r' % (self, text))
 
-    def format(self, amount):
-        pass
+    def quantize(self, amount):
+        r'''Produce a Decimal value with the correct number of decimal places
+        for this currency.  Raise ValueError if the given amount would have to
+        be rounded (ie, has too many decimal places).
+        >>> Currencies.AUD.quantize(1)
+        Decimal('1.00')
+        '''
+        try:
+            return self.decimal_context.quantize(amount, self.zero)
+        except decimal.Inexact:
+            raise ValueError('invalid literal for %r: %r' % (self, amount))
+
+    def format(self, amount, thousands=False):
+        ur'''Return a string representation of the Decimal amount with the
+        currency symbol as prefix or suffix.
+        >>> Currencies.AUD.format(1)
+        u'$1.00'
+        >>> Currencies.AUD.format(10000000)
+        u'$10000000.00'
+        >>> Currencies.AUD.format(10000000, thousands=True)
+        u'$10,000,000.00'
+        >>> Currencies.EUR.format(1) == u'1.00 €'
+        True
+        '''
+        amt = self.quantize(amount)
+        fmt = u'{0:,}' if thousands else u'{0}'
+        if self.local_symbol:
+            fmt = '{1}{2}' + fmt if self.local_symbol_precedes else fmt + '{2}{1}'
+        sep = ' ' if self.local_symbol_separated_by_space else ''
+        return fmt.format(amt, self.local_symbol, sep)
 
 class Money(object):
 
-    def __new__(cls, text, currency=None):
-        if currency is None:
-            currency, amount = Currency.extract_currency(amount)
+    r'''Represents an exact amount (not fractional) of a given single currency.
+    >>> Money(140, Currencies.AUD)
+    Money(140.00, Currencies.AUD)
+    '''
+
+    def __init__(self, amount, currency):
+        self.currency = currency
+        self.amount = currency.quantize(amount)
+
+    @classmethod
+    def from_text(cls, text, currency=None):
+        r'''Parse a text string into a Money object.
+        >>> Money.from_text('8071.51 AUD')
+        Money(8071.51, Currencies.AUD)
+        '''
+        if currency is not None:
+            amount = currency.parse_amount(text)
+        else:
+            currency, number = Currency.extract_currency(text)
             if currency is None:
-                raise ValueError('invalid literal for Money(currency=None): %r' % (text,))
-        self = super(Money, cls).__new__(cls)
-        self.amount = currency.parse_amount(amount)
-        return self
+                raise ValueError('invalid literal for %r.from_text(currency=None): %r' % (type(self).__name__, text,))
+            amount = currency.parse_amount(number)
+        return cls(amount, currency)
+
+    def __repr__(self):
+        return '%s(%s, %r)' % (type(self).__name__, self.amount, self.currency)
 
 Currency('AUD', 2, '$', True).register()
-Currency('EUR', 2, '€', False).register()
+Currency('EUR', 2, u'€', False, True).register()
 
 def _test():
     import doctest
