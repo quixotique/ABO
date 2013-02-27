@@ -4,16 +4,19 @@
 
 """A Journal is a source of Transactions parsed from a text file.
 
->>> j1 = Journal(_test_j1)
->>> for t in j1.transactions: t
+>>> for t in Journal(_test_j1).transactions: t
 Transaction(date=datetime.date(2013, 2, 21), who='Somebody', what='something', entries=(Entry(account='food', amount=Money(-10.00, Currencies.AUD)), Entry(account='bank', amount=Money(10.00, Currencies.AUD))))
-Transaction(date=datetime.date(2013, 2, 22), who='Somebody Else', what='another thing', entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)), Entry(account='drink', amount=Money(-3.00, Currencies.AUD)), Entry(account='bank', amount=Money(10.00, Currencies.AUD))))
+>>> for t in Journal(_test_j2).transactions: t
+Transaction(date=datetime.date(2013, 2, 22), who='Somebody Else', what='another thing', entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)), Entry(account='drink', amount=Money(-3.00, Currencies.AUD), detail='beer'), Entry(account='bank', amount=Money(10.00, Currencies.AUD))))
+>>> for t in Journal(_test_j3).transactions: t
+Transaction(date=datetime.date(2013, 2, 23), who='Whoever', what='whatever', entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)), Entry(account='drink', amount=Money(-3.00, Currencies.AUD), detail='beer'), Entry(account='bank', amount=Money(10.00, Currencies.AUD))))
 >>>
 """
 
+import re
 import StringIO
-_test_j1 = StringIO.StringIO(r'''
 
+_test_j1 = StringIO.StringIO(r'''
 type transaction
 date 21/2/2013
 who Somebody
@@ -21,17 +24,31 @@ what something
 db food
 cr bank
 amt 10.00
+''')
+_test_j1.name = 'StringIO'
 
+_test_j2 = StringIO.StringIO(r'''
 type transaction
 date 22/2/2013
 who Somebody Else
 what another thing
 db food 7
-db drink 3
+db drink 3 beer
 cr bank 10
-
 ''')
-_test_j1.name = 'StringIO'
+_test_j2.name = 'StringIO'
+
+_test_j3 = StringIO.StringIO(r'''
+type transaction
+date 23/2/2013
+who Whoever
+what whatever
+db food 7
+db drink beer
+cr bank
+amt 10
+''')
+_test_j3.name = 'StringIO'
 
 import datetime
 from abo.transaction import Transaction
@@ -105,25 +122,53 @@ class Journal(object):
                 amount = None
             if tags['type'][1] == 'transaction':
                 entries = []
+                totals = {'db': 0, 'cr': 0}
+                entries_noamt = {'db': None, 'cr': None}
                 for dbcr, sign in (('db', -1), ('cr', 1)):
                     for lnum, ent in tags[dbcr]:
                         words = ent.split(None, 2)
-                        dbcr_amount = amount
-                        if len(words) > 1:
+                        entry = {}
+                        money = None
+                        entry['account'] = words.pop(0)
+                        if words and self.appears_money(words[0]):
                             try:
-                                dbcr_amount = abo.config.parse_money(words[1])
+                                money = abo.config.parse_money(words.pop(0))
                             except ValueError:
                                 raise ParseException(source_file, lnum, 'invalid amount %r' % words[1])
-                        if dbcr_amount is None:
-                            raise ParseException(source_file, lnum, 'missing amount')
-                        entry = {'account': words[0], 'amount': dbcr_amount * sign}
-                        if len(words) > 2:
-                            entry['detail'] = words[2]
-                        entries.append(entry)
+                        if words:
+                            entry['detail'] = words.pop(0)
+                        assert not words
+                        if money is not None:
+                            entry['amount'] = money * sign
+                            entries.append(entry)
+                            totals[dbcr] += money
+                        elif entries_noamt[dbcr] is None:
+                            entries_noamt[dbcr] = entry
+                        else:
+                            raise ParseException(source_file, lnum, '%s missing amount' % (dbcr,))
+                if amount is None and entries:
+                    amount = max(totals.values())
+                for dbcr, sign, desc in (('db', -1, 'debit'), ('cr', 1, 'credit')):
+                    if totals[dbcr] > amount:
+                        raise ParseException(source_file, lnum, '%ss (%s) exceed amount (%s)' % (desc, totals[dbcr], amount))
+                    elif totals[dbcr] < amount:
+                        if entries_noamt[dbcr] is not None:
+                            entries_noamt[dbcr]['amount'] = (amount - totals[dbcr]) * sign
+                            entries.append(entries_noamt[dbcr])
+                        else:
+                            raise ParseException(source_file, lnum, '%ss (%s) do not sum to amount (%s)' % (desc, totals[dbcr], amount))
+                    elif entries_noamt[dbcr] is not None:
+                        raise ParseException(source_file, lnum, 'nil entry; credits already sum to amount (%s)' % (amount,))
                 kwargs['entries'] = entries
                 self.transactions.append(Transaction(**kwargs))
             else:
                 raise ParseException(source_file, tags['type'][0], 'unknown type %r', tags['type'][1])
+
+    _regex_amount = re.compile(r'\d*\.\d+|\d+')
+
+    @classmethod
+    def appears_money(cls, text):
+        return cls._regex_amount.search(text) is not None
 
 class ParseException(Exception):
 

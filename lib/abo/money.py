@@ -312,14 +312,50 @@ class Money(object):
             return other.amount
         return other
 
+    def __eq__(self, other):
+        return type(self)(self.amount == self._unmoney(other, '{0} == {1}'), self.currency)
+
+    def __ne__(self, other):
+        return type(self)(self.amount != self._unmoney(other, '{0} != {1}'), self.currency)
+
+    def __lt__(self, other):
+        return type(self)(self.amount < self._unmoney(other, '{0} < {1}'), self.currency)
+
+    def __le__(self, other):
+        return type(self)(self.amount <= self._unmoney(other, '{0} <= {1}'), self.currency)
+
+    def __gt__(self, other):
+        return type(self)(self.amount > self._unmoney(other, '{0} > {1}'), self.currency)
+
+    def __ge__(self, other):
+        return type(self)(self.amount >= self._unmoney(other, '{0} >= {1}'), self.currency)
+
+    def __neg__(self):
+        return type(self)(-self.amount, self.currency)
+
+    def __pos__(self):
+        return type(self)(+self.amount, self.currency)
+
+    def __abs__(self):
+        return type(self)(abs(self.amount), self.currency)
+
     def __add__(self, other):
         return type(self)(self.amount + self._unmoney(other, '{0} + {1}'), self.currency)
+
+    def __sub__(self, other):
+        return type(self)(self.amount - self._unmoney(other, '{0} - {1}'), self.currency)
 
     def __radd__(self, other):
         return type(self)(self._unmoney(other, '{1} + {0}') + self.amount, self.currency)
 
+    def __rsub__(self, other):
+        return type(self)(self._unmoney(other, '{1} - {0}') - self.amount, self.currency)
+
     def __mul__(self, other):
         return type(self)(self.amount * self._unmoney(other, '{0} * {1}'), self.currency)
+
+    def __rmul__(self, other):
+        return type(self)(self._unmoney(other, '{1} * {0}') * self.amount, self.currency)
 
 Currency('AUD', 2, '$', True).register()
 Currency('EUR', 2, u'€', False, True).register()

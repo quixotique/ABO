@@ -1,3 +1,7 @@
+# vim: sw=4 sts=4 et fileencoding=utf8 nomod
+#
+# Copyright 2013 Andrew Bettison
+
 """A Transaction is an immutable object representing a single, indivisible item
 in the journal.  The movements in a Transaction are represented by a list of
 two or more Entry objects.  The debits and credits of all the Entries in a
@@ -102,7 +106,7 @@ class Transaction(abo.base.Base):
                 e = Entry(self, **e)
                 ents.append(e)
             bal += e.amount
-        assert not bal
+        assert not bal, 'entries sum to zero'
         self.entries = tuple(ents)
         # Check that transaction is valid.
         self._validate_transaction(self)
