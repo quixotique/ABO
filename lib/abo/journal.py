@@ -1,9 +1,13 @@
+# vim: sw=4 sts=4 et fileencoding=utf8 nomod
+#
+# Copyright 2013 Andrew Bettison
+
 """A Journal is a source of Transactions parsed from a text file.
 
 >>> j1 = Journal(_test_j1)
 >>> for t in j1.transactions: t
-Transaction(date=datetime.date(2013, 2, 21), who='Somebody', what='something', entries=(Entry(account='food', amount=AUD('-10.00')), Entry(account='bank', amount=AUD('10.00'))))
-Transaction(date=datetime.date(2013, 2, 22), who='Somebody Else', what='another thing', entries=(Entry(account='food', amount=AUD('-7.00')), Entry(account='drink', amount=AUD('-3.00')), Entry(account='bank', amount=AUD('10.00'))))
+Transaction(date=datetime.date(2013, 2, 21), who='Somebody', what='something', entries=(Entry(account='food', amount=Money(-10.00, Currencies.AUD)), Entry(account='bank', amount=Money(10.00, Currencies.AUD))))
+Transaction(date=datetime.date(2013, 2, 22), who='Somebody Else', what='another thing', entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)), Entry(account='drink', amount=Money(-3.00, Currencies.AUD)), Entry(account='bank', amount=Money(10.00, Currencies.AUD))))
 >>>
 """
 
@@ -30,11 +34,10 @@ cr bank 10
 _test_j1.name = 'StringIO'
 
 import datetime
-import abo.base
 from abo.transaction import Transaction
-import abo.amount
+import abo.config
 
-class Journal(abo.base.Base):
+class Journal(object):
 
     def __init__(self, source_file):
         self.transactions = []
@@ -95,7 +98,7 @@ class Journal(abo.base.Base):
             kwargs['what'] = tags['what'][1]
             if tags['amt']:
                 try:
-                    amount = abo.amount.make(tags['amt'][1])
+                    amount = abo.config.parse_money(tags['amt'][1])
                 except ValueError:
                     raise ParseException(source_file, tags['amt'][0], 'invalid amount %r' % tags['amt'][1])
             else:
@@ -108,12 +111,12 @@ class Journal(abo.base.Base):
                         dbcr_amount = amount
                         if len(words) > 1:
                             try:
-                                dbcr_amount = abo.amount.make(words[1])
+                                dbcr_amount = abo.config.parse_money(words[1])
                             except ValueError:
                                 raise ParseException(source_file, lnum, 'invalid amount %r' % words[1])
                         if dbcr_amount is None:
                             raise ParseException(source_file, lnum, 'missing amount')
-                        entry = {'account': ent, 'amount': dbcr_amount * sign}
+                        entry = {'account': words[0], 'amount': dbcr_amount * sign}
                         if len(words) > 2:
                             entry['detail'] = words[2]
                         entries.append(entry)

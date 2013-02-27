@@ -1,4 +1,6 @@
 # vim: sw=4 sts=4 et fileencoding=utf8 nomod
+#
+# Copyright 2013 Andrew Bettison
 
 """A Money object represents an exact amount of a single currency.
 """
@@ -8,6 +10,9 @@ import decimal
 import pycountry
 
 class RegistryError(Exception):
+    pass
+
+class CurrencyMismatch(Exception):
     pass
 
 class Currencies(object):
@@ -79,6 +84,11 @@ class Currency(object):
             and other.local_symbol_precedes == self.local_symbol_precedes
             and other.local_symbol_separated_by_space == self.local_symbol_separated_by_space)
 
+    def __ne__(self, other):
+        if not isinstance(other, Currency):
+            return NotImplemented
+        return not self.__eq__(other)
+
     def __str__(self):
         return self.code
 
@@ -139,19 +149,19 @@ class Currency(object):
         return None, text
 
     @classmethod
-    def parse_amount_code(cls, text, default_currency=None):
-        r'''Parse given text as a Decimal and a currency code.
-        >>> Currency.parse_amount_code('123')
+    def parse_amount_currency(cls, text, default_currency=None):
+        r'''Parse given text into a Decimal amount and a Currency object.
+        >>> Currency.parse_amount_currency('123')
         Traceback (most recent call last):
         ValueError: missing currency code in '123'
-        >>> Currency.parse_amount_code('AUD 123')
+        >>> Currency.parse_amount_currency('AUD 123')
         (Currencies.AUD, Decimal('123'))
-        >>> Currency.parse_amount_code('123AUD')
+        >>> Currency.parse_amount_currency('123AUD')
         (Currencies.AUD, Decimal('123'))
-        >>> Currency.parse_amount_code('AUD 1.2.3')
+        >>> Currency.parse_amount_currency('AUD 1.2.3')
         Traceback (most recent call last):
         ValueError: invalid amount: '1.2.3'
-        >>> Currency.parse_amount_code('123 USD')
+        >>> Currency.parse_amount_currency('123 USD')
         Traceback (most recent call last):
         ValueError: unknown currency 'USD' in '123 USD'
         '''
@@ -204,7 +214,7 @@ class Currency(object):
         Traceback (most recent call last):
         ValueError: invalid amount: '1.2.3'
         '''
-        currency, amount = self.parse_amount_code(text, default_currency=self)
+        currency, amount = self.parse_amount_currency(text, default_currency=self)
         if currency is not self:
             raise ValueError('currency code of %r should be %r' % (text, self.code))
         try:
@@ -213,9 +223,10 @@ class Currency(object):
             raise ValueError('invalid literal for %r: %r' % (self, text))
 
     def quantize(self, amount):
-        r'''Produce a Decimal value with the correct number of decimal places
-        for this currency.  Raise ValueError if the given amount would have to
-        be rounded (ie, has too many decimal places).
+        r'''Convert the given number into a Decimal value with the correct
+        number of decimal places for this currency.  Raise ValueError if the
+        given amount would have to be rounded (ie, has too many decimal
+        places).
         >>> Currencies.AUD.quantize(1)
         Decimal('1.00')
         '''
@@ -243,6 +254,22 @@ class Currency(object):
         sep = ' ' if self.local_symbol_separated_by_space else ''
         return fmt.format(amt, self.local_symbol, sep)
 
+    def parse_amount_money(self, text):
+        r'''Parse given text into a Money object with this currency.
+        >>> Currencies.EUR.parse_amount_money('60001')
+        Money(60001.00, Currencies.EUR)
+        '''
+        return Money.from_text(text, currency=self)
+
+    def money(self, amount):
+        r'''Convert the given number into a Money object for this currency.
+        Raise ValueError if the given amount would have to be rounded (ie, has
+        too many decimal places.
+        >>> Currencies.AUD.money(1)
+        Money(1.00, Currencies.AUD)
+        '''
+        return Money(amount, self)
+
 class Money(object):
 
     r'''Represents an exact amount (not fractional) of a given single currency.
@@ -269,8 +296,30 @@ class Money(object):
             amount = currency.parse_amount(number)
         return cls(amount, currency)
 
+    def __str__(self):
+        return '%s %s' % (self.amount, self.currency)
+
     def __repr__(self):
         return '%s(%s, %r)' % (type(self).__name__, self.amount, self.currency)
+
+    def __nonzero__(self):
+        return bool(self.amount)
+
+    def _unmoney(self, other, fmt):
+        if isinstance(other, Money):
+            if other.currency != self.currency:
+                raise CurrencyMismatch(fmt.format(self, other))
+            return other.amount
+        return other
+
+    def __add__(self, other):
+        return type(self)(self.amount + self._unmoney(other, '{0} + {1}'), self.currency)
+
+    def __radd__(self, other):
+        return type(self)(self._unmoney(other, '{1} + {0}') + self.amount, self.currency)
+
+    def __mul__(self, other):
+        return type(self)(self.amount * self._unmoney(other, '{0} * {1}'), self.currency)
 
 Currency('AUD', 2, '$', True).register()
 Currency('EUR', 2, u'€', False, True).register()
