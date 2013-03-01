@@ -4,52 +4,10 @@
 
 """A Journal is a source of Transactions parsed from a text file.
 
->>> for t in Journal(_test_j1).transactions: t
-Transaction(date=datetime.date(2013, 2, 21), who='Somebody', what='something', entries=(Entry(account='food', amount=Money(-10.00, Currencies.AUD)), Entry(account='bank', amount=Money(10.00, Currencies.AUD))))
->>> for t in Journal(_test_j2).transactions: t
-Transaction(date=datetime.date(2013, 2, 22), who='Somebody Else', what='another thing', entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)), Entry(account='drink', amount=Money(-3.00, Currencies.AUD), detail='beer'), Entry(account='bank', amount=Money(10.00, Currencies.AUD))))
->>> for t in Journal(_test_j3).transactions: t
-Transaction(date=datetime.date(2013, 2, 23), who='Whoever', what='whatever', entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)), Entry(account='drink', amount=Money(-3.00, Currencies.AUD), detail='beer'), Entry(account='bank', amount=Money(10.00, Currencies.AUD))))
 >>>
 """
 
 import re
-import StringIO
-
-_test_j1 = StringIO.StringIO(r'''
-type transaction
-date 21/2/2013
-who Somebody
-what something
-db food
-cr bank
-amt 10.00
-''')
-_test_j1.name = 'StringIO'
-
-_test_j2 = StringIO.StringIO(r'''
-type transaction
-date 22/2/2013
-who Somebody Else
-what another thing
-db food 7
-db drink 3 beer
-cr bank 10
-''')
-_test_j2.name = 'StringIO'
-
-_test_j3 = StringIO.StringIO(r'''
-type transaction
-date 23/2/2013
-who Whoever
-what whatever
-db food 7
-db drink beer
-cr bank
-amt 10
-''')
-_test_j3.name = 'StringIO'
-
 import datetime
 from abo.transaction import Transaction
 import abo.config
@@ -61,6 +19,11 @@ class Journal(object):
         self._parse(source_file)
 
     def _parse(self, source_file):
+        if isinstance(source_file, basestring):
+            # To facilitate testing.
+            import StringIO
+            source_file = StringIO.StringIO(source_file)
+            source_file.name = 'StringIO'
         lines = list(source_file)
         blocks = []
         block = []
@@ -174,6 +137,54 @@ class ParseException(Exception):
 
     def __init__(self, source_file, line_number, message):
         super(ParseException, self).__init__('%s, %u: %s' % (getattr(source_file, 'name', type(source_file).__name__), line_number, message))
+
+__test__ = {
+'transactions':r"""
+>>> Journal(r'''
+... type transaction
+... date 21/2/2013
+... who Somebody
+... what something
+... db food
+... cr bank
+... amt 10.00
+... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 2, 21),
+    who='Somebody', what='something',
+    entries=(Entry(account='food', amount=Money(-10.00, Currencies.AUD)),
+             Entry(account='bank', amount=Money(10.00, Currencies.AUD))))]
+>>> Journal(r'''
+... type transaction
+... date 22/2/2013
+... who Somebody Else
+... what another thing
+... db food 7
+... db drink 3 beer
+... cr bank 10
+... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 2, 22),
+    who='Somebody Else', what='another thing',
+    entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)),
+             Entry(account='drink', amount=Money(-3.00, Currencies.AUD), detail='beer'),
+             Entry(account='bank', amount=Money(10.00, Currencies.AUD))))]
+>>> Journal(r'''
+... type transaction
+... date 23/2/2013
+... who Whoever
+... what whatever
+... db food 7
+... db drink beer
+... cr bank
+... cr cash 2
+... amt 10
+... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 2, 23),
+    who='Whoever', what='whatever',
+    entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)),
+             Entry(account='drink', amount=Money(-3.00, Currencies.AUD), detail='beer'),
+             Entry(account='cash', amount=Money(2.00, Currencies.AUD)),
+             Entry(account='bank', amount=Money(8.00, Currencies.AUD))))]
+"""}
 
 def _test():
     import doctest

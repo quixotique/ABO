@@ -7,9 +7,9 @@ in the journal.  The movements in a Transaction are represented by a list of
 two or more Entry objects.  The debits and credits of all the Entries in a
 Transaction must balance to zero, and no Entry can be for a zero amount.
 
->>> t1 = Transaction(date=1, who="Someone", what="something", \\
-...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
-...                  {'account':'a2', 'amount':-14.56}))
+>>> t1 = Transaction(date=1, who="Someone", what="something",
+...         entries=({'account':'a2', 'amount':14.56, 'detail':'else'},
+...                  {'account':'a1', 'amount':-14.56}))
 >>> t1.description()
 'Someone; something'
 >>> t1.entries[0].transaction is t1
@@ -17,15 +17,15 @@ True
 >>> t1.entries[0].account
 'a1'
 >>> t1.entries[0].amount
-14.56
->>> t1.entries[0].description()
+-14.56
+>>> t1.entries[1].description()
 'Someone; something, else'
 >>> t1
-Transaction(date=1, who='Someone', what='something', entries=(Entry(account='a1', amount=14.56, detail='else'), Entry(account='a2', amount=-14.56)))
+Transaction(date=1, who='Someone', what='something', entries=(Entry(account='a1', amount=-14.56), Entry(account='a2', amount=14.56, detail='else')))
 >>> t2 = Transaction(date=2, who="Them", what="whatever", entries=t1.entries)
 >>> t2.entries[0].transaction is t2
 True
->>> t2.entries[0].description()
+>>> t2.entries[1].description()
 'Them; whatever, else'
 >>>
 """
@@ -108,7 +108,7 @@ class Transaction(abo.base.Base):
                 ents.append(e)
             bal += e.amount
         assert bal == 0, 'entries sum to zero'
-        self.entries = tuple(ents)
+        self.entries = tuple(sorted(ents, key=lambda e: (e.amount, e.account, e.detail)))
 
     def __repr__(self):
         r = []
@@ -131,8 +131,8 @@ class Transaction(abo.base.Base):
 __test__ = {
 'accessors':"""
     >>> t = Transaction(date=1, cdate=7, who="Someone", what="something", \\
-    ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
-    ...                  {'account':'a2', 'amount':-14.56}))
+    ...         entries=({'account':'a1', 'amount':-14.56, 'detail':'else'}, \\
+    ...                  {'account':'a2', 'amount':14.56}))
     >>> t.date
     1
     >>> t.cdate
@@ -146,7 +146,7 @@ __test__ = {
     >>> t.entries[0].account
     'a1'
     >>> t.entries[0].amount
-    14.56
+    -14.56
     >>> t.entries[0].detail
     'else'
     >>> t.entries[0].description()
@@ -156,7 +156,7 @@ __test__ = {
     >>> t.entries[1].account
     'a2'
     >>> t.entries[1].amount
-    -14.56
+    14.56
     >>> t.entries[1].detail
     ''
     >>> t.entries[1].description()
