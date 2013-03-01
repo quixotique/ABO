@@ -9,6 +9,7 @@
 
 import re
 import datetime
+import copy
 from abo.transaction import Transaction
 import abo.config
 
@@ -27,28 +28,56 @@ class Journal(object):
         lines = list(source_file)
         blocks = []
         block = []
-        for lnum, line in enumerate(lines, 1):
+        lnum = 0
+        for line in lines:
             line = line.rstrip('\n')
             if line:
-                block.append((lnum, line))
+                words = line.split(None, 2)
+                if words[0] == '#line' and len(words) > 1 and words[1].isdigit():
+                    lnum = int(words[1])
+                elif words[0].startswith('#'):
+                    lnum += 1
+                else:
+                    lnum += 1
+                    block.append((lnum, line))
             elif block:
                 blocks.append(block)
                 block = []
         if block:
             blocks.append(block)
+        optional = set(['due', 'amt'])
+        template = {
+            'type': None,
+            'date': None,
+            'due': None,
+            'who': None,
+            'what': None,
+            'db': [],
+            'cr': [],
+            'amt': None,
+        }
+        defaults = copy.deepcopy(template)
         for block in blocks:
-            optional = set(['due', 'amt'])
-            tags= {
-                'type': None,
-                'date': None,
-                'due': None,
-                'who': None,
-                'what': None,
-                'db': [],
-                'cr': [],
-                'amt': None,
-            }
+            tags = copy.deepcopy(template)
+            empty = True
             for lnum, line in block:
+                words = line.split(None, 1)
+                if words[0] == '%default':
+                    try:
+                        tag, text = words[1].split(None, 1)
+                    except ValueError, e:
+                        raise ParseException(source_file, lnum, 'syntax error, expecting "%default <tag> <text>"')
+                    if tag not in template:
+                        raise ParseException(source_file, lnum, 'invalid %%default tag %r' % tag)
+                    if not text:
+                        defaults[tag] = template[tag]
+                    elif type(template[tag]) is list:
+                        defaults[tag] = [(lnum, text)]
+                    else:
+                        defaults[tag] = (lnum, text)
+                    continue
+                if words[0].startswith('%'):
+                    continue
                 try:
                     tag, text = line.split(None, 1)
                 except ValueError, e:
@@ -61,9 +90,15 @@ class Journal(object):
                     tags[tag] = (lnum, text)
                 else:
                     raise ParseException(source_file, lnum, 'duplicate tag %r' % tag)
+                empty = False
+            if empty:
+                continue
             for tag in tags:
-                if tag not in optional and not tags[tag]:
-                    raise ParseException(source_file, block[0][0], 'missing tag %r', tag)
+                if not tags[tag]:
+                    if defaults.get(tag):
+                        tags[tag] = defaults[tag]
+                    elif tag not in optional:
+                        raise ParseException(source_file, block[0][0], 'missing tag %r', tag)
             kwargs = {}
             try:
                 kwargs['date'] = datetime.datetime.strptime(tags['date'][1], '%d/%m/%Y').date()
@@ -125,7 +160,7 @@ class Journal(object):
                 kwargs['entries'] = entries
                 self.transactions.append(Transaction(**kwargs))
             else:
-                raise ParseException(source_file, tags['type'][0], 'unknown type %r', tags['type'][1])
+                raise ParseException(source_file, tags['type'][0], 'unknown type %r' % (tags['type'][1],))
 
     _regex_amount = re.compile(r'\d*\.\d+|\d+')
 
@@ -140,6 +175,7 @@ class ParseException(Exception):
 
 __test__ = {
 'transactions':r"""
+
 >>> Journal(r'''
 ... type transaction
 ... date 21/2/2013
@@ -153,6 +189,7 @@ __test__ = {
     who='Somebody', what='something',
     entries=(Entry(account='food', amount=Money(-10.00, Currencies.AUD)),
              Entry(account='bank', amount=Money(10.00, Currencies.AUD))))]
+
 >>> Journal(r'''
 ... type transaction
 ... date 22/2/2013
@@ -167,6 +204,7 @@ __test__ = {
     entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)),
              Entry(account='drink', amount=Money(-3.00, Currencies.AUD), detail='beer'),
              Entry(account='bank', amount=Money(10.00, Currencies.AUD))))]
+
 >>> Journal(r'''
 ... type transaction
 ... date 23/2/2013
@@ -184,7 +222,38 @@ __test__ = {
              Entry(account='drink', amount=Money(-3.00, Currencies.AUD), detail='beer'),
              Entry(account='cash', amount=Money(2.00, Currencies.AUD)),
              Entry(account='bank', amount=Money(8.00, Currencies.AUD))))]
-"""}
+
+>>> Journal(r'''
+... %default type transaction
+... %default cr cash
+... %default db games
+...
+... date 23/2/2013
+... who Whoever
+... what whatever
+... db food 7
+... db drink beer
+... amt 10
+... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 2, 23),
+    who='Whoever', what='whatever',
+    entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)),
+             Entry(account='drink', amount=Money(-3.00, Currencies.AUD), detail='beer'),
+             Entry(account='cash', amount=Money(10.00, Currencies.AUD))))]
+
+>>> Journal(r'''
+... date 23/2/2013
+... # comment
+... who Whoever
+... #line 20 wah
+... what whatever
+... db
+... ''') #doctest: +NORMALIZE_WHITESPACE
+Traceback (most recent call last):
+ParseException: StringIO, 22: syntax error, expecting "<tag> <text>"
+
+""",
+}
 
 def _test():
     import doctest
