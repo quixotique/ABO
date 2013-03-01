@@ -5,7 +5,3 @@ class Base(object):
 	global unique_id
 	unique_id += 1
 	return unique_id
-    def make_money(self, n):
-	return n
-    def _validate_transaction(self, t):
-	pass
