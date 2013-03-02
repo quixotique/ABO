@@ -12,6 +12,7 @@ import datetime
 import copy
 from abo.transaction import Transaction
 import abo.config
+from abo.struct import struct
 
 class Journal(object):
 
@@ -29,17 +30,20 @@ class Journal(object):
         blocks = []
         block = []
         lnum = 0
+        name = getattr(source_file, 'name', str(source_file))
         for line in lines:
             line = line.rstrip('\n')
             if line:
-                words = line.split(None, 2)
+                words = line.split(None, 3)
                 if words[0] == '#line' and len(words) > 1 and words[1].isdigit():
                     lnum = int(words[1])
+                    if len(words) > 2:
+                        name = words[2]
                 elif words[0].startswith('#'):
                     lnum += 1
                 else:
                     lnum += 1
-                    block.append((lnum, line))
+                    block.append(struct(name=name, line_number=lnum, fulltext=line))
             elif block:
                 blocks.append(block)
                 block = []
@@ -60,36 +64,36 @@ class Journal(object):
         for block in blocks:
             tags = copy.deepcopy(template)
             empty = True
-            for lnum, line in block:
-                words = line.split(None, 1)
+            for line in block:
+                words = line.fulltext.split(None, 1)
                 if words[0] == '%default':
                     try:
-                        tag, text = words[1].split(None, 1)
+                        line.tag, line.text = words[1].split(None, 1)
                     except ValueError, e:
-                        raise ParseException(source_file, lnum, 'syntax error, expecting "%default <tag> <text>"')
-                    if tag not in template:
-                        raise ParseException(source_file, lnum, 'invalid %%default tag %r' % tag)
-                    if not text:
-                        defaults[tag] = template[tag]
-                    elif type(template[tag]) is list:
-                        defaults[tag] = [(lnum, text)]
+                        raise ParseException(line, 'syntax error, expecting "%default <tag> <text>"')
+                    if line.tag not in template:
+                        raise ParseException(line, 'invalid %%default tag %r' % line.tag)
+                    if not line.text:
+                        defaults[line.tag] = template[line.tag]
+                    elif type(template[line.tag]) is list:
+                        defaults[line.tag] = [line]
                     else:
-                        defaults[tag] = (lnum, text)
+                        defaults[line.tag] = line
                     continue
                 if words[0].startswith('%'):
                     continue
                 try:
-                    tag, text = line.split(None, 1)
+                    line.tag, line.text = line.fulltext.split(None, 1)
                 except ValueError, e:
-                    raise ParseException(source_file, lnum, 'syntax error, expecting "<tag> <text>"')
-                if tag not in tags:
-                    raise ParseException(source_file, lnum, 'invalid tag %r' % tag)
-                if type(tags[tag]) is list:
-                    tags[tag].append((lnum, text))
-                elif tags[tag] is None:
-                    tags[tag] = (lnum, text)
+                    raise ParseException(line, 'syntax error, expecting "<tag> <text>"')
+                if line.tag not in tags:
+                    raise ParseException(line, 'invalid tag %r' % line.tag)
+                if type(tags[line.tag]) is list:
+                    tags[line.tag].append(line)
+                elif tags[line.tag] is None:
+                    tags[line.tag] = line
                 else:
-                    raise ParseException(source_file, lnum, 'duplicate tag %r' % tag)
+                    raise ParseException(line, 'duplicate tag %r' % line.tag)
                 empty = False
             if empty:
                 continue
@@ -98,41 +102,41 @@ class Journal(object):
                     if defaults.get(tag):
                         tags[tag] = defaults[tag]
                     elif tag not in optional:
-                        raise ParseException(source_file, block[0][0], 'missing tag %r', tag)
+                        raise ParseException(block[0], 'missing tag %r', tag)
             kwargs = {}
             try:
-                kwargs['date'] = datetime.datetime.strptime(tags['date'][1], '%d/%m/%Y').date()
+                kwargs['date'] = datetime.datetime.strptime(tags['date'].text, '%d/%m/%Y').date()
             except ValueError:
-                raise ParseException(source_file, tags['date'][0], 'invalid date %r' % tags['date'][1])
+                raise ParseException(tags['date'], 'invalid date %r' % tags['date'].text)
             if tags['due']:
                 try:
-                    kwargs['cdate'] = datetime.datetime.strptime(tags['due'][1], '%d/%m/%Y').date()
+                    kwargs['cdate'] = datetime.datetime.strptime(tags['due'].text, '%d/%m/%Y').date()
                 except ValueError:
-                    raise ParseException(source_file, tags['due'][0], 'invalid due date %r' % tags['due'][1])
-            kwargs['who'] = tags['who'][1]
-            kwargs['what'] = tags['what'][1]
+                    raise ParseException(tags['due'], 'invalid due date %r' % tags['due'].text)
+            kwargs['who'] = tags['who'].text
+            kwargs['what'] = tags['what'].text
             if tags['amt']:
                 try:
-                    amount = abo.config.parse_money(tags['amt'][1])
+                    amount = abo.config.parse_money(tags['amt'].text)
                 except ValueError:
-                    raise ParseException(source_file, tags['amt'][0], 'invalid amount %r' % tags['amt'][1])
+                    raise ParseException(tags['amt'], 'invalid amount %r' % tags['amt'].text)
             else:
                 amount = None
-            if tags['type'][1] == 'transaction':
+            if tags['type'].text == 'transaction':
                 entries = []
                 totals = {'db': 0, 'cr': 0}
                 entries_noamt = {'db': None, 'cr': None}
                 for dbcr, sign in (('db', -1), ('cr', 1)):
-                    for lnum, ent in tags[dbcr]:
-                        words = ent.split(None, 2)
-                        entry = {}
+                    for ent in tags[dbcr]:
+                        words = ent.text.split(None, 2)
+                        entry = {'line': ent}
                         money = None
                         entry['account'] = words.pop(0)
                         if words and self.appears_money(words[0]):
                             try:
                                 money = abo.config.parse_money(words.pop(0))
                             except ValueError:
-                                raise ParseException(source_file, lnum, 'invalid amount %r' % words[1])
+                                raise ParseException(ent, 'invalid amount %r' % words[1])
                         if words:
                             entry['detail'] = words.pop(0)
                         assert not words
@@ -143,24 +147,26 @@ class Journal(object):
                         elif entries_noamt[dbcr] is None:
                             entries_noamt[dbcr] = entry
                         else:
-                            raise ParseException(source_file, lnum, '%s missing amount' % (dbcr,))
+                            raise ParseException(ent, '%s missing amount' % (dbcr,))
                 if amount is None and entries:
                     amount = max(totals.values())
                 for dbcr, sign, desc in (('db', -1, 'debit'), ('cr', 1, 'credit')):
                     if totals[dbcr] > amount:
-                        raise ParseException(source_file, lnum, '%ss (%s) exceed amount (%s)' % (desc, totals[dbcr], amount))
+                        raise ParseException(block[0], '%ss (%s) exceed amount (%s)' % (desc, totals[dbcr], amount))
                     elif totals[dbcr] < amount:
                         if entries_noamt[dbcr] is not None:
                             entries_noamt[dbcr]['amount'] = (amount - totals[dbcr]) * sign
                             entries.append(entries_noamt[dbcr])
                         else:
-                            raise ParseException(source_file, lnum, '%ss (%s) do not sum to amount (%s)' % (desc, totals[dbcr], amount))
+                            raise ParseException(block[0], '%ss (%s) do not sum to amount (%s)' % (desc, totals[dbcr], amount))
                     elif entries_noamt[dbcr] is not None:
-                        raise ParseException(source_file, lnum, 'nil entry; credits already sum to amount (%s)' % (amount,))
+                        raise ParseException(entries_noamt[dbcr]['line'], 'nil entry; credits already sum to amount (%s)' % (amount,))
+                for entry in entries:
+                    del entry['line']
                 kwargs['entries'] = entries
                 self.transactions.append(Transaction(**kwargs))
             else:
-                raise ParseException(source_file, tags['type'][0], 'unknown type %r' % (tags['type'][1],))
+                raise ParseException(tags['type'], 'unknown type %r' % (tags['type'].text,))
 
     _regex_amount = re.compile(r'\d*\.\d+|\d+')
 
@@ -170,8 +176,14 @@ class Journal(object):
 
 class ParseException(Exception):
 
-    def __init__(self, source_file, line_number, message):
-        super(ParseException, self).__init__('%s, %u: %s' % (getattr(source_file, 'name', type(source_file).__name__), line_number, message))
+    def __init__(self, source, message):
+        s = []
+        if hasattr(source, 'name'):
+            s.append(str(source.name))
+        if hasattr(source, 'line_number'):
+            s.append(str(source.line_number))
+        s = ', '.join(s) + ': ' if s else ''
+        super(ParseException, self).__init__('%s%s' % (s, message))
 
 __test__ = {
 'transactions':r"""
@@ -245,12 +257,12 @@ __test__ = {
 ... date 23/2/2013
 ... # comment
 ... who Whoever
-... #line 20 wah
+... #line 20 "wah"
 ... what whatever
 ... db
 ... ''') #doctest: +NORMALIZE_WHITESPACE
 Traceback (most recent call last):
-ParseException: StringIO, 22: syntax error, expecting "<tag> <text>"
+ParseException: "wah", 22: syntax error, expecting "<tag> <text>"
 
 """,
 }
