@@ -12,6 +12,7 @@ import datetime
 import copy
 from abo.transaction import Transaction
 import abo.config
+import abo.account
 from abo.struct import struct
 
 class Journal(object):
@@ -106,7 +107,7 @@ class Journal(object):
                     raise ParseException(firstline, 'missing tag %r', tag)
                 used[tag] = True
                 return line
-            meth = getattr(self, '_parse_type_' + tagline('type').text)
+            meth = getattr(self, '_parse_type_' + tagline('type').text, None)
             if not meth:
                 raise ParseException(tags['type'], 'unknown type %r' % (tags['type'].text,))
             kwargs = {}
@@ -166,7 +167,7 @@ class Journal(object):
         amount = self._parse_money(amt) if amt else None
         entries = []
         acc = tagline('acc')
-        account = self._parse_account(acc)
+        account = self._parse_account_name(acc)
         total = 0
         entry_noamt = None
         for line in tagline('item'):
@@ -202,6 +203,23 @@ class Journal(object):
     def _parse_type_bill(self, firstline, kwargs, tagline):
         return self._parse_invoice_bill(firstline, kwargs, tagline, 1)
 
+    def _parse_remittance_receipt(self, firstline, kwargs, tagline, sign):
+        amount = self._parse_money(tagline('amt'))
+        acc = tagline('acc')
+        account = self._parse_account_name(acc)
+        bank = tagline('bank')
+        bank_account = self._parse_account_name(bank)
+        entries = []
+        entries.append({'line': acc, 'account': account, 'amount': amount * sign})
+        entries.append({'line': bank, 'account': bank_account, 'amount': amount * -sign})
+        return entries
+
+    def _parse_type_remittance(self, firstline, kwargs, tagline):
+        return self._parse_remittance_receipt(firstline, kwargs, tagline, 1)
+
+    def _parse_type_receipt(self, firstline, kwargs, tagline):
+        return self._parse_remittance_receipt(firstline, kwargs, tagline, -1)
+
     _regex_relative = re.compile(r'^[+-]\d+$')
 
     @classmethod
@@ -214,8 +232,11 @@ class Journal(object):
             raise ParseException(line, 'invalid date %r' % line.text)
 
     @classmethod
-    def _parse_account(cls, line):
-        return line.text
+    def _parse_account_name(cls, line):
+        try:
+            return abo.account.parse_account_name(line.text)
+        except ValueError, e:
+            raise ParseException(line, e)
 
     @classmethod
     def _parse_money(cls, line):
@@ -228,7 +249,10 @@ class Journal(object):
     def _parse_dbcr(cls, line):
         entry = {'line': line}
         words = line.text.split(None, 2)
-        entry['account'] = words.pop(0)
+        try:
+            entry['account'] = abo.account.parse_account_name(words.pop(0))
+        except ValueError:
+            raise ParseException(line, e)
         money = None
         if words and cls.appears_money(words[0]):
             try:
@@ -260,7 +284,7 @@ class ParseException(Exception):
         super(ParseException, self).__init__('%s%s' % (s, message))
 
 __test__ = {
-'transactions':r"""
+'transaction':r"""
 
 >>> Journal(r'''
 ... type transaction
@@ -379,7 +403,7 @@ ParseException: StringIO, 7: spurious 'item' tag
              Entry(account='bank', amount=Money(10.00, Currencies.AUD))))]
 
 """,
-'invoices':r"""
+'invoice':r"""
 
 >>> Journal(r'''
 ... type invoice
@@ -397,7 +421,7 @@ ParseException: StringIO, 7: spurious 'item' tag
              Entry(account='thing', amount=Money(100.00, Currencies.AUD), detail='comment')))]
 
 """,
-'bills':r"""
+'bill':r"""
 
 >>> Journal(r'''
 ... type bill
@@ -415,6 +439,40 @@ ParseException: StringIO, 7: spurious 'item' tag
     entries=(Entry(account='thing', amount=Money(-1.00, Currencies.AUD), detail='comment'),
              Entry(account='round', amount=Money(-0.01, Currencies.AUD), detail='oops'),
              Entry(account='body', amount=Money(1.01, Currencies.AUD), cdate=datetime.date(2013, 2, 15))))]
+
+""",
+'remittance':r"""
+
+>>> Journal(r'''
+... type remittance
+... date 15/2/2013
+... who Somebody
+... what something
+... acc body
+... bank cash
+... amt 1.01
+... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 2, 15),
+    who='Somebody', what='something',
+    entries=(Entry(account='cash', amount=Money(-1.01, Currencies.AUD)),
+             Entry(account='body', amount=Money(1.01, Currencies.AUD))))]
+
+""",
+'receipt':r"""
+
+>>> Journal(r'''
+... type receipt
+... date 15/2/2013
+... who Somebody
+... what something
+... acc body
+... bank cash
+... amt 55.65
+... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 2, 15),
+    who='Somebody', what='something',
+    entries=(Entry(account='body', amount=Money(-55.65, Currencies.AUD)),
+             Entry(account='cash', amount=Money(55.65, Currencies.AUD))))]
 
 """,
 }
