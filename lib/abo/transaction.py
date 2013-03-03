@@ -37,7 +37,7 @@ class Entry(abo.base.Base):
     single account.
     """
 
-    def __init__(self, transaction, account=None, amount=None, detail=""):
+    def __init__(self, transaction, account=None, amount=None, cdate=None, detail=""):
         """Construct a new Entry object, given its account, amount (-ve for
         debit, +ve for credit), and optional descriptive detail.
         """
@@ -48,12 +48,15 @@ class Entry(abo.base.Base):
         self.transaction = transaction
         self.account = account
         self.amount = amount
+        self.cdate = cdate
         self.detail = detail
 
     def __repr__(self):
         r = []
         r.append(('account', self.account))
         r.append(('amount', self.amount))
+        if self.cdate:
+            r.append(('cdate', self.cdate))
         if self.detail:
             r.append(('detail', self.detail))
         return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % i for i in r))
@@ -84,7 +87,7 @@ class Transaction(abo.base.Base):
     transaction for humans, and a list of two or more Entries.
     """
 
-    def __init__(self, date=None, cdate=None, who=None, what=None, entries=()):
+    def __init__(self, date=None, who=None, what=None, entries=()):
         """Construct a new Transaction object, given its date, optional control
         date, description, and list of Entry objects.
         """
@@ -94,7 +97,6 @@ class Transaction(abo.base.Base):
         assert len(entries) >= 2, 'too few entries'
         self.id = self._make_unique_id()
         self.date = date
-        self.cdate = cdate
         self.who = who
         self.what = what
         # Construct member Entry objects and ensure that they sum to zero.
@@ -113,8 +115,6 @@ class Transaction(abo.base.Base):
     def __repr__(self):
         r = []
         r.append(('date', self.date))
-        if self.cdate:
-            r.append(('cdate', self.cdate))
         r.append(('who', self.who))
         r.append(('what', self.what))
         r.append(('entries', self.entries))
@@ -130,13 +130,11 @@ class Transaction(abo.base.Base):
 
 __test__ = {
 'accessors':"""
-    >>> t = Transaction(date=1, cdate=7, who="Someone", what="something", \\
+    >>> t = Transaction(date=1, who="Someone", what="something", \\
     ...         entries=({'account':'a1', 'amount':-14.56, 'detail':'else'}, \\
-    ...                  {'account':'a2', 'amount':14.56}))
+    ...                  {'account':'a2', 'amount':14.56, 'cdate': 7}))
     >>> t.date
     1
-    >>> t.cdate
-    7
     >>> t.who
     'Someone'
     >>> t.what
@@ -147,6 +145,7 @@ __test__ = {
     'a1'
     >>> t.entries[0].amount
     -14.56
+    >>> t.entries[0].cdate
     >>> t.entries[0].detail
     'else'
     >>> t.entries[0].description()
@@ -157,6 +156,8 @@ __test__ = {
     'a2'
     >>> t.entries[1].amount
     14.56
+    >>> t.entries[1].cdate
+    7
     >>> t.entries[1].detail
     ''
     >>> t.entries[1].description()
@@ -169,36 +170,36 @@ __test__ = {
     False
 """,
 'errors':"""
-    >>> t = Transaction(cdate=7, who="Someone", what="something", \\
+    >>> t = Transaction(who="Someone", what="something", \\
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
     ...                  {'account':'a2', 'amount':-14.56}))
     Traceback (most recent call last):
     AssertionError: missing date
-    >>> t = Transaction(date=1, cdate=7, what="something", \\
+    >>> t = Transaction(date=1, what="something", \\
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
     ...                  {'account':'a2', 'amount':-14.56}))
     Traceback (most recent call last):
     AssertionError: missing who
-    >>> t = Transaction(date=1, cdate=7, who="Someone", \\
+    >>> t = Transaction(date=1, who="Someone", \\
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
     ...                  {'account':'a2', 'amount':-14.56}))
     Traceback (most recent call last):
     AssertionError: missing what
-    >>> t = Transaction(date=1, cdate=7, who="Someone", what="something", \\
+    >>> t = Transaction(date=1, who="Someone", what="something", \\
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'},))
     Traceback (most recent call last):
     AssertionError: too few entries
-    >>> t = Transaction(date=1, cdate=7, who="Someone", what="something", \\
+    >>> t = Transaction(date=1, who="Someone", what="something", \\
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
     ...                  {'account':'a2', 'amount':-14.55}))
     Traceback (most recent call last):
     AssertionError: entries sum to zero
-    >>> t = Transaction(date=1, cdate=7, who="Someone", what="something", \\
+    >>> t = Transaction(date=1, who="Someone", what="something", \\
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
     ...                  {'amount':-14.55}))
     Traceback (most recent call last):
     AssertionError: missing account
-    >>> t = Transaction(date=1, cdate=7, who="Someone", what="something", \\
+    >>> t = Transaction(date=1, who="Someone", what="something", \\
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
     ...                  {'account':'a2', 'amount':-14.56}, \\
     ...                  {'account':'a3', 'amount':0.00}))
