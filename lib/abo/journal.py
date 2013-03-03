@@ -159,9 +159,9 @@ class Journal(object):
                 raise ParseException(entries_noamt[dbcr]['line'], 'nil entry; %ss already sum to amount (%s)' % (desc, amount,))
         return entries
 
-    def _parse_type_invoice(self, firstline, kwargs, tagline):
+    def _parse_invoice_bill(self, firstline, kwargs, tagline, sign):
         due = tagline('due', optional=True)
-        cdate = self._parse_date(due) if due else None
+        cdate = self._parse_date(due, relative_to=kwargs['date']) if due else None
         amt = tagline('amt', optional=True)
         amount = self._parse_money(amt) if amt else None
         entries = []
@@ -173,6 +173,7 @@ class Journal(object):
             entry = self._parse_dbcr(line)
             if 'amount' in entry:
                 total += entry['amount']
+                entry['amount'] *= -sign
                 entries.append(entry)
             elif entry_noamt is None:
                 entry_noamt = entry
@@ -186,20 +187,30 @@ class Journal(object):
             raise ParseException(firstline, 'items (%s) exceed amount (%s) by %s' % (total, amount, total - amount))
         elif total < amount:
             if entry_noamt is not None:
-                entry_noamt['amount'] = amount - total
+                entry_noamt['amount'] = (amount - total) * -sign
                 entries.append(entry_noamt)
             else:
                 raise ParseException(firstline, 'items (%s) sum below amount (%s) by %s' % (total, amount, amount - total))
         elif entry_noamt is not None:
             raise ParseException(entry_noamt['line'], 'nil entry; items already sum to amount (%s)' % (amount,))
-        entries.append({'line': acc, 'account': account, 'amount': -amount, 'cdate': cdate})
+        entries.append({'line': acc, 'account': account, 'amount': amount * sign, 'cdate': cdate})
         return entries
 
+    def _parse_type_invoice(self, firstline, kwargs, tagline):
+        return self._parse_invoice_bill(firstline, kwargs, tagline, -1)
+
+    def _parse_type_bill(self, firstline, kwargs, tagline):
+        return self._parse_invoice_bill(firstline, kwargs, tagline, 1)
+
+    _regex_relative = re.compile(r'^[+-]\d+$')
+
     @classmethod
-    def _parse_date(cls, line):
+    def _parse_date(cls, line, relative_to=None):
         try:
             return datetime.datetime.strptime(line.text, '%d/%m/%Y').date()
         except ValueError:
+            if relative_to is not None and cls._regex_relative.match(line.text):
+                return relative_to + datetime.timedelta(int(line.text))
             raise ParseException(line, 'invalid date %r' % line.text)
 
     @classmethod
@@ -384,6 +395,26 @@ ParseException: StringIO, 7: spurious 'item' tag
     who='Somebody', what='something',
     entries=(Entry(account='body', amount=Money(-100.00, Currencies.AUD), cdate=datetime.date(2013, 3, 21)),
              Entry(account='thing', amount=Money(100.00, Currencies.AUD), detail='comment')))]
+
+""",
+'bills':r"""
+
+>>> Journal(r'''
+... type bill
+... date 1/2/2013
+... due +14
+... who Somebody
+... what something
+... acc body
+... item thing comment
+... item round .01 oops
+... amt 1.01
+... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 2, 1),
+    who='Somebody', what='something',
+    entries=(Entry(account='thing', amount=Money(-1.00, Currencies.AUD), detail='comment'),
+             Entry(account='round', amount=Money(-0.01, Currencies.AUD), detail='oops'),
+             Entry(account='body', amount=Money(1.01, Currencies.AUD), cdate=datetime.date(2013, 2, 15))))]
 
 """,
 }
