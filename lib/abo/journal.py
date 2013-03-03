@@ -64,6 +64,7 @@ class Journal(object):
         }
         defaults = copy.deepcopy(template)
         for block in blocks:
+            firstline = None
             tags = copy.deepcopy(template)
             for line in block:
                 words = line.fulltext.split(None, 1)
@@ -89,75 +90,110 @@ class Journal(object):
                     raise ParseException(line, 'syntax error, expecting "<tag> <text>"')
                 if line.tag not in tags:
                     raise ParseException(line, 'invalid tag %r' % line.tag)
+                firstline = line
                 if type(tags[line.tag]) is list:
                     tags[line.tag].append(line)
                 elif tags[line.tag] is None:
                     tags[line.tag] = line
                 else:
                     raise ParseException(line, 'duplicate tag %r' % line.tag)
-            used = dict((tag, False) for tag in tags if tags[tag])
-            if not used:
+            if not firstline:
                 continue
+            used = dict((tag, False) for tag in tags if tags[tag])
             def tagline(tag, optional=False):
                 line = tags.get(tag) or defaults.get(tag)
                 if not line and not optional:
-                    raise ParseException(block[0], 'missing tag %r', tag)
+                    raise ParseException(firstline, 'missing tag %r', tag)
                 used[tag] = True
                 return line
+            meth = getattr(self, '_parse_type_' + tagline('type').text)
+            if not meth:
+                raise ParseException(tags['type'], 'unknown type %r' % (tags['type'].text,))
             kwargs = {}
             kwargs['date'] = self._parse_date(tagline('date'))
             kwargs['who'] = tagline('who').text
             kwargs['what'] = tagline('what').text
-            amt = tagline('amt', optional=True)
-            amount = self._parse_money(amt) if amt else None
-            if tagline('type').text == 'transaction':
-                entries = []
-                totals = {'db': 0, 'cr': 0}
-                entries_noamt = {'db': None, 'cr': None}
-                for dbcr, sign in (('db', -1), ('cr', 1)):
-                    for line in tagline(dbcr):
-                        words = line.text.split(None, 2)
-                        entry = {'line': line}
-                        money = None
-                        entry['account'] = words.pop(0)
-                        if words and self.appears_money(words[0]):
-                            try:
-                                money = abo.config.parse_money(words.pop(0))
-                            except ValueError:
-                                raise ParseException(line, 'invalid amount %r' % words[1])
-                        if words:
-                            entry['detail'] = words.pop(0)
-                        assert not words
-                        if money is not None:
-                            entry['amount'] = money * sign
-                            entries.append(entry)
-                            totals[dbcr] += money
-                        elif entries_noamt[dbcr] is None:
-                            entries_noamt[dbcr] = entry
-                        else:
-                            raise ParseException(line, '%s missing amount' % (dbcr,))
-                if amount is None and entries:
-                    amount = max(totals.values())
-                for dbcr, sign, desc in (('db', -1, 'debit'), ('cr', 1, 'credit')):
-                    if totals[dbcr] > amount:
-                        raise ParseException(block[0], '%ss (%s) exceed amount (%s)' % (desc, totals[dbcr], amount))
-                    elif totals[dbcr] < amount:
-                        if entries_noamt[dbcr] is not None:
-                            entries_noamt[dbcr]['amount'] = (amount - totals[dbcr]) * sign
-                            entries.append(entries_noamt[dbcr])
-                        else:
-                            raise ParseException(block[0], '%ss (%s) do not sum to amount (%s)' % (desc, totals[dbcr], amount))
-                    elif entries_noamt[dbcr] is not None:
-                        raise ParseException(entries_noamt[dbcr]['line'], 'nil entry; credits already sum to amount (%s)' % (amount,))
-                for entry in entries:
-                    del entry['line']
-                kwargs['entries'] = entries
-                self.transactions.append(Transaction(**kwargs))
-            else:
-                raise ParseException(tags['type'], 'unknown type %r' % (tags['type'].text,))
+            entries = meth(firstline, kwargs, tagline)
             for tag in used:
                 if not used[tag]:
-                    raise ParseException(tags[tag], 'spurious %r tag' % (tag,))
+                    line = tags[tag]
+                    if type(line) is list:
+                        line = line[0]
+                    raise ParseException(line, 'spurious %r tag' % (tag,))
+            for entry in entries:
+                del entry['line']
+            kwargs['entries'] = entries
+            self.transactions.append(Transaction(**kwargs))
+
+    def _parse_type_transaction(self, firstline, kwargs, tagline):
+        amt = tagline('amt', optional=True)
+        amount = self._parse_money(amt) if amt else None
+        entries = []
+        totals = {'db': 0, 'cr': 0}
+        entries_noamt = {'db': None, 'cr': None}
+        for dbcr, sign in (('db', -1), ('cr', 1)):
+            for line in tagline(dbcr):
+                entry = self._parse_dbcr(line)
+                if 'amount' in entry:
+                    totals[dbcr] += entry['amount']
+                    entry['amount'] *= sign
+                    entries.append(entry)
+                elif entries_noamt[dbcr] is None:
+                    entries_noamt[dbcr] = entry
+                else:
+                    raise ParseException(line, '%s missing amount' % (dbcr,))
+        if amount is None:
+            if not entries:
+                raise ParseException(firstline, "missing 'amt'")
+            amount = max(totals.values())
+        for dbcr, sign, desc in (('db', -1, 'debit'), ('cr', 1, 'credit')):
+            if totals[dbcr] > amount:
+                raise ParseException(firstline, '%ss (%s) exceed amount (%s) by %s' % (desc, totals[dbcr], amount, totals[dbcr] - amount))
+            elif totals[dbcr] < amount:
+                if entries_noamt[dbcr] is not None:
+                    entries_noamt[dbcr]['amount'] = (amount - totals[dbcr]) * sign
+                    entries.append(entries_noamt[dbcr])
+                else:
+                    raise ParseException(firstline, '%ss (%s) sum below amount (%s) by %s' % (desc, totals[dbcr], amount, amount - totals[dbcr] ))
+            elif entries_noamt[dbcr] is not None:
+                raise ParseException(entries_noamt[dbcr]['line'], 'nil entry; %ss already sum to amount (%s)' % (desc, amount,))
+        return entries
+
+    def _parse_type_invoice(self, firstline, kwargs, tagline):
+        due = tagline('due', optional=True)
+        cdate = self._parse_date(due) if due else None
+        amt = tagline('amt', optional=True)
+        amount = self._parse_money(amt) if amt else None
+        entries = []
+        acc = tagline('acc')
+        account = self._parse_account(acc)
+        total = 0
+        entry_noamt = None
+        for line in tagline('item'):
+            entry = self._parse_dbcr(line)
+            if 'amount' in entry:
+                total += entry['amount']
+                entries.append(entry)
+            elif entry_noamt is None:
+                entry_noamt = entry
+            else:
+                raise ParseException(line, "'item' missing amount")
+        if amount is None:
+            if not entries:
+                raise ParseException(firstline, "missing 'amt'")
+            amount = total
+        if total > amount:
+            raise ParseException(firstline, 'items (%s) exceed amount (%s) by %s' % (total, amount, total - amount))
+        elif total < amount:
+            if entry_noamt is not None:
+                entry_noamt['amount'] = amount - total
+                entries.append(entry_noamt)
+            else:
+                raise ParseException(firstline, 'items (%s) sum below amount (%s) by %s' % (total, amount, amount - total))
+        elif entry_noamt is not None:
+            raise ParseException(entry_noamt['line'], 'nil entry; items already sum to amount (%s)' % (amount,))
+        entries.append({'line': acc, 'account': account, 'amount': -amount, 'cdate': cdate})
+        return entries
 
     @classmethod
     def _parse_date(cls, line):
@@ -167,11 +203,33 @@ class Journal(object):
             raise ParseException(line, 'invalid date %r' % line.text)
 
     @classmethod
+    def _parse_account(cls, line):
+        return line.text
+
+    @classmethod
     def _parse_money(cls, line):
         try:
             return abo.config.parse_money(line.text)
         except ValueError:
             raise ParseException(line, 'invalid amount %r' % line.text)
+
+    @classmethod
+    def _parse_dbcr(cls, line):
+        entry = {'line': line}
+        words = line.text.split(None, 2)
+        entry['account'] = words.pop(0)
+        money = None
+        if words and cls.appears_money(words[0]):
+            try:
+                money = abo.config.parse_money(words.pop(0))
+            except ValueError:
+                raise ParseException(line, 'invalid amount %r' % words[1])
+        if words:
+            entry['detail'] = words.pop(0)
+        assert not words
+        if money is not None:
+            entry['amount'] = money
+        return entry
 
     _regex_amount = re.compile(r'\d*\.\d+|\d+')
 
@@ -283,6 +341,19 @@ Traceback (most recent call last):
 ParseException: StringIO, 3: spurious 'due' tag
 
 >>> Journal(r'''
+... type transaction
+... date 21/2/2013
+... who Somebody
+... what something
+... db food
+... cr bank
+... item food
+... amt 10.00
+... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+Traceback (most recent call last):
+ParseException: StringIO, 7: spurious 'item' tag
+
+>>> Journal(r'''
 ... %default due 21/3/2013
 ... type transaction
 ... date 21/2/2013
@@ -295,6 +366,24 @@ ParseException: StringIO, 3: spurious 'due' tag
     who='Somebody', what='something',
     entries=(Entry(account='food', amount=Money(-10.00, Currencies.AUD)),
              Entry(account='bank', amount=Money(10.00, Currencies.AUD))))]
+
+""",
+'invoices':r"""
+
+>>> Journal(r'''
+... type invoice
+... date 21/2/2013
+... due 21/3/2013
+... who Somebody
+... what something
+... acc body
+... item thing comment
+... amt 100
+... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 2, 21),
+    who='Somebody', what='something',
+    entries=(Entry(account='body', amount=Money(-100.00, Currencies.AUD), cdate=datetime.date(2013, 3, 21)),
+             Entry(account='thing', amount=Money(100.00, Currencies.AUD), detail='comment')))]
 
 """,
 }
