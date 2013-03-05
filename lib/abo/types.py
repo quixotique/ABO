@@ -1,6 +1,6 @@
-# vim: sw=4 sts=4 et fileencoding=latin1 nomod
+# vim: sw=4 sts=4 et fileencoding=utf8 nomod
 
-r'''Generic data structure.
+r'''Generic data types.
 
     >>> s = struct(a=1, b=2, c=3)
     >>> s.a

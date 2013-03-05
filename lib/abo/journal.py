@@ -8,18 +8,22 @@
 """
 
 import re
+import shlex
+import subprocess
 import datetime
 import copy
 from abo.transaction import Transaction
 import abo.config
 import abo.account
-from abo.struct import struct
+from abo.types import struct
 
 class Journal(object):
 
     def __init__(self, source_file):
         self.transactions = []
         self._parse(source_file)
+
+    _regex_filter = re.compile(r'^%filter\s+(.*)$', re.MULTILINE)
 
     def _parse(self, source_file):
         if isinstance(source_file, basestring):
@@ -28,10 +32,25 @@ class Journal(object):
             source_file = StringIO.StringIO(source_file)
             source_file.name = 'StringIO'
         lines = list(source_file)
+        name = getattr(source_file, 'name', str(source_file))
+        m = self._regex_filter.search('\n'.join(lines[:10]))
+        if m:
+            args = shlex.split(m.group(1))
+            if type(source_file) is file:
+                expanded = False
+                for i in xrange(len(args)):
+                    if args[i] == '{}':
+                        args[i] = name
+                        expanded = True
+                if not expanded:
+                    args.append(name)
+                out = subprocess.check_output(args, stdin=file('/dev/null'))
+            else:
+                out, err = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE).communicate(''.join(lines))
+            lines = list(StringIO.StringIO(out))
         blocks = []
         block = []
         lnum = 0
-        name = getattr(source_file, 'name', str(source_file))
         for line in lines:
             line = line.rstrip('\n')
             if line:
@@ -104,7 +123,7 @@ class Journal(object):
             def tagline(tag, optional=False):
                 line = tags.get(tag) or defaults.get(tag)
                 if not line and not optional:
-                    raise ParseException(firstline, 'missing tag %r', tag)
+                    raise ParseException(firstline, 'missing tag %r' % tag)
                 used[tag] = True
                 return line
             meth = getattr(self, '_parse_type_' + tagline('type').text, None)
@@ -471,6 +490,25 @@ ParseException: StringIO, 7: spurious 'item' tag
 ... ''').transactions #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who='Somebody', what='something',
+    entries=(Entry(account='body', amount=Money(-55.65, Currencies.AUD)),
+             Entry(account='cash', amount=Money(55.65, Currencies.AUD))))]
+
+""",
+'filter':r"""
+
+>>> Journal(r'''
+... %filter m4 --synclines
+... define(`some', `any')
+... type receipt
+... date 15/2/2013
+... who some body
+... what some thing
+... acc body
+... bank cash
+... amt 55.65
+... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 2, 15),
+    who='any body', what='any thing',
     entries=(Entry(account='body', amount=Money(-55.65, Currencies.AUD)),
              Entry(account='cash', amount=Money(55.65, Currencies.AUD))))]
 
