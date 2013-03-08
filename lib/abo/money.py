@@ -21,7 +21,7 @@ class Currencies(object):
 class Currency(object):
 
     _registry = Currencies
-    _amount_regex = re.compile(r'[+-]?(\d+(?:\.\d+)?|\.\d+)')
+    _amount_regex = re.compile(r'[+-]?(?:\b(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d+)?|\.\d+)\b')
 
     def __new__(cls, code, local_frac_digits=0, local_symbol=None, local_symbol_precedes=False, local_symbol_separated_by_space=False, ):
         try:
@@ -178,7 +178,7 @@ class Currency(object):
         if not m:
             raise ValueError('invalid amount: %r' % (amount,))
         pre = amount[:m.start(0)]
-        numeric = m.group(0)
+        numeric = m.group(0).replace(',', '')
         post = amount[m.end(0):]
         if currency.local_symbol:
             if currency.local_symbol_precedes:
@@ -201,6 +201,8 @@ class Currency(object):
         Decimal('123.00')
         >>> Currencies.AUD.parse_amount('70.45')
         Decimal('70.45')
+        >>> Currencies.AUD.parse_amount('+.05')
+        Decimal('0.05')
         >>> Currencies.AUD.parse_amount('70.456')
         Traceback (most recent call last):
         ValueError: invalid literal for Currencies.AUD: '70.456'
