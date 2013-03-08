@@ -1,0 +1,22 @@
+#!/usr/bin/env python2.7
+# vim: sw=4 sts=4 et fileencoding=utf8 nomod
+# Copyright 2013 Andrew Bettison
+
+import sys
+import os.path
+
+def main():
+    try:
+        import abo.journal
+    except ImportError:
+        sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib'))
+        import abo.journal
+    transactions = []
+    for arg in sys.argv[1:]:
+        transactions += abo.journal.Journal(file(arg)).transactions
+    transactions.sort(key=lambda t: (t.date, t.who, t.what))
+    for t in transactions:
+        print t
+
+if __name__ == '__main__':
+    main()

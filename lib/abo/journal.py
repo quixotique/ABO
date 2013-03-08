@@ -47,22 +47,21 @@ class Journal(object):
                 out = subprocess.check_output(args, stdin=file('/dev/null'))
             else:
                 out, err = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE).communicate(''.join(lines))
+            import StringIO
             lines = list(StringIO.StringIO(out))
         blocks = []
         block = []
         lnum = 0
         for line in lines:
             line = line.rstrip('\n')
+            lnum += 1
             if line:
                 words = line.split(None, 3)
                 if words[0] == '#line' and len(words) > 1 and words[1].isdigit():
-                    lnum = int(words[1])
+                    lnum = int(words[1]) - 1
                     if len(words) > 2:
                         name = words[2]
-                elif words[0].startswith('#'):
-                    lnum += 1
-                else:
-                    lnum += 1
+                elif not words[0].startswith('#'):
                     block.append(struct(name=name, line_number=lnum, fulltext=line))
             elif block:
                 blocks.append(block)
@@ -90,9 +89,9 @@ class Journal(object):
                 words = line.fulltext.split(None, 1)
                 if words[0] == '%default':
                     try:
-                        line.tag, line.text = words[1].split(None, 1)
-                    except ValueError, e:
-                        raise ParseException(line, 'syntax error, expecting "%default <tag> <text>"')
+                        self._parse_line_tagtext(line, words[1])
+                    except ParseException:
+                        raise ParseException(line, 'in %%default: ' + e)
                     if line.tag not in defaults:
                         raise ParseException(line, 'invalid %%default tag %r' % line.tag)
                     if not line.text:
@@ -104,13 +103,11 @@ class Journal(object):
                     continue
                 if words[0].startswith('%'):
                     continue
-                try:
-                    line.tag, line.text = line.fulltext.split(None, 1)
-                except ValueError, e:
-                    raise ParseException(line, 'syntax error, expecting "<tag> <text>"')
+                self._parse_line_tagtext(line, line.fulltext)
                 if line.tag not in tags:
                     raise ParseException(line, 'invalid tag %r' % line.tag)
-                firstline = line
+                if not firstline:
+                    firstline = line
                 if type(tags[line.tag]) is list:
                     tags[line.tag].append(line)
                 elif tags[line.tag] is None:
@@ -131,7 +128,8 @@ class Journal(object):
                 raise ParseException(tags['type'], 'unknown type %r' % (tags['type'].text,))
             kwargs = {}
             kwargs['date'] = self._parse_date(tagline('date'))
-            kwargs['who'] = tagline('who').text
+            who = tagline('who', optional=True)
+            kwargs['who'] = who.text if who else None
             kwargs['what'] = tagline('what').text
             entries = meth(firstline, kwargs, tagline)
             for tag in used:
@@ -145,9 +143,20 @@ class Journal(object):
             kwargs['entries'] = entries
             self.transactions.append(Transaction(**kwargs))
 
+    def _parse_line_tagtext(cls, line, text):
+        words = text.split(None, 1)
+        if len(words) == 2:
+            line.tag, line.text = words
+        elif len(words) == 1:
+            line.tag, line.text = words[0], ''
+        else:
+            raise ParseException(line, 'expecting <tag> [value]')
+
     def _parse_type_transaction(self, firstline, kwargs, tagline):
         amt = tagline('amt', optional=True)
         amount = self._parse_money(amt) if amt else None
+        if amount is not None and amount < 0:
+            raise ParseException(amt, 'negative amount not allowed: %s' % amount)
         entries = []
         totals = {'db': 0, 'cr': 0}
         entries_noamt = {'db': None, 'cr': None}
@@ -184,6 +193,8 @@ class Journal(object):
         cdate = self._parse_date(due, relative_to=kwargs['date']) if due else None
         amt = tagline('amt', optional=True)
         amount = self._parse_money(amt) if amt else None
+        if amount is not None and amount == 0:
+            raise ParseException(amt, 'zero amount not allowed: %s' % amount)
         entries = []
         acc = tagline('acc')
         account = self._parse_account_name(acc)
@@ -203,9 +214,7 @@ class Journal(object):
             if not entries:
                 raise ParseException(firstline, "missing 'amt'")
             amount = total
-        if total > amount:
-            raise ParseException(firstline, 'items (%s) exceed amount (%s) by %s' % (total, amount, total - amount))
-        elif total < amount:
+        elif total != amount:
             if entry_noamt is not None:
                 entry_noamt['amount'] = (amount - total) * -sign
                 entries.append(entry_noamt)
@@ -267,23 +276,31 @@ class Journal(object):
     @classmethod
     def _parse_dbcr(cls, line):
         entry = {'line': line}
-        words = line.text.split(None, 2)
+        text = line.text
+        word, text = cls._popword(text)
         try:
-            entry['account'] = abo.account.parse_account_name(words.pop(0))
+            entry['account'] = abo.account.parse_account_name(word)
         except ValueError:
             raise ParseException(line, e)
         money = None
-        if words and cls.appears_money(words[0]):
+        word, detail = cls._popword(text)
+        if word and cls.appears_money(word):
             try:
-                money = abo.config.parse_money(words.pop(0))
+                money = abo.config.parse_money(word)
             except ValueError:
-                raise ParseException(line, 'invalid amount %r' % words[1])
-        if words:
-            entry['detail'] = words.pop(0)
-        assert not words
+                raise ParseException(line, 'invalid amount %r' % word)
+        else:
+            detail = text
+        if detail:
+            entry['detail'] = text
         if money is not None:
             entry['amount'] = money
         return entry
+
+    @staticmethod
+    def _popword(text):
+        words = text.split(None, 1)
+        return tuple(words) if len(words) == 2 else (words[0], '') if len(words) == 1 else ('', '')
 
     _regex_amount = re.compile(r'\d*\.\d+|\d+')
 
