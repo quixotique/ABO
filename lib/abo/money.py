@@ -21,7 +21,7 @@ class Currencies(object):
 class Currency(object):
 
     _registry = Currencies
-    _amount_regex = re.compile(r'\d+(\.\d+)?|\.\d+')
+    _amount_regex = re.compile(r'[+-]?(\d+(?:\.\d+)?|\.\d+)')
 
     def __new__(cls, code, local_frac_digits=0, local_symbol=None, local_symbol_precedes=False, local_symbol_separated_by_space=False, ):
         try:
@@ -235,11 +235,13 @@ class Currency(object):
         except decimal.Inexact:
             raise ValueError('invalid literal for %r: %r' % (self, amount))
 
-    def format(self, amount, thousands=False):
+    def format(self, amount, thousands=False, positive_sign='', positive_prefix='', positive_suffix='', negative_sign='-', negative_prefix='', negative_suffix=''):
         ur'''Return a string representation of the Decimal amount with the
         currency symbol as prefix or suffix.
         >>> Currencies.AUD.format(1)
         u'$1.00'
+        >>> Currencies.AUD.format(-1)
+        u'$-1.00'
         >>> Currencies.AUD.format(10000000)
         u'$10000000.00'
         >>> Currencies.AUD.format(10000000, thousands=True)
@@ -250,9 +252,10 @@ class Currency(object):
         amt = self.quantize(amount)
         fmt = u'{0:,}' if thousands else u'{0}'
         if self.local_symbol:
-            fmt = '{1}{2}' + fmt if self.local_symbol_precedes else fmt + '{2}{1}'
+            fmt = '{4}{1}{2}{3}'+fmt+'{5}' if self.local_symbol_precedes else '{4}{3}'+fmt+'{2}{1}{5}'
         sep = ' ' if self.local_symbol_separated_by_space else ''
-        return fmt.format(amt, self.local_symbol, sep)
+        return (fmt.format(amt, self.local_symbol, sep, positive_sign, positive_prefix, positive_suffix) if amt >= 0
+                else fmt.format(-amt, self.local_symbol, sep, negative_sign, negative_prefix, negative_suffix))
 
     def parse_amount_money(self, text):
         r'''Parse given text into a Money object with this currency.
@@ -286,6 +289,8 @@ class Money(object):
         r'''Parse a text string into a Money object.
         >>> Money.from_text('8071.51 AUD')
         Money(8071.51, Currencies.AUD)
+        >>> Money.from_text('-6.99 AUD')
+        Money(-6.99, Currencies.AUD)
         '''
         if currency is not None:
             amount = currency.parse_amount(text)
