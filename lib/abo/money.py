@@ -21,9 +21,8 @@ class Currencies(object):
 class Currency(object):
 
     _registry = Currencies
-    _amount_regex = re.compile(r'[+-]?(?:\b(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d+)?|\.\d+)\b')
 
-    def __new__(cls, code, local_frac_digits=0, local_symbol=None, local_symbol_precedes=False, local_symbol_separated_by_space=False, ):
+    def __new__(cls, code, local_frac_digits=0, local_symbol=None, local_symbol_precedes=False, local_symbol_separated_by_space=False):
         try:
             currency = pycountry.currencies.get(letter=code)
         except KeyError:
@@ -148,6 +147,8 @@ class Currency(object):
                 pass
         return None, text
 
+    _amount_regex = re.compile(r'(?P<sign>[+-]?)(?P<decimal>\b(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d+)?|\.\d+)\b')
+
     @classmethod
     def parse_amount_currency(cls, text, default_currency=None):
         r'''Parse given text into a Decimal amount and a Currency object.
@@ -156,6 +157,17 @@ class Currency(object):
         ValueError: missing currency code in '123'
         >>> Currency.parse_amount_currency('AUD 123')
         (Currencies.AUD, Decimal('123'))
+        >>> Currency.parse_amount_currency('AUD $-4,567')
+        (Currencies.AUD, Decimal('-4567'))
+        >>> Currency.parse_amount_currency('AUD -$4,567')
+        (Currencies.AUD, Decimal('-4567'))
+        >>> Currency.parse_amount_currency('AUD -$-4,567')
+        Traceback (most recent call last):
+        ValueError: invalid amount: '-$-4,567'
+        >>> Currency.parse_amount_currency('AUD $-4,567.8')
+        (Currencies.AUD, Decimal('-4567.8'))
+        >>> Currency.parse_amount_currency('AUD $+34,567.891')
+        (Currencies.AUD, Decimal('34567.891'))
         >>> Currency.parse_amount_currency('123AUD')
         (Currencies.AUD, Decimal('123'))
         >>> Currency.parse_amount_currency('AUD 1.2.3')
@@ -178,8 +190,12 @@ class Currency(object):
         if not m:
             raise ValueError('invalid amount: %r' % (amount,))
         pre = amount[:m.start(0)]
-        numeric = m.group(0).replace(',', '')
+        sign = m.group('sign')
+        numeric = m.group('decimal').replace(',', '')
         post = amount[m.end(0):]
+        if not sign and pre and pre[0] in '+-':
+            sign = pre[0]
+            pre = pre[1:]
         if currency.local_symbol:
             if currency.local_symbol_precedes:
                 if pre.startswith(currency.local_symbol):
@@ -189,7 +205,7 @@ class Currency(object):
                     post = post[:-len(currency.local_symbol)].rstrip()
         if pre or post:
             raise ValueError('invalid amount: %r' % (amount,))
-        return currency, decimal.Decimal(numeric, context=currency.decimal_context)
+        return currency, decimal.Decimal(sign + numeric, context=currency.decimal_context)
 
     def parse_amount(self, text):
         r'''Parse given text as a decimal amount of this currency.
@@ -201,8 +217,17 @@ class Currency(object):
         Decimal('123.00')
         >>> Currencies.AUD.parse_amount('70.45')
         Decimal('70.45')
+        >>> Currencies.AUD.parse_amount('-$1,234,567.89')
+        Decimal('-1234567.89')
         >>> Currencies.AUD.parse_amount('+.05')
         Decimal('0.05')
+        >>> Currencies.AUD.parse_amount('123,456,789.10')
+        Decimal('123456789.10')
+        >>> Currencies.AUD.parse_amount('AUD $-4,567.8')
+        Traceback (most recent call last):
+        ValueError: invalid literal for Currencies.AUD: 'AUD $-4,567.8'
+        >>> Currencies.AUD.parse_amount('AUD $-4,567.80')
+        Decimal('-4567.80')
         >>> Currencies.AUD.parse_amount('70.456')
         Traceback (most recent call last):
         ValueError: invalid literal for Currencies.AUD: '70.456'
@@ -220,9 +245,12 @@ class Currency(object):
         if currency is not self:
             raise ValueError('currency code of %r should be %r' % (text, self.code))
         try:
-            return self.quantize(amount)
+            exp = amount.as_tuple()[2]
+            if exp == 0 or exp == -self.local_frac_digits:
+                return self.decimal_context.quantize(amount, self.zero)
         except ValueError:
-            raise ValueError('invalid literal for %r: %r' % (self, text))
+            pass
+        raise ValueError('invalid literal for %r: %r' % (self, text))
 
     def quantize(self, amount):
         r'''Convert the given number into a Decimal value with the correct
@@ -244,6 +272,8 @@ class Currency(object):
         u'$1.00'
         >>> Currencies.AUD.format(-1)
         u'$-1.00'
+        >>> Currencies.AUD.format(-100, negative_prefix='(', negative_sign='', negative_suffix=')')
+        u'($100.00)'
         >>> Currencies.AUD.format(10000000)
         u'$10000000.00'
         >>> Currencies.AUD.format(10000000, thousands=True)
