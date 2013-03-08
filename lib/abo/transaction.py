@@ -92,7 +92,6 @@ class Transaction(abo.base.Base):
         date, description, and list of Entry objects.
         """
         assert date is not None, 'missing date'
-        assert who is not None, 'missing who'
         assert what is not None, 'missing what'
         assert len(entries) >= 2, 'too few entries'
         self.id = self._make_unique_id()
@@ -115,7 +114,8 @@ class Transaction(abo.base.Base):
     def __repr__(self):
         r = []
         r.append(('date', self.date))
-        r.append(('who', self.who))
+        if self.who:
+            r.append(('who', self.who))
         r.append(('what', self.what))
         r.append(('entries', self.entries))
         return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % i for i in r))
