@@ -265,7 +265,7 @@ class Currency(object):
         except decimal.Inexact:
             raise ValueError('invalid literal for %r: %r' % (self, amount))
 
-    def format(self, amount, thousands=False, positive_sign='', positive_prefix='', positive_suffix='', negative_sign='-', negative_prefix='', negative_suffix=''):
+    def format(self, amount, symbol=True, thousands=False, positive_sign='', positive_prefix='', positive_suffix='', negative_sign='-', negative_prefix='', negative_suffix=''):
         ur'''Return a string representation of the Decimal amount with the
         currency symbol as prefix or suffix.
         >>> Currencies.AUD.format(1)
@@ -283,8 +283,10 @@ class Currency(object):
         '''
         amt = self.quantize(amount)
         fmt = u'{0:,}' if thousands else u'{0}'
-        if self.local_symbol:
+        if symbol and self.local_symbol:
             fmt = '{4}{1}{2}{3}'+fmt+'{5}' if self.local_symbol_precedes else '{4}{3}'+fmt+'{2}{1}{5}'
+        else:
+            fmt = '{4}{3}'+fmt+'{5}'
         sep = ' ' if self.local_symbol_separated_by_space else ''
         return (fmt.format(amt, self.local_symbol, sep, positive_sign, positive_prefix, positive_suffix) if amt >= 0
                 else fmt.format(-amt, self.local_symbol, sep, negative_sign, negative_prefix, negative_suffix))
@@ -332,6 +334,9 @@ class Money(object):
                 raise ValueError('invalid literal for %r.from_text(currency=None): %r' % (type(self).__name__, text,))
             amount = currency.parse_amount(number)
         return cls(amount, currency)
+
+    def format(self, **kwargs):
+        return self.currency.format(self.amount, **kwargs)
 
     def __str__(self):
         return '%s %s' % (self.amount, self.currency)
