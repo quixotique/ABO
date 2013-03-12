@@ -3,7 +3,13 @@
 # Copyright 2013 Andrew Bettison
 
 import sys
+import locale
+import codecs
+import os
 import os.path
+import errno
+import cPickle as pickle
+import textwrap
 
 def main():
     try:
@@ -11,12 +17,65 @@ def main():
     except ImportError:
         sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib'))
         import abo.journal
+    import abo.config
     transactions = []
+    caches = []
     for arg in sys.argv[1:]:
-        transactions += abo.journal.Journal(file(arg)).transactions
+        caches.append(TransactionCache(arg, abo.journal.Journal(codecs.open(arg, 'r', sys.stdin.encoding))))
+    for cache in caches:
+        transactions += cache.transactions()
     transactions.sort(key=lambda t: (t.date, t.who, t.what))
     for t in transactions:
-        print t
+        for line in format_transaction(t):
+            print line
+
+class TransactionCache(object):
+
+    def __init__(self, path, transaction_source):
+        self.path = path
+        self.transaction_source = transaction_source
+
+    def cache_path(self):
+        return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo', os.path.abspath(self.path).replace('/', '%%'))
+
+    def transactions(self):
+        cpath = self.cache_path()
+        if self.mtime(cpath) < self.mtime(self.path):
+            transactions = self.transaction_source.transactions()
+            try:
+                os.makedirs(os.path.dirname(cpath))
+            except OSError, e:
+                if e.errno != errno.EEXIST:
+                    raise
+            pickle.dump(transactions, file(cpath, 'w'))
+        else:
+            return pickle.load(file(cpath))
+        return transactions
+
+    @staticmethod
+    def mtime(path):
+        try:
+            return os.stat(path).st_mtime
+        except OSError, e:
+            if e.errno != errno.ENOENT:
+                raise
+            return -1
+
+def format_transaction(t):
+    import abo.config
+    width = max(50, int(os.environ.get('COLUMNS', 80)))
+    aw = 15
+    bw = len(abo.config.money(1000000).format(symbol=False, thousands=True))
+    pw = width - 11 - 2 - 1 - aw - 1 - bw - 1 - 2
+    fmt = '%-11.11s  %-{pw}.{pw}s %{bw}s %-2.2s %-{aw}.{aw}s'.format(pw=pw, bw=bw, aw=aw)
+    desc = textwrap.wrap(t.description(), width=pw)
+    entries = list(t.entries)
+    yield fmt % ((t.date.strftime(r'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
+    while desc or entries:
+        yield fmt % (('', desc.pop(0) if desc else u'') + (entry_fields(entries.pop(0)) if entries else ('', '', '')))
+
+def entry_fields(e):
+    return (abs(e.amount).format(symbol=False, thousands=True), ('db' if e.amount < 0 else 'cr'), e.account)
 
 if __name__ == '__main__':
     main()

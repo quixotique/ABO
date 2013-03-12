@@ -20,12 +20,18 @@ from abo.types import struct
 class Journal(object):
 
     def __init__(self, source_file):
-        self.transactions = []
-        self._parse(source_file)
+        self.source_file = source_file
+        self._transactions = None
+
+    def transactions(self):
+        if self._transactions is None:
+            self._parse(self.source_file)
+        return self._transactions
 
     _regex_filter = re.compile(r'^%filter\s+(.*)$', re.MULTILINE)
 
     def _parse(self, source_file):
+        self._transactions = []
         if isinstance(source_file, basestring):
             # To facilitate testing.
             import StringIO
@@ -141,7 +147,7 @@ class Journal(object):
             for entry in entries:
                 del entry['line']
             kwargs['entries'] = entries
-            self.transactions.append(Transaction(**kwargs))
+            self._transactions.append(Transaction(**kwargs))
 
     def _parse_line_tagtext(cls, line, text):
         words = text.split(None, 1)
@@ -330,7 +336,7 @@ __test__ = {
 ... db food
 ... cr bank
 ... amt 10.00
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who='Somebody', what='something',
     entries=(Entry(account='food', amount=Money(-10.00, Currencies.AUD)),
@@ -344,7 +350,7 @@ __test__ = {
 ... db food 7
 ... db drink 3 beer
 ... cr bank 10
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 22),
     who='Somebody Else', what='another thing',
     entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)),
@@ -361,7 +367,7 @@ __test__ = {
 ... cr bank
 ... cr cash 2
 ... amt 10
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 23),
     who='Whoever', what='whatever',
     entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)),
@@ -380,7 +386,7 @@ __test__ = {
 ... db food 7
 ... db drink beer
 ... amt 10
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 23),
     who='Whoever', what='whatever',
     entries=(Entry(account='food', amount=Money(-7.00, Currencies.AUD)),
@@ -407,7 +413,7 @@ ParseException: "wah", 22: syntax error, expecting "<tag> <text>"
 ... db food
 ... cr bank
 ... amt 10.00
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 Traceback (most recent call last):
 ParseException: StringIO, 3: spurious 'due' tag
 
@@ -420,7 +426,7 @@ ParseException: StringIO, 3: spurious 'due' tag
 ... cr bank
 ... item food
 ... amt 10.00
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 Traceback (most recent call last):
 ParseException: StringIO, 7: spurious 'item' tag
 
@@ -432,7 +438,7 @@ ParseException: StringIO, 7: spurious 'item' tag
 ... what something
 ... db food 10
 ... cr bank
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who='Somebody', what='something',
     entries=(Entry(account='food', amount=Money(-10.00, Currencies.AUD)),
@@ -450,7 +456,7 @@ ParseException: StringIO, 7: spurious 'item' tag
 ... acc body
 ... item thing comment
 ... amt 100
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who='Somebody', what='something',
     entries=(Entry(account='body', amount=Money(-100.00, Currencies.AUD), cdate=datetime.date(2013, 3, 21)),
@@ -469,7 +475,7 @@ ParseException: StringIO, 7: spurious 'item' tag
 ... item thing comment
 ... item round .01 oops
 ... amt 1.01
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 1),
     who='Somebody', what='something',
     entries=(Entry(account='thing', amount=Money(-1.00, Currencies.AUD), detail='comment'),
@@ -487,7 +493,7 @@ ParseException: StringIO, 7: spurious 'item' tag
 ... acc body
 ... bank cash
 ... amt 1.01
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who='Somebody', what='something',
     entries=(Entry(account='cash', amount=Money(-1.01, Currencies.AUD)),
@@ -504,7 +510,7 @@ ParseException: StringIO, 7: spurious 'item' tag
 ... acc body
 ... bank cash
 ... amt 55.65
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who='Somebody', what='something',
     entries=(Entry(account='body', amount=Money(-55.65, Currencies.AUD)),
@@ -523,7 +529,7 @@ ParseException: StringIO, 7: spurious 'item' tag
 ... acc body
 ... bank cash
 ... amt 55.65
-... ''').transactions #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who='any body', what='any thing',
     entries=(Entry(account='body', amount=Money(-55.65, Currencies.AUD)),
