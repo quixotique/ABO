@@ -12,6 +12,8 @@ import cPickle as pickle
 import textwrap
 
 def main():
+    locale.setlocale(locale.LC_ALL, '')
+    lang, enc = locale.getlocale()
     try:
         import abo.journal
     except ImportError:
@@ -21,13 +23,13 @@ def main():
     transactions = []
     caches = []
     for arg in sys.argv[1:]:
-        caches.append(TransactionCache(arg, abo.journal.Journal(codecs.open(arg, 'r', sys.stdin.encoding))))
+        caches.append(TransactionCache(arg, abo.journal.Journal(file(arg))))
     for cache in caches:
         transactions += cache.transactions()
     transactions.sort(key=lambda t: (t.date, t.who, t.what))
     for t in transactions:
         for line in format_transaction(t):
-            print line
+            print line.encode(enc)
 
 class TransactionCache(object):
 
@@ -67,10 +69,10 @@ def format_transaction(t):
     aw = 15
     bw = len(abo.config.money(1000000).format(symbol=False, thousands=True))
     pw = width - 11 - 2 - 1 - aw - 1 - bw - 1 - 2
-    fmt = '%-11.11s  %-{pw}.{pw}s %{bw}s %-2.2s %-{aw}.{aw}s'.format(pw=pw, bw=bw, aw=aw)
+    fmt = u'%-11.11s  %-{pw}.{pw}s %{bw}s %-2.2s %-{aw}.{aw}s'.format(pw=pw, bw=bw, aw=aw)
     desc = textwrap.wrap(t.description(), width=pw)
     entries = list(t.entries)
-    yield fmt % ((t.date.strftime(r'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
+    yield fmt % ((t.date.strftime(ur'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
     while desc or entries:
         yield fmt % (('', desc.pop(0) if desc else u'') + (entry_fields(entries.pop(0)) if entries else ('', '', '')))
 

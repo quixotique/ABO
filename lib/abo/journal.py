@@ -7,6 +7,7 @@
 >>>
 """
 
+import locale
 import re
 import shlex
 import subprocess
@@ -28,6 +29,7 @@ class Journal(object):
             self._parse(self.source_file)
         return self._transactions
 
+    _regex_encoding = re.compile(r'coding[=:]\s*([-\w.]+)', re.MULTILINE)
     _regex_filter = re.compile(r'^%filter\s+(.*)$', re.MULTILINE)
 
     def _parse(self, source_file):
@@ -39,6 +41,8 @@ class Journal(object):
             source_file.name = 'StringIO'
         lines = list(source_file)
         name = getattr(source_file, 'name', str(source_file))
+        m = self._regex_encoding.search('\n'.join(lines[:10]))
+        encoding = m.group(1) if m else locale.getlocale()[1]
         m = self._regex_filter.search('\n'.join(lines[:10]))
         if m:
             args = shlex.split(m.group(1))
@@ -53,8 +57,11 @@ class Journal(object):
                 out = subprocess.check_output(args, stdin=file('/dev/null'))
             else:
                 out, err = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE).communicate(''.join(lines))
+            out = out.decode(encoding)
             import StringIO
             lines = list(StringIO.StringIO(out))
+        else:
+            lines = [line.decode(encoding) for line in lines]
         blocks = []
         block = []
         lnum = 0
