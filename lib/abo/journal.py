@@ -256,10 +256,10 @@ class Journal(object):
         return entries
 
     def _parse_type_remittance(self, firstline, kwargs, tagline):
-        return self._parse_remittance_receipt(firstline, kwargs, tagline, 1)
+        return self._parse_remittance_receipt(firstline, kwargs, tagline, -1)
 
     def _parse_type_receipt(self, firstline, kwargs, tagline):
-        return self._parse_remittance_receipt(firstline, kwargs, tagline, -1)
+        return self._parse_remittance_receipt(firstline, kwargs, tagline, 1)
 
     _regex_relative = re.compile(r'^[+-]\d+$')
 

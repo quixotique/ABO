@@ -120,6 +120,11 @@ class Transaction(abo.base.Base):
         r.append(('entries', self.entries))
         return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % i for i in r))
 
+    def amount(self):
+        """Return the absolute (positive) sum of all credits in this transaction.
+        """
+        return sum(e.amount for e in self.entries if e.amount > 0)
+
     def description(self):
         """Return the full description for this Transaction, by appending its
         who and what strings, separated by a semicolon and space.  The
@@ -141,6 +146,8 @@ __test__ = {
     'something'
     >>> len(t.entries)
     2
+    >>> t.amount()
+    14.56
     >>> t.entries[0].account
     'a1'
     >>> t.entries[0].amount
@@ -175,11 +182,6 @@ __test__ = {
     ...                  {'account':'a2', 'amount':-14.56}))
     Traceback (most recent call last):
     AssertionError: missing date
-    >>> t = Transaction(date=1, what="something", \\
-    ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
-    ...                  {'account':'a2', 'amount':-14.56}))
-    Traceback (most recent call last):
-    AssertionError: missing who
     >>> t = Transaction(date=1, who="Someone", \\
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
     ...                  {'account':'a2', 'amount':-14.56}))

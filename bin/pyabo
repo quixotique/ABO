@@ -26,7 +26,7 @@ def main():
         caches.append(TransactionCache(arg, abo.journal.Journal(file(arg))))
     for cache in caches:
         transactions += cache.transactions()
-    transactions.sort(key=lambda t: (t.date, t.who, t.what))
+    transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
     for t in transactions:
         for line in format_transaction(t):
             print line.encode(enc)
