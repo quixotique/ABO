@@ -167,6 +167,16 @@ sub cdate { $_[0]->{'cdate'}; }
 sub who { $_[0]->_expand($_[0]->{'who'}); }
 sub what { $_[0]->_expand($_[0]->{'what'}); }
 
+sub amount
+{
+	my $self = shift;
+        my $amount = $self->make_money(0);
+	for my $e ($self->entries) {
+		$amount += $e->amount if $e->dbcr eq 'cr';
+	}
+        return $amount;
+}
+
 sub desc
 {
 	my $self = shift;
