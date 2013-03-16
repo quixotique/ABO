@@ -111,6 +111,7 @@ sub date { $_[0]->transaction->date }
 sub dbcr { $_[0]->{'dbcr'} }
 sub account { $_[0]->{'account'} }
 sub amount { $_[0]->{'amount'} }
+sub amount_signed { $_[0]->{'dbcr'} eq 'db' ? -$_[0]->{'amount'} : $_[0]->{'amount'} }
 sub who { $_[0]->transaction->who }
 sub what { $_[0]->transaction->what }
 sub detail { $_[0]->{'detail'} }
