@@ -30,6 +30,8 @@ True
 >>>
 """
 
+import re
+import datetime
 import abo.base
 
 class Entry(abo.base.Base):
@@ -97,7 +99,7 @@ class Transaction(abo.base.Base):
         self.id = self._make_unique_id()
         self.date = date
         self.who = who
-        self.what = what
+        self.what = self._expand(what, date=date)
         # Construct member Entry objects and ensure that they sum to zero.
         ents = []
         bal = 0
@@ -132,6 +134,18 @@ class Transaction(abo.base.Base):
         strings if needed.
         """
         return '; '.join([s for s in (self.who, self.what) if s])
+
+    _regex_expand_field = re.compile(r'%{(\w+)([+-]\d+)?}')
+
+    def _expand(self, text, date):
+        def repl(m):
+            if m.group(1) == 'date':
+                d = date
+                if m.group(2):
+                    d += datetime.timedelta(int(m.group(2)))
+                return d.strftime(r'%-d-%b-%Y')
+            return text
+        return self._regex_expand_field.sub(repl, text)
 
 __test__ = {
 'accessors':"""
