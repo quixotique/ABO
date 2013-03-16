@@ -142,6 +142,12 @@ sub init
 	}
 	$self->error("entries unbalanced") if $bal;
 
+        @{$self->{'entries'}} = sort {
+                   $a->amount_signed <=> $b->amount_signed
+                || $a->account->name cmp $b->account->name
+                || $a->detail cmp $b->detail
+            } @{$self->{'entries'}};
+
 	return undef if $self->{'_error'};
 	$self->_nucleus->validate_transaction($self) or return undef;
 

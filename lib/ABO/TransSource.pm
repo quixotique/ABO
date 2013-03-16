@@ -38,7 +38,7 @@ sub transactions
 	my @t = $self->unsorted_transactions(@_);
 	$self->blah("sort ".scalar(@t)." transactions ".ref($self))
 		if @t > 1;
-	return sort { $a->date <=> $b->date } @t;
+	return sort { $a->date <=> $b->date || $a->who cmp $b->who || $a->what cmp $a->what } @t;
 }
 
 1;
