@@ -94,12 +94,11 @@ class Transaction(abo.base.Base):
         date, description, and list of Entry objects.
         """
         assert date is not None, 'missing date'
-        assert what is not None, 'missing what'
         assert len(entries) >= 2, 'too few entries'
         self.id = self._make_unique_id()
         self.date = date
         self.who = who
-        self.what = self._expand(what, date=date)
+        self.what = self._expand(what, date=date) if what else what
         # Construct member Entry objects and ensure that they sum to zero.
         ents = []
         bal = 0
@@ -118,7 +117,8 @@ class Transaction(abo.base.Base):
         r.append(('date', self.date))
         if self.who:
             r.append(('who', self.who))
-        r.append(('what', self.what))
+        if self.what:
+            r.append(('what', self.what))
         r.append(('entries', self.entries))
         return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % i for i in r))
 
@@ -196,11 +196,6 @@ __test__ = {
     ...                  {'account':'a2', 'amount':-14.56}))
     Traceback (most recent call last):
     AssertionError: missing date
-    >>> t = Transaction(date=1, who="Someone", \\
-    ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
-    ...                  {'account':'a2', 'amount':-14.56}))
-    Traceback (most recent call last):
-    AssertionError: missing what
     >>> t = Transaction(date=1, who="Someone", what="something", \\
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'},))
     Traceback (most recent call last):
