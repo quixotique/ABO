@@ -17,6 +17,8 @@ except ImportError:
     sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib'))
     import abo.journal
 import abo.config
+import abo.period
+import abo.balance
 
 def main():
     locale.setlocale(locale.LC_ALL, '')
@@ -35,18 +37,30 @@ def main():
         print line.encode(output_encoding)
 
 def cmd_journal(transactions, args):
+    if args:
+        transactions = filter_period(transactions, args)
     for t in transactions:
         for line in format_journal(t):
             yield line
 
 def cmd_acc(transactions, args):
+    account = args.pop(0)
+    if args:
+        transactions = filter_period(transactions, args)
     balance = 0
     for t in transactions:
         for e in t.entries:
-            if e.account == args[0]:
+            if e.account == account:
                 balance += e.amount
                 for line in format_acc(e, balance):
                     yield line
+
+def filter_period(transactions, args):
+    periods = abo.period.parse_periods(args)
+    if len(periods) > 1:
+        raise ValueError('too many periods')
+    period = abo.balance.Range(*periods[0])
+    return [t for t in transactions if t.date in period]
 
 class TransactionCache(object):
 
