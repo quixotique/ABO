@@ -29,8 +29,11 @@ at a single point in time.
 -122.07
 >>> b.cbalance('a2')
 -24.57
->>> b.entries()
-(Entry(account='a1', amount=122.07), Entry(account='a2', amount=-24.57), Entry(account='a2', amount=-100.0, cdate=5), Entry(account='a2', amount=2.5, cdate=6))
+>>> b.entries() #doctest: +NORMALIZE_WHITESPACE
+(Entry(account='a1', amount=122.07),
+ Entry(account='a2', amount=-24.57),
+ Entry(account='a2', amount=-100.0, cdate=5),
+ Entry(account='a2', amount=2.5, cdate=6))
 
 """
 

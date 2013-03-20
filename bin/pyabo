@@ -11,25 +11,42 @@ import errno
 import cPickle as pickle
 import textwrap
 
+try:
+    import abo.journal
+except ImportError:
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib'))
+    import abo.journal
+import abo.config
+
 def main():
     locale.setlocale(locale.LC_ALL, '')
     lang, enc = locale.getlocale()
-    try:
-        import abo.journal
-    except ImportError:
-        sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib'))
-        import abo.journal
-    import abo.config
+    output_encoding = enc
+    func = globals()['cmd_' + sys.argv[1]]
+    config = abo.config.config()
     transactions = []
     caches = []
-    for arg in sys.argv[1:]:
-        caches.append(TransactionCache(arg, abo.journal.Journal(file(arg))))
+    for path in config.input_file_paths:
+        caches.append(TransactionCache(path, abo.journal.Journal(file(path))))
     for cache in caches:
         transactions += cache.transactions()
     transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
+    for line in func(transactions, sys.argv[2:]):
+        print line.encode(output_encoding)
+
+def cmd_journal(transactions, args):
     for t in transactions:
-        for line in format_transaction(t):
-            print line.encode(enc)
+        for line in format_journal(t):
+            yield line
+
+def cmd_acc(transactions, args):
+    balance = 0
+    for t in transactions:
+        for e in t.entries:
+            if e.account == args[0]:
+                balance += e.amount
+                for line in format_acc(e, balance):
+                    yield line
 
 class TransactionCache(object):
 
@@ -63,21 +80,37 @@ class TransactionCache(object):
                 raise
             return -1
 
-def format_transaction(t):
-    import abo.config
-    width = max(50, int(os.environ.get('COLUMNS', 80)))
+def format_journal(transaction):
+    width = max(50, abo.config.output_width())
     aw = 15
-    bw = len(abo.config.money(1000000).format(symbol=False, thousands=True))
-    pw = width - 11 - 2 - 1 - aw - 1 - bw - 1 - 2
-    fmt = u'%-11.11s  %-{pw}.{pw}s %{bw}s %-2.2s %-{aw}.{aw}s'.format(pw=pw, bw=bw, aw=aw)
-    desc = textwrap.wrap(t.description(), width=pw)
-    entries = list(t.entries)
-    yield fmt % ((t.date.strftime(ur'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
+    dw = 11
+    bw = abo.config.money_column_width()
+    pw = max(1, width - dw - 2 - 1 - aw - 1 - bw - 1 - 2)
+    fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-{aw}.{aw}s'.format(**locals())
+    desc = textwrap.wrap(transaction.description(), width=pw)
+    entries = list(transaction.entries)
+    def entry_fields(e):
+        return (abo.config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), e.account)
+    yield fmt % ((transaction.date.strftime(ur'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
     while desc or entries:
         yield fmt % (('', desc.pop(0) if desc else u'') + (entry_fields(entries.pop(0)) if entries else ('', '', '')))
 
-def entry_fields(e):
-    return (abs(e.amount).format(symbol=False, thousands=True), ('db' if e.amount < 0 else 'cr'), e.account)
+def format_acc(entry, balance):
+    width = max(50, abo.config.output_width())
+    dw = 11
+    mw = abo.config.money_column_width()
+    bw = abo.config.balance_column_width()
+    pw = max(1, width - dw - 2 - 2 * (mw + 1) - 1 - bw)
+    fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
+    desc = textwrap.wrap(entry.description(), width=pw)
+    yield fmt % (entry.transaction.date.strftime(ur'%_d-%b-%Y'),
+            desc.pop(0),
+            abo.config.format_money(-entry.amount) if entry.amount < 0 else '',
+            abo.config.format_money(entry.amount) if entry.amount > 0 else '',
+            abo.config.format_money(balance)
+        )
+    while desc:
+        yield fmt % ('', desc.pop(0), '', '', '')
 
 if __name__ == '__main__':
     main()

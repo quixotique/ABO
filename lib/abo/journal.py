@@ -179,8 +179,6 @@ class Journal(object):
                 self._parse_line_tagtext(line, line.fulltext)
                 if line.tag not in tags:
                     raise ParseException(line, 'invalid tag %r' % line.tag)
-                if not line.text:
-                    raise ParseException(line, 'empty tag %r' % line.tag)
                 if not firstline:
                     firstline = line
                 if type(tags[line.tag]) is list:
@@ -241,6 +239,8 @@ class Journal(object):
         entries_noamt = {'db': None, 'cr': None}
         for dbcr, sign in (('db', -1), ('cr', 1)):
             for line in tagline(dbcr):
+                if not line.text:
+                    raise ParseException(line, 'empty tag %r' % line.tag)
                 entry = self._parse_dbcr(line)
                 if 'amount' in entry:
                     totals[dbcr] += entry['amount']
@@ -468,6 +468,7 @@ __test__ = {
 
 >>> Journal(r'''
 ... date 23/2/2013
+... type transaction
 ... # comment
 ... who Whoever
 ... #line 20 "wah"
