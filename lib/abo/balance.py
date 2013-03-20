@@ -63,7 +63,7 @@ class Balance(object):
         self.accounts = tuple(sorted(self._balances))
 
     def balance(self, account):
-        return sum(self._balances[account].itervalues())
+        return sum(self._balances[account].itervalues()) if account in self._balances else 0
 
     def cbalance(self, account):
         return self._balances[account][None]

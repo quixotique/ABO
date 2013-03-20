@@ -63,8 +63,11 @@ def cmd_journal(transactions, args):
 
 def cmd_acc(transactions, args):
     account = args.pop(0)
+    bf = None
     if args:
         range = parse_range(args)
+        if range.start is not None:
+            bf = abo.balance.Balance(transactions, abo.balance.Range(None, range.start))
         transactions = filter_period(transactions, range)
     else:
         range = abo.balance.Range(None, None)
@@ -78,10 +81,20 @@ def cmd_acc(transactions, args):
     yield range_line(range).center(width)
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
     balance = 0
+    totdb = 0
+    totcr = 0
+    if bf:
+        balance = bf.balance(account)
+    if balance:
+        yield fmt % ('', 'Brought forward', '', '', abo.config.format_money(balance))
     for t in transactions:
         for e in t.entries:
             if e.account == account:
                 balance += e.amount
+                if e.amount < 0:
+                    totdb += e.amount
+                elif e.amount > 0:
+                    totcr += e.amount
                 desc = textwrap.wrap(e.description(), width=pw)
                 yield fmt % (e.transaction.date.strftime(ur'%_d-%b-%Y'),
                         desc.pop(0),
@@ -92,6 +105,11 @@ def cmd_acc(transactions, args):
                 while desc:
                     yield fmt % ('', desc.pop(0), '', '', '')
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
+    yield fmt % ('', 'Totals for period',
+            abo.config.format_money(-totdb),
+            abo.config.format_money(totcr),
+            '')
+    yield fmt % ('', 'Balance', '', '', abo.config.format_money(balance))
 
 def parse_range(args):
     periods = abo.period.parse_periods(args)

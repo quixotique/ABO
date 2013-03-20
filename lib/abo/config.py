@@ -18,8 +18,10 @@ def parse_money(text):
 def money(amount):
     return currency.money(amount)
 
-def format_money(money):
-    return money.format(symbol=False, thousands=True)
+def format_money(amount):
+    if not isinstance(amount, abo.money.Money):
+        amount = money(amount)
+    return amount.format(symbol=False, thousands=True)
 
 def money_column_width():
     return len(format_money(money(1000000)))
