@@ -38,29 +38,79 @@ def main():
 
 def cmd_journal(transactions, args):
     if args:
-        transactions = filter_period(transactions, args)
+        range = parse_range(args)
+        transactions = filter_period(transactions, range)
+    else:
+        range = abo.balance.Range(None, None)
+    width = max(50, abo.config.output_width())
+    aw = 15
+    dw = 11
+    bw = abo.config.money_column_width()
+    pw = max(1, width - dw - 2 - 1 - aw - 1 - bw - 1 - 2)
+    fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-{aw}.{aw}s'.format(**locals())
+    yield 'JOURNAL OF TRANSACTIONS'.center(width)
+    yield range_line(range).center(width)
+    yield fmt % ('-' * dw, '-' * pw, '-' * bw, '--', '-' * aw)
     for t in transactions:
-        for line in format_journal(t):
-            yield line
+        desc = textwrap.wrap(t.description(), width=pw)
+        entries = list(t.entries)
+        def entry_fields(e):
+            return (abo.config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), e.account)
+        yield fmt % ((t.date.strftime(ur'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
+        while desc or entries:
+            yield fmt % (('', desc.pop(0) if desc else u'') + (entry_fields(entries.pop(0)) if entries else ('', '', '')))
+    yield fmt % ('-' * dw, '-' * pw, '-' * bw, '--', '-' * aw)
 
 def cmd_acc(transactions, args):
     account = args.pop(0)
     if args:
-        transactions = filter_period(transactions, args)
+        range = parse_range(args)
+        transactions = filter_period(transactions, range)
+    else:
+        range = abo.balance.Range(None, None)
+    width = max(50, abo.config.output_width())
+    dw = 11
+    mw = abo.config.money_column_width()
+    bw = abo.config.balance_column_width()
+    pw = max(1, width - dw - 2 - 2 * (mw + 1) - 1 - bw)
+    fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
+    yield 'STATEMENT OF ACCOUNT'.center(width)
+    yield range_line(range).center(width)
+    yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
     balance = 0
     for t in transactions:
         for e in t.entries:
             if e.account == account:
                 balance += e.amount
-                for line in format_acc(e, balance):
-                    yield line
+                desc = textwrap.wrap(e.description(), width=pw)
+                yield fmt % (e.transaction.date.strftime(ur'%_d-%b-%Y'),
+                        desc.pop(0),
+                        abo.config.format_money(-e.amount) if e.amount < 0 else '',
+                        abo.config.format_money(e.amount) if e.amount > 0 else '',
+                        abo.config.format_money(balance)
+                    )
+                while desc:
+                    yield fmt % ('', desc.pop(0), '', '', '')
+    yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
 
-def filter_period(transactions, args):
+def parse_range(args):
     periods = abo.period.parse_periods(args)
     if len(periods) > 1:
         raise ValueError('too many periods')
-    period = abo.balance.Range(*periods[0])
-    return [t for t in transactions if t.date in period]
+    return abo.balance.Range(*periods[0])
+    
+def filter_period(transactions, range):
+    return [t for t in transactions if t.date in range]
+
+def range_line(range):
+    p = []
+    if range.start is not None:
+        p.append('FROM')
+        p.append(range.start.strftime(ur'%_d-%b-%Y'))
+    if range.end is not None:
+        p.append('TO')
+        p.append(range.end.strftime(ur'%_d-%b-%Y'))
+    return ' '.join(p) if p else 'ALL'
 
 class TransactionCache(object):
 
@@ -93,38 +143,6 @@ class TransactionCache(object):
             if e.errno != errno.ENOENT:
                 raise
             return -1
-
-def format_journal(transaction):
-    width = max(50, abo.config.output_width())
-    aw = 15
-    dw = 11
-    bw = abo.config.money_column_width()
-    pw = max(1, width - dw - 2 - 1 - aw - 1 - bw - 1 - 2)
-    fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-{aw}.{aw}s'.format(**locals())
-    desc = textwrap.wrap(transaction.description(), width=pw)
-    entries = list(transaction.entries)
-    def entry_fields(e):
-        return (abo.config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), e.account)
-    yield fmt % ((transaction.date.strftime(ur'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
-    while desc or entries:
-        yield fmt % (('', desc.pop(0) if desc else u'') + (entry_fields(entries.pop(0)) if entries else ('', '', '')))
-
-def format_acc(entry, balance):
-    width = max(50, abo.config.output_width())
-    dw = 11
-    mw = abo.config.money_column_width()
-    bw = abo.config.balance_column_width()
-    pw = max(1, width - dw - 2 - 2 * (mw + 1) - 1 - bw)
-    fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
-    desc = textwrap.wrap(entry.description(), width=pw)
-    yield fmt % (entry.transaction.date.strftime(ur'%_d-%b-%Y'),
-            desc.pop(0),
-            abo.config.format_money(-entry.amount) if entry.amount < 0 else '',
-            abo.config.format_money(entry.amount) if entry.amount > 0 else '',
-            abo.config.format_money(balance)
-        )
-    while desc:
-        yield fmt % ('', desc.pop(0), '', '', '')
 
 if __name__ == '__main__':
     main()
