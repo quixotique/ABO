@@ -2,6 +2,17 @@
 # vim: sw=4 sts=4 et fileencoding=utf8 nomod
 # Copyright 2013 Andrew Bettison
 
+'''Usage:
+    pyabo acc [--wrap] <account> [<period>...]
+    pyabo journal [--wrap] [<period>...]
+    pyabo -h | --help
+    pyabo --version
+Options:
+    -h --help               Show this message
+    --version               Show version and exit
+    -w --wrap               Wrap long lines
+'''
+
 import sys
 import locale
 import codecs
@@ -19,12 +30,23 @@ except ImportError:
 import abo.config
 import abo.period
 import abo.balance
+try:
+    import docopt
+except ImportError:
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
+    import docopt
 
 def main():
     locale.setlocale(locale.LC_ALL, '')
     lang, enc = locale.getlocale()
     output_encoding = enc
-    func = globals()['cmd_' + sys.argv[1]]
+    opts = docopt.docopt(__doc__, version='0.1')
+    if opts['acc']:
+        func = cmd_acc
+    elif opts['journal']:
+        func = cmd_journal
+    else:
+        assert False, 'unknown command'
     config = abo.config.config()
     transactions = []
     caches = []
@@ -33,15 +55,11 @@ def main():
     for cache in caches:
         transactions += cache.transactions()
     transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
-    for line in func(transactions, sys.argv[2:]):
+    for line in func(transactions, opts):
         print line.encode(output_encoding)
 
-def cmd_journal(transactions, args):
-    if args:
-        range = parse_range(args)
-        transactions = filter_period(transactions, range)
-    else:
-        range = abo.balance.Range(None, None)
+def cmd_journal(transactions, opts):
+    range, transactions = filter_period(transactions, opts)
     width = max(50, abo.config.output_width())
     aw = 15
     dw = 11
@@ -57,20 +75,19 @@ def cmd_journal(transactions, args):
         def entry_fields(e):
             return (abo.config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), e.account)
         yield fmt % ((t.date.strftime(ur'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
-        while desc or entries:
+        while entries:
             yield fmt % (('', desc.pop(0) if desc else u'') + (entry_fields(entries.pop(0)) if entries else ('', '', '')))
+        if opts['--wrap']:
+            while desc:
+                yield fmt % ('', desc.pop(0), '', '', '')
     yield fmt % ('-' * dw, '-' * pw, '-' * bw, '--', '-' * aw)
 
-def cmd_acc(transactions, args):
-    account = args.pop(0)
+def cmd_acc(transactions, opts):
+    account = opts['<account>']
+    range, transactions = filter_period(transactions, opts)
     bf = None
-    if args:
-        range = parse_range(args)
-        if range.start is not None:
-            bf = abo.balance.Balance(transactions, abo.balance.Range(None, range.start))
-        transactions = filter_period(transactions, range)
-    else:
-        range = abo.balance.Range(None, None)
+    if range.start is not None:
+        bf = abo.balance.Balance(transactions, abo.balance.Range(None, range.start))
     width = max(50, abo.config.output_width())
     dw = 11
     mw = abo.config.money_column_width()
@@ -102,8 +119,9 @@ def cmd_acc(transactions, args):
                         abo.config.format_money(e.amount) if e.amount > 0 else '',
                         abo.config.format_money(balance)
                     )
-                while desc:
-                    yield fmt % ('', desc.pop(0), '', '', '')
+                if opts['--wrap']:
+                    while desc:
+                        yield fmt % ('', desc.pop(0), '', '', '')
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
     yield fmt % ('', 'Totals for period',
             abo.config.format_money(-totdb),
@@ -111,14 +129,19 @@ def cmd_acc(transactions, args):
             '')
     yield fmt % ('', 'Balance', '', '', abo.config.format_money(balance))
 
-def parse_range(args):
-    periods = abo.period.parse_periods(args)
+def parse_range(words):
+    periods = abo.period.parse_periods(words)
     if len(periods) > 1:
         raise ValueError('too many periods')
     return abo.balance.Range(*periods[0])
     
-def filter_period(transactions, range):
-    return [t for t in transactions if t.date in range]
+def filter_period(transactions, opts):
+    if opts['<period>']:
+        range = parse_range(opts['<period>'])
+        transactions = [t for t in transactions if t.date in range]
+    else:
+        range = abo.balance.Range(None, None)
+    return range, transactions
 
 def range_line(range):
     p = []
