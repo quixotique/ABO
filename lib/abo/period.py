@@ -18,6 +18,12 @@
 >>> parse_periods(['next', 'month'])
 [(datetime.date(2013, 4, 1), datetime.date(2013, 4, 30))]
 
+>>> parse_periods(['this', 'week'])
+[(datetime.date(2013, 3, 18), datetime.date(2013, 3, 24))]
+
+>>> parse_periods(['last', 'week'])
+[(datetime.date(2013, 3, 11), datetime.date(2013, 3, 17))]
+
 >>> parse_periods(['last', 'quarter'])
 [(datetime.date(2012, 10, 1), datetime.date(2012, 12, 31))]
 
@@ -172,6 +178,9 @@ def enclosing_range(origin, unit):
     if unit in ('day', 'days'):
         start = origin
         end = origin
+    elif unit in ('week', 'weeks'):
+        start = origin - timedelta(origin.weekday())
+        end = start + timedelta(6)
     elif unit in ('month', 'months'):
         start = origin.replace(day=1)
         end = advance_date(start, months=1) - timedelta(1)
@@ -211,6 +220,10 @@ def parse_last(args):
         args.pop(0)
         start = advance_date(today.replace(day=1), months=-1)
         end = advance_date(start, months=1) - timedelta(1)
+    elif args[0] == 'week':
+        args.pop(0)
+        start = today - timedelta(7 + today.weekday())
+        end = start + timedelta(6)
     else:
         start = today.replace(month=parse_monthname(args[0]), day=1)
         args.pop(0)
@@ -240,6 +253,10 @@ def parse_next(args):
         args.pop(0)
         start = advance_date(today.replace(day=1), months=1)
         end = advance_date(start, months=1) - timedelta(1)
+    elif args[0] == 'week':
+        args.pop(0)
+        start = today + timedelta(7 - today.weekday())
+        end = start + timedelta(6)
     else:
         start = today.replace(month=parse_monthname(args[0]), day=1)
         args.pop(0)
