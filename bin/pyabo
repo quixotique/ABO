@@ -84,7 +84,7 @@ def cmd_journal(transactions, opts):
 
 def cmd_acc(transactions, opts):
     account = opts['<account>']
-    range, transactions = filter_period(transactions, opts)
+    range, period_transactions = filter_period(transactions, opts)
     bf = None
     if range.start is not None:
         bf = abo.balance.Balance(transactions, abo.balance.Range(None, range.start))
@@ -101,10 +101,14 @@ def cmd_acc(transactions, opts):
     totdb = 0
     totcr = 0
     if bf:
-        balance = bf.balance(account)
-    if balance:
-        yield fmt % ('', 'Brought forward', '', '', abo.config.format_money(balance))
-    for t in transactions:
+        for e in bf.entries():
+            if e.account == account:
+                balance += e.amount
+                yield fmt % ('', 'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),
+                        abo.config.format_money(-e.amount) if e.amount < 0 else '',
+                        abo.config.format_money(e.amount) if e.amount > 0 else '',
+                        abo.config.format_money(balance))
+    for t in period_transactions:
         for e in t.entries:
             if e.account == account:
                 balance += e.amount
@@ -117,8 +121,7 @@ def cmd_acc(transactions, opts):
                         desc.pop(0),
                         abo.config.format_money(-e.amount) if e.amount < 0 else '',
                         abo.config.format_money(e.amount) if e.amount > 0 else '',
-                        abo.config.format_money(balance)
-                    )
+                        abo.config.format_money(balance))
                 if opts['--wrap']:
                     while desc:
                         yield fmt % ('', desc.pop(0), '', '', '')

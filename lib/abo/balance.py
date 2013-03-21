@@ -71,10 +71,11 @@ class Balance(object):
     def entries(self):
         ret = []
         for account, amounts in self._balances.iteritems():
-            for cdate, amount in amounts.iteritems():
-                if amount:
-                    ret.append(abo.transaction.Entry(transaction=None, amount=amount, account=account, cdate=cdate))
-        return tuple(sorted(ret, key=lambda e: (e.cdate, e.account, -e.amount)))
+            if amounts[None]:
+                ret.append(abo.transaction.Entry(transaction=None, amount=amounts[None], account=account))
+            for cdate in sorted(d for d in amounts if d is not None):
+                ret.append(abo.transaction.Entry(transaction=None, amount=amounts[cdate], account=account, cdate=cdate))
+        return tuple(ret)
 
 class Range(object):
 
