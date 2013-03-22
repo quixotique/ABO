@@ -30,8 +30,8 @@ at a single point in time.
 >>> b.cbalance('a2')
 -24.57
 >>> b.entries() #doctest: +NORMALIZE_WHITESPACE
-(Entry(account='a1', amount=122.07),
- Entry(account='a2', amount=-24.57),
+(Entry(account='a2', amount=-24.57),
+ Entry(account='a1', amount=122.07),
  Entry(account='a2', amount=-100.0, cdate=5),
  Entry(account='a2', amount=2.5, cdate=6))
 
@@ -69,13 +69,16 @@ class Balance(object):
         return self._balances[account][None]
 
     def entries(self):
-        ret = []
+        without_cdate = []
+        with_cdate = []
         for account, amounts in self._balances.iteritems():
             if amounts[None]:
-                ret.append(abo.transaction.Entry(transaction=None, amount=amounts[None], account=account))
+                without_cdate.append(abo.transaction.Entry(transaction=None, amount=amounts[None], account=account))
             for cdate in sorted(d for d in amounts if d is not None):
-                ret.append(abo.transaction.Entry(transaction=None, amount=amounts[cdate], account=account, cdate=cdate))
-        return tuple(ret)
+                with_cdate.append(abo.transaction.Entry(transaction=None, amount=amounts[cdate], account=account, cdate=cdate))
+        without_cdate.sort(key= lambda e: (e.amount, e.account))
+        with_cdate.sort(key= lambda e: (e.cdate, e.amount, e.account))
+        return tuple(without_cdate + with_cdate)
 
 class Range(object):
 

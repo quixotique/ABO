@@ -22,6 +22,7 @@ import os.path
 import errno
 import cPickle as pickle
 import textwrap
+from itertools import chain
 
 try:
     import abo.journal
@@ -60,21 +61,28 @@ def main():
         print line.encode(output_encoding)
 
 def cmd_journal(transactions, opts):
-    range, transactions = filter_period(transactions, opts)
+    range, bf, transactions = filter_period(transactions, opts)
     width = max(50, abo.config.output_width())
     aw = 15
     dw = 11
-    bw = abo.config.money_column_width()
+    bw = abo.config.balance_column_width()
     pw = max(1, width - dw - 2 - 1 - aw - 1 - bw - 1 - 2)
     fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-{aw}.{aw}s'.format(**locals())
     yield 'JOURNAL OF TRANSACTIONS'.center(width)
     yield range_line(range).center(width)
+    yield ''
+    yield fmt % ('Date', 'Particulars', 'Amount', 'DC', 'Account')
     yield fmt % ('-' * dw, '-' * pw, '-' * bw, '--', '-' * aw)
+    def entry_fields(e):
+        return (abo.config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), e.account)
+    if bf:
+        for e in bf.entries():
+            yield fmt % (('',
+                'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),)
+                + entry_fields(e))
     for t in transactions:
         desc = textwrap.wrap(t.description(), width=pw)
         entries = list(t.entries)
-        def entry_fields(e):
-            return (abo.config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), e.account)
         yield fmt % ((t.date.strftime(ur'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
         while entries:
             yield fmt % (('', desc.pop(0) if desc else u'') + (entry_fields(entries.pop(0)) if entries else ('', '', '')))
@@ -85,10 +93,7 @@ def cmd_journal(transactions, opts):
 
 def cmd_acc(transactions, opts):
     account = opts['<account>']
-    range, period_transactions = filter_period(transactions, opts)
-    bf = None
-    if range.start is not None:
-        bf = abo.balance.Balance(transactions, abo.balance.Range(None, range.start))
+    range, bf, transactions = filter_period(transactions, opts)
     width = max(50, abo.config.output_width())
     dw = 11
     mw = abo.config.money_column_width()
@@ -97,6 +102,8 @@ def cmd_acc(transactions, opts):
     fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
     yield 'STATEMENT OF ACCOUNT'.center(width)
     yield range_line(range).center(width)
+    yield ''
+    yield fmt % ('Date', 'Particulars', 'Debit', 'Credit', 'Balance')
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
     balance = 0
     totdb = 0
@@ -109,7 +116,7 @@ def cmd_acc(transactions, opts):
                         abo.config.format_money(-e.amount) if e.amount < 0 else '',
                         abo.config.format_money(e.amount) if e.amount > 0 else '',
                         abo.config.format_money(balance))
-    for t in period_transactions:
+    for t in transactions:
         for e in t.entries:
             if e.account == account:
                 balance += e.amount
@@ -138,14 +145,17 @@ def parse_range(words):
     if len(periods) > 1:
         raise ValueError('too many periods')
     return abo.balance.Range(*periods[0])
-    
+
 def filter_period(transactions, opts):
+    brought_forward = None
     if opts['<period>']:
         range = parse_range(opts['<period>'])
+        if range.start is not None:
+            brought_forward = abo.balance.Balance(transactions, abo.balance.Range(None, range.start))
         transactions = [t for t in transactions if t.date in range]
     else:
         range = abo.balance.Range(None, None)
-    return range, transactions
+    return range, brought_forward, transactions
 
 def range_line(range):
     p = []
