@@ -40,3 +40,7 @@ def config():
 
 def output_width():
     return int(os.environ.get('COLUMNS', 80))
+
+def cache_dir_path():
+    return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo')
+
