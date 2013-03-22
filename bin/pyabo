@@ -3,13 +3,14 @@
 # Copyright 2013 Andrew Bettison
 
 '''Usage:
-    pyabo acc [--wrap] <account> [<period>...]
-    pyabo journal [--wrap] [<period>...]
+    pyabo acc [-fw] <account> [<period>...]
+    pyabo journal [-fw] [<period>...]
     pyabo -h | --help
     pyabo --version
 Options:
     -h --help               Show this message
     --version               Show version and exit
+    -f --force              Force re-population of transaction cache
     -w --wrap               Wrap long lines
 '''
 
@@ -53,7 +54,7 @@ def main():
     for path in config.input_file_paths:
         caches.append(TransactionCache(path, abo.journal.Journal(file(path))))
     for cache in caches:
-        transactions += cache.transactions()
+        transactions += cache.transactions(force=opts['--force'])
     transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
     for line in func(transactions, opts):
         print line.encode(output_encoding)
@@ -165,9 +166,9 @@ class TransactionCache(object):
     def cache_path(self):
         return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo', os.path.abspath(self.path).replace('/', '%%'))
 
-    def transactions(self):
+    def transactions(self, force=False):
         cpath = self.cache_path()
-        if self.mtime(cpath) < self.mtime(self.path):
+        if force or self.mtime(cpath) < self.mtime(self.path):
             transactions = self.transaction_source.transactions()
             try:
                 os.makedirs(os.path.dirname(cpath))
@@ -175,9 +176,8 @@ class TransactionCache(object):
                 if e.errno != errno.EEXIST:
                     raise
             pickle.dump(transactions, file(cpath, 'w'))
-        else:
-            return pickle.load(file(cpath))
-        return transactions
+            return transactions
+        return pickle.load(file(cpath))
 
     @staticmethod
     def mtime(path):
