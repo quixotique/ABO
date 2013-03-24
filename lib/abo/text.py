@@ -71,7 +71,8 @@ def number_lines(lines, name=None, start=1):
 
 class numbered_line(unicode):
 
-    r'''
+    r'''Sub-class of unicode which carries extra attributes such as
+    'line_number' and 'name', which it preserves where needed.
     >>> i = numbered_line(u'abc ')
     >>> i.line_number = 42
     >>> i.name = 'wah'
@@ -86,23 +87,41 @@ class numbered_line(unicode):
     '''
 
     def __new__(cls, arg=''):
+        if isinstance(arg, cls):
+            return arg
         self = super(numbered_line, cls).__new__(cls, arg)
-        if hasattr(arg, 'line_number'):
-            self.line_number = arg.line_number
-        if hasattr(arg, 'name'):
-            self.name = arg.name
+        if isinstance(arg, cls):
+            self.__dict__.update(arg.__dict__)
         return self
 
     def __wrap(self, value):
         obj = type(self)(value)
-        if hasattr(self, 'line_number'):
-            obj.line_number = self.line_number
-        if hasattr(self, 'name'):
-            obj.name = self.name
+        obj.__dict__.update(self.__dict__)
         return obj
+
+    def strip(self, chars=None):
+        return self.__wrap(super(numbered_line, self).strip(chars))
 
     def rstrip(self, chars=None):
         return self.__wrap(super(numbered_line, self).rstrip(chars))
+
+    def lstrip(self, chars=None):
+        return self.__wrap(super(numbered_line, self).lstrip(chars))
+
+class LineError(ValueError):
+
+    def __init__(self, msg, line=None):
+        super(LineError, self).__init__(self.where(line, suffix=': ') + msg)
+        self.line = line
+
+    @classmethod
+    def where(cls, line, suffix=''):
+        r = []
+        if hasattr(line, 'name'):
+            r.append(str(line.name))
+        if hasattr(line, 'line_number'):
+            r.append(str(line.line_number))
+        return ', '.join(r) + (suffix if r else '')
 
 def line_blocks(lines):
     r"""Return an iterator over blocks of lines, where a block is a contiguous
@@ -122,6 +141,42 @@ def line_blocks(lines):
             block = []
     if block:
         yield block
+
+def undent_lines(lines):
+    r"""Return an iterator over lines with the 'indent' attribute set to the
+    logical indent level, starting at zero.
+    >>> lines = map(numbered_line, ['  abc', 'def', ' ghi', '  jkl', '   mno', ' pqr', 'stu'])
+    >>> il = list(undent_lines(lines))
+    >>> il
+    [u'abc', u'def', u'ghi', u'jkl', u'mno', u'pqr', u'stu']
+    >>> [i.indent for i in il]
+    [1, 0, 1, 2, 3, 1, 0]
+    >>> lines = map(numbered_line, ['  abc', ' def'])
+    >>> list(undent_lines(lines))
+    Traceback (most recent call last):
+    LineError: invalid indent
+    """
+    indent = []
+    for line in lines:
+        iline = line.lstrip()
+        sp = line[:-len(iline)]
+        if not sp:
+            indent = []
+        elif indent:
+            while indent and sp != indent[-1]:
+                if indent[-1].startswith(sp):
+                    indent.pop()
+                elif sp.startswith(indent[-1]):
+                    indent.append(sp)
+                else:
+                    break
+            if not (indent and sp == indent[-1]) or (not indent and not sp):
+                raise LineError('invalid indent', line=line)
+        elif sp:
+            indent.append(sp)
+
+        iline.indent = len(indent)
+        yield iline
 
 def _test():
     import doctest
