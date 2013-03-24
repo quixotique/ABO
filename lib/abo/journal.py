@@ -100,7 +100,7 @@ class Journal(object):
             source_file.name = 'StringIO'
         name = getattr(source_file, 'name', str(source_file))
         lines = list(source_file)
-        m = self._regex_filter.search('\n'.join(lines[:10]))
+        m = self._regex_filter.search(''.join(lines[:10]))
         if m:
             args = shlex.split(m.group(1))
             if type(source_file) is file:
@@ -116,26 +116,10 @@ class Journal(object):
                 out, err = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE).communicate(''.join(lines))
             import StringIO
             lines = list(StringIO.StringIO(out))
+        lines = [line.rstrip('\n') for line in lines]
         lines = abo.text.decode_lines(lines)
-        blocks = []
-        block = []
-        lnum = 0
-        for line in lines:
-            line = line.rstrip('\n')
-            lnum += 1
-            if line:
-                words = line.split(None, 3)
-                if words[0] == '#line' and len(words) > 1 and words[1].isdigit():
-                    lnum = int(words[1]) - 1
-                    if len(words) > 2:
-                        name = words[2]
-                elif not words[0].startswith('#'):
-                    block.append(struct(name=name, line_number=lnum, fulltext=line))
-            elif block:
-                blocks.append(block)
-                block = []
-        if block:
-            blocks.append(block)
+        lines = abo.text.number_lines(lines, name=source_file.name)
+        blocks = abo.text.line_blocks(lines)
         template = {
             'type': None,
             'date': None,
@@ -154,7 +138,7 @@ class Journal(object):
             firstline = None
             tags = copy.deepcopy(template)
             for line in block:
-                words = line.fulltext.split(None, 1)
+                words = line.split(None, 1)
                 if words[0] == '%default':
                     try:
                         self._parse_line_tagtext(line, words[1])
@@ -171,7 +155,7 @@ class Journal(object):
                     continue
                 if words[0].startswith('%'):
                     continue
-                self._parse_line_tagtext(line, line.fulltext)
+                self._parse_line_tagtext(line, line)
                 if line.tag not in tags:
                     raise ParseException(line, 'invalid tag %r' % line.tag)
                 if not firstline:
