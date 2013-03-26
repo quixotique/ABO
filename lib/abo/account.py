@@ -2,41 +2,7 @@
 #
 # Copyright 2013 Andrew Bettison
 
-"""Account object.
-
->>> c = Chart(r'''
-... expenses
-...   household
-...     utilities
-...       gas
-...       electricity
-...       water
-...     consumibles
-...       food
-...     transport
-...       car
-...       taxi
-... income
-...     salary
-...     rent
-...     prizes
-... ''')
->>> map(unicode, c.accounts()) #doctest: +NORMALIZE_WHITESPACE
-[u':expenses',
- u':expenses:household',
- u':expenses:household:utilities',
- u':expenses:household:utilities:gas',
- u':expenses:household:utilities:electricity',
- u':expenses:household:utilities:water',
- u':expenses:household:consumibles',
- u':expenses:household:consumibles:food',
- u':expenses:household:transport',
- u':expenses:household:transport:car',
- u':expenses:household:transport:taxi',
- u':income',
- u':income:salary',
- u':income:rent',
- u':income:prizes']
+"""Account and Chart objects.
 """
 
 import re
@@ -52,9 +18,39 @@ def parse_account_name(text):
 
 class Account(object):
 
+    r"""Account objects are related hierarchically with any number of root
+    Accounts.
+
+    >>> a = Account('a')
+    >>> b = Account('b', parent=a)
+    >>> c = Account('c', parent=b)
+    >>> d = Account('d', parent=a)
+    >>> e = Account('e')
+    >>> c
+    Account('c', parent=Account('b', parent=Account('a')))
+    >>> unicode(c)
+    u':a:b:c'
+    >>> a in c
+    False
+    >>> c in a
+    True
+    >>> c in e
+    False
+    >>> s = set([a, c, d])
+    >>> a in s
+    True
+    >>> b in s
+    False
+
+    """
+
     def __init__(self, name, parent=None):
+        assert name
+        assert parent is None or isinstance(parent, Account)
         self.name = name
         self.parent = parent
+        self._hash = hash(self.name) ^ hash(self.parent)
+        self._children = dict()
 
     def __unicode__(self):
         return (unicode(self.parent) if self.parent else u'') + u':' + unicode(self.name)
@@ -63,13 +59,68 @@ class Account(object):
         return (str(self.parent) if self.parent else '') + ':' + str(self.name)
 
     def __repr__(self):
-        r = []
-        r.append(('name', self.name))
+        r = [repr(self.name)]
         if self.parent is not None:
-            r.append(('parent', self.parent))
-        return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % i for i in r))
+            r.append('parent=%r' % (self.parent,))
+        return '%s(%s)' % (type(self).__name__, ', '.join(r))
+
+    def __hash__(self):
+        return self._hash
+
+    def __eq__(self, other):
+        if not isinstance(other, Account):
+            return NotImplemented
+        return self.name == other.name and self.parent == other.parent
+
+    def __ne__(self, other):
+        if not isinstance(other, Account):
+            return NotImplemented
+        return not self.__eq__(other)
+
+    def __contains__(self, account):
+        if account in self._children:
+            return self._children[account]
+        return isinstance(account, Account) and (account == self or account.parent in self)
 
 class Chart(object):
+
+    r"""A Chart is a set of accounts.
+
+    >>> c = Chart(r'''
+    ... expenses
+    ...   household
+    ...     utilities
+    ...       gas
+    ...       electricity
+    ...       water
+    ...     consumibles
+    ...       food
+    ...     transport
+    ...       car
+    ...       taxi
+    ... income
+    ...     salary
+    ...     rent
+    ...     prizes
+    ... ''')
+    >>> map(unicode, c.accounts()) #doctest: +NORMALIZE_WHITESPACE
+    [u':expenses',
+    u':expenses:household',
+    u':expenses:household:consumibles',
+    u':expenses:household:consumibles:food',
+    u':expenses:household:transport',
+    u':expenses:household:transport:car',
+    u':expenses:household:transport:taxi',
+    u':expenses:household:utilities',
+    u':expenses:household:utilities:electricity',
+    u':expenses:household:utilities:gas',
+    u':expenses:household:utilities:water',
+    u':income',
+    u':income:prizes',
+    u':income:rent',
+    u':income:salary']
+
+    """
 
     def __init__(self, source_file):
         self.source_file = source_file
@@ -78,10 +129,10 @@ class Chart(object):
     def accounts(self):
         if self._accounts is None:
             self._parse(self.source_file)
-        return self._accounts
+        return sorted(self._accounts.itervalues(), key= lambda a: unicode(a))
 
     def _parse(self, source_file):
-        self._accounts = []
+        self._accounts = {}
         if isinstance(source_file, basestring):
             # To facilitate testing.
             import StringIO
@@ -94,7 +145,7 @@ class Chart(object):
         lines = abo.text.undent_lines(lines)
         stack = []
         for line in lines:
-            if not line:
+            if not line or line.startswith('#'):
                 continue
             words = line.split()
             if not words:
@@ -107,7 +158,10 @@ class Chart(object):
             if line.indent < len(stack):
                 stack = stack[:line.indent]
             account = Account(words[0], stack[-1] if stack else None)
-            self._accounts.append(account)
+            fullname = unicode(account)
+            if fullname in self._accounts:
+                raise abo.text.LineError('duplicate account name', line=line)
+            self._accounts[fullname] = account
             stack.append(account)
 
 def _test():
