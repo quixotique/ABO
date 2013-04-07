@@ -116,13 +116,13 @@ class numbered_line(unicode):
     >>> import pickle
     >>> pickle.dumps(i, 0)
     Traceback (most recent call last):
-    PicklingError: cannot pickle instances of <class 'abo.text.numbered_line'>
+    PicklingError: cannot pickle u'xyz' with type <class 'abo.text.numbered_line'>
     >>> pickle.dumps(i, 1)
     Traceback (most recent call last):
-    PicklingError: cannot pickle instances of <class 'abo.text.numbered_line'>
+    PicklingError: cannot pickle u'xyz' with type <class 'abo.text.numbered_line'>
     >>> pickle.dumps(i, 2)
     Traceback (most recent call last):
-    PicklingError: cannot pickle instances of <class 'abo.text.numbered_line'>
+    PicklingError: cannot pickle u'xyz' with type <class 'abo.text.numbered_line'>
 
     '''
 

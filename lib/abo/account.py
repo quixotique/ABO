@@ -40,6 +40,19 @@ class Account(object):
     True
     >>> b in s
     False
+    >>> a.is_substantial()
+    False
+    >>> c.is_substantial()
+    True
+
+    Account objects can be pickled and unpickled using protocol 2:
+
+    >>> import pickle
+    >>> import abo.account
+    >>> pickle.loads(pickle.dumps(d, 2))
+    Account(label='d', parent=Account(label='a'), atype=AccountType.ProfitLoss)
+    >>> pickle.loads(pickle.dumps(d, 2)) == d
+    True
 
     """
 
@@ -57,6 +70,8 @@ class Account(object):
         self._children = dict()
         self.wildchild = False
         assert self.name or self.label
+        if self.parent:
+            self.parent._children[self] = True
 
     def __unicode__(self):
         return (unicode(self.parent) if self.parent else u'') + u':' + unicode(self.name or self.label)
@@ -93,21 +108,24 @@ class Account(object):
         return not self.__eq__(other)
 
     def __contains__(self, account):
+        if not isinstance(account, Account):
+            return False
         if account not in self._children:
-            self._children[account] = isinstance(account, Account) and (account == self or account.parent in self)
+            self._children[account] = account == self or account.parent in self
         return self._children[account]
 
+    def is_substantial(self):
+        return not filter(bool, self._children.values())
+
     def make_child(self, name=None, label=None, atype=None):
-        child = type(self)(name=name, label=label, atype=atype, parent=self)
-        self._children[child] = True
-        return child
+        return type(self)(name=name, label=label, atype=atype, parent=self)
 
 class Chart(object):
 
     r"""A Chart is a set of accounts.
 
     >>> c1 = Chart.from_file(r'''#ABO-Legacy-Accounts
-    ... "Expenses"
+    ... exp "Expenses"
     ...   "Household"
     ...     "Utilities"
     ...       gas "Gas"
@@ -120,7 +138,7 @@ class Chart(object):
     ...         car "Car rego, insurance, maintenance"
     ...         petrol "Petrol for cars"
     ...       taxi "Taxi journeys"
-    ... "Income"
+    ... inc "Income"
     ...     "Salary"
     ...     rent "Rent"
     ...     prizes "Prizes"
@@ -132,7 +150,7 @@ class Chart(object):
     u':Cash assets' 'cash_assets' AccountType.AssetLiability
     u':Cash assets:Bank account' 'bank' AccountType.AssetLiability
     u':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability
-    u':Expenses' None AccountType.ProfitLoss
+    u':Expenses' 'exp' AccountType.ProfitLoss
     u':Expenses:Household' None AccountType.ProfitLoss
     u':Expenses:Household:Consumibles' None AccountType.ProfitLoss
     u':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss
@@ -145,13 +163,18 @@ class Chart(object):
     u':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss
     u':Expenses:Household:Utilities:Gas' 'gas' AccountType.ProfitLoss
     u':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss
-    u':Income' None AccountType.ProfitLoss
+    u':Income' 'inc' AccountType.ProfitLoss
     u':Income:Prizes' 'prizes' AccountType.ProfitLoss
     u':Income:Rent' 'rent' AccountType.ProfitLoss
     u':Income:Salary' None AccountType.ProfitLoss
 
+    >>> c1.account('food') in c1.account('exp')
+    True
+    >>> c1.account('food') in c1.account('inc')
+    False
+
     >>> c2 = Chart.from_file(r'''
-    ... Expenses =PL
+    ... Expenses =PL [exp]
     ...   Household
     ...     Utilities
     ...       Gas [gas]
@@ -164,7 +187,7 @@ class Chart(object):
     ...         Car rego, [car] insurance, maintenance
     ...         Petrol for cars [petrol]
     ...       Taxi journeys [taxi]
-    ... Income =PL
+    ... Income [inc] =PL
     ...     Salary
     ...     [rent] Rent
     ...     [prizes] Prizes

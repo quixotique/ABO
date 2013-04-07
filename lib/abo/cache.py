@@ -23,12 +23,12 @@ class FileCache(object):
     def get(self, force=False):
         cpath = self.cache_path()
         if force or self.mtime(cpath) < self.mtime(self.path):
-            content = self.contentfunc()
             try:
                 os.makedirs(os.path.dirname(cpath))
             except OSError, e:
                 if e.errno != errno.EEXIST:
                     raise
+            content = self.contentfunc()
             pickle.dump(content, file(cpath, 'w'), 2)
             return content
         return pickle.load(file(cpath))

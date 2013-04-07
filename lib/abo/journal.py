@@ -240,6 +240,8 @@ class Journal(object):
                 entry['account'] = self.chart.account(acc) if self.chart else abo.account.Account(name=acc)
             except (ValueError, KeyError), e:
                 raise ParseException(line, e)
+            if not entry['account'].is_substantial():
+                raise ParseException(line, 'insubstantial account %r' % unicode(entry['account']))
             entries.append(entry)
         if noamt:
             total = sum(entry['amount'] for entry in entries if 'amount' in entry)
@@ -338,6 +340,8 @@ class Journal(object):
         entries = []
         acc = tagline('acc')
         account = self._parse_account_label(acc)
+        if not account.is_substantial():
+            raise ParseException(line, 'insubstantial account %r' % account.label)
         total = 0
         entry_noamt = None
         for line in tagline('item'):
@@ -375,6 +379,8 @@ class Journal(object):
         amount = self._parse_money(tagline('amt'))
         acc = tagline('acc')
         account = self._parse_account_label(acc)
+        if not account.is_substantial():
+            raise ParseException(acc, 'insubstantial account %r' % account.label)
         bank = tagline('bank')
         bank_account = self._parse_account_label(bank)
         entries = []
@@ -432,6 +438,8 @@ class Journal(object):
             entry['account'] = self.chart.account(word) if self.chart else abo.account.Account(label=word)
         except (KeyError, ValueError), e:
             raise ParseException(line, e)
+        if not entry['account'].is_substantial():
+            raise ParseException(line, 'insubstantial account %r' % unicode(entry['account']))
         money = None
         word, detail = self._popword(text)
         if word and self.appears_money(word):
