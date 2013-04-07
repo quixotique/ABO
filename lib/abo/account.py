@@ -53,7 +53,7 @@ class Account(object):
         self.label = label and str(label)
         self.parent = parent
         self.atype = atype
-        self._hash = hash(self.name) ^ hash(self.parent)
+        self._hash = hash(self.label) ^ hash(self.name) ^ hash(self.parent) ^ hash(self.atype)
         self._children = dict()
         assert self.name
 
@@ -79,7 +79,10 @@ class Account(object):
     def __eq__(self, other):
         if not isinstance(other, Account):
             return NotImplemented
-        return self.name == other.name and self.parent == other.parent
+        return (self.name == other.name
+            and self.label == other.label
+            and self.parent == other.parent
+            and self.atype == other.atype)
 
     def __ne__(self, other):
         if not isinstance(other, Account):
@@ -95,7 +98,7 @@ class Chart(object):
 
     r"""A Chart is a set of accounts.
 
-    >>> c = Chart.from_file(r'''
+    >>> c1 = Chart.from_file(r'''#ABO-Legacy-Accounts
     ... "Expenses"
     ...   "Household"
     ...     "Utilities"
@@ -113,25 +116,57 @@ class Chart(object):
     ...     "Salary"
     ...     rent "Rent"
     ...     prizes "Prizes"
+    ... cash_assets asset "Cash assets"
+    ...   bank asset:cash "Bank account"
+    ...   loose_change asset:cash "Loose change"
     ... ''')
-    >>> map(unicode, c.accounts()) #doctest: +NORMALIZE_WHITESPACE
-    [u':Expenses',
-     u':Expenses:Household',
-     u':Expenses:Household:Consumibles',
-     u':Expenses:Household:Consumibles:Food',
-     u':Expenses:Household:Transport',
-     u':Expenses:Household:Transport:Car',
-     u':Expenses:Household:Transport:Car:Car rego, insurance, maintenance',
-     u':Expenses:Household:Transport:Car:Petrol for cars',
-     u':Expenses:Household:Transport:Taxi journeys',
-     u':Expenses:Household:Utilities',
-     u':Expenses:Household:Utilities:Electricity',
-     u':Expenses:Household:Utilities:Gas',
-     u':Expenses:Household:Utilities:Water usage',
-     u':Income',
-     u':Income:Prizes',
-     u':Income:Rent',
-     u':Income:Salary']
+    >>> for a in c1.accounts(): print repr(unicode(a)), repr(a.label), repr(a.atype)
+    u':Cash assets' 'cash_assets' AccountType.AssetLiability
+    u':Cash assets:Bank account' 'bank' AccountType.AssetLiability
+    u':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability
+    u':Expenses' None AccountType.ProfitLoss
+    u':Expenses:Household' None AccountType.ProfitLoss
+    u':Expenses:Household:Consumibles' None AccountType.ProfitLoss
+    u':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss
+    u':Expenses:Household:Transport' None AccountType.ProfitLoss
+    u':Expenses:Household:Transport:Car' None AccountType.ProfitLoss
+    u':Expenses:Household:Transport:Car:Car rego, insurance, maintenance' 'car' AccountType.ProfitLoss
+    u':Expenses:Household:Transport:Car:Petrol for cars' 'petrol' AccountType.ProfitLoss
+    u':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss
+    u':Expenses:Household:Utilities' None AccountType.ProfitLoss
+    u':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss
+    u':Expenses:Household:Utilities:Gas' 'gas' AccountType.ProfitLoss
+    u':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss
+    u':Income' None AccountType.ProfitLoss
+    u':Income:Prizes' 'prizes' AccountType.ProfitLoss
+    u':Income:Rent' 'rent' AccountType.ProfitLoss
+    u':Income:Salary' None AccountType.ProfitLoss
+
+    >>> c2 = Chart.from_file(r'''
+    ... Expenses =PL
+    ...   Household
+    ...     Utilities
+    ...       Gas [gas]
+    ...       Electricity [elec]
+    ...       [water] Water usage
+    ...     Consumibles
+    ...       Food [food]
+    ...     Transport
+    ...       Car
+    ...         Car rego, [car] insurance, maintenance
+    ...         Petrol for cars [petrol]
+    ...       Taxi journeys [taxi]
+    ... Income =PL
+    ...     Salary
+    ...     [rent] Rent
+    ...     [prizes] Prizes
+    ... =AL Cash assets [cash_assets]
+    ...   [bank] Bank account
+    ...   [loose_change] Loose change
+    ... ''')
+
+    >>> c1.accounts() == c2.accounts()
+    True
 
     """
 
@@ -167,8 +202,9 @@ class Chart(object):
     def accounts(self):
         return sorted(self._accounts, key= lambda a: unicode(a))
 
-    _regex_line = re.compile('^(?P<label>' + Account._rxpat_label + ')?\s*(?P<type>\w+)?(?::(?P<qual>\w+))?\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
-
+    _regex_legacy_line = re.compile(r'^(?P<label>' + Account._rxpat_label + r')?\s*(?P<type>\w+)?(?::(?P<qual>\w+))?\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
+    _regex_label = re.compile(r'\[(' + Account._rxpat_label + r')]')
+    _regex_type = re.compile(r'=(\w+)')
     def _parse(self, source_file):
         self._accounts = set()
         self._labels = {}
@@ -179,24 +215,45 @@ class Chart(object):
             source_file.name = 'StringIO'
         name = getattr(source_file, 'name', str(source_file))
         lines = [line.rstrip('\n') for line in source_file]
-        lines = abo.text.decode_lines(lines)
+        lines = list(abo.text.decode_lines(lines))
+        is_legacy = '#ABO-Legacy-Accounts' in lines[:5]
         lines = abo.text.number_lines(lines, name=source_file.name)
         lines = abo.text.undent_lines(lines)
         stack = []
         for line in lines:
             if not line or line.startswith('#'):
                 continue
-            m = self._regex_line.match(line)
-            if not m:
-                raise abo.text.LineError('malformed line', line=line)
-            label = m.group('label')
-            actype = m.group('type')
-            qual = m.group('qual')
-            if actype and (actype.startswith('ass') or actype.startswith('lia') or actype.startswith('pay') or actype.startswith('rec')):
-                atype = AccountType.Equity if qual == 'equity' else AccountType.AssetLiability
+            if is_legacy:
+                m = self._regex_legacy_line.match(line)
+                if not m:
+                    raise abo.text.LineError('malformed line', line=line)
+                label = m.group('label')
+                actype = m.group('type')
+                qual = m.group('qual')
+                if actype and (actype.startswith('ass') or actype.startswith('lia') or actype.startswith('pay') or actype.startswith('rec')):
+                    atype = AccountType.Equity if qual == 'equity' else AccountType.AssetLiability
+                else:
+                    atype = AccountType.ProfitLoss
+                name = m.group('name1') or m.group('name2')
             else:
-                atype = AccountType.ProfitLoss
-            name = m.group('name1') or m.group('name2')
+                label = None
+                atype = None
+                m = self._regex_label.search(line)
+                if m:
+                    label = str(m.group(1))
+                    line = line[:m.start(0)] + line[m.end(0):]
+                m = self._regex_type.search(line)
+                if m:
+                    try:
+                        atype = {'AL': AccountType.AssetLiability,
+                                 'PL': AccountType.ProfitLoss,
+                                 'EQ': AccountType.Equity}[m.group(1)]
+                    except KeyError:
+                        raise abo.text.LineError('invalid account type %r' % (m.group(1),), line=line)
+                    line = line[:m.start(0)] + line[m.end(0):]
+                elif stack:
+                    atype = stack[-1].atype
+                name = ' '.join(line.split())
             assert line.indent <= len(stack)
             if line.indent < len(stack):
                 stack = stack[:line.indent]

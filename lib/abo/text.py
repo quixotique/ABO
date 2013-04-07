@@ -84,6 +84,22 @@ class numbered_line(unicode):
     42
     >>> i.rstrip().name
     'wah'
+    >>> i[1]
+    u'b'
+    >>> i[1].name
+    'wah'
+    >>> i[2:]
+    u'c '
+    >>> i[2:].name
+    'wah'
+    >>> i + u'def'
+    u'abc def'
+    >>> (i + u'def').name
+    'wah'
+    >>> u'xxx' + i
+    u'xxxabc '
+    >>> (u'xxx' + i).name
+    'wah'
     '''
 
     def __new__(cls, arg=''):
@@ -107,6 +123,18 @@ class numbered_line(unicode):
 
     def lstrip(self, chars=None):
         return self.__wrap(super(numbered_line, self).lstrip(chars))
+
+    def __getitem__(self, key):
+        return self.__wrap(super(numbered_line, self).__getitem__(key))
+
+    def __getslice__(self, i, j):
+        return self.__wrap(super(numbered_line, self).__getslice__(i, j))
+
+    def __add__(self, other):
+        return self.__wrap(super(numbered_line, self).__add__(other))
+        
+    def __radd__(self, other):
+        return self.__wrap(other.__add__(self))
 
 class LineError(ValueError):
 
