@@ -73,6 +73,7 @@ class numbered_line(unicode):
 
     r'''Sub-class of unicode which carries extra attributes such as
     'line_number' and 'name', which it preserves where needed.
+
     >>> i = numbered_line(u'abc ')
     >>> i.line_number = 42
     >>> i.name = 'wah'
@@ -100,6 +101,22 @@ class numbered_line(unicode):
     u'xxxabc '
     >>> (u'xxx' + i).name
     'wah'
+
+    Cannot pickle instances of numbered_line:
+
+    >>> import abo.text
+    >>> i = abo.text.numbered_line(u'xyz')
+    >>> import pickle
+    >>> pickle.dumps(i, 0)
+    Traceback (most recent call last):
+    PicklingError: cannot pickle instances of <class 'abo.text.numbered_line'>
+    >>> pickle.dumps(i, 1)
+    Traceback (most recent call last):
+    PicklingError: cannot pickle instances of <class 'abo.text.numbered_line'>
+    >>> pickle.dumps(i, 2)
+    Traceback (most recent call last):
+    PicklingError: cannot pickle instances of <class 'abo.text.numbered_line'>
+
     '''
 
     def __new__(cls, arg=''):
@@ -109,6 +126,14 @@ class numbered_line(unicode):
         if isinstance(arg, cls):
             self.__dict__.update(arg.__dict__)
         return self
+
+    def __getstate__(self):
+        import pickle
+        raise pickle.PicklingError('cannot pickle instances of %r' % type(self))
+
+    def __getnewargs__(self):
+        import pickle
+        raise pickle.PicklingError('cannot pickle instances of %r' % type(self))
 
     def __wrap(self, value):
         obj = type(self)(value)

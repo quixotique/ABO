@@ -20,6 +20,17 @@ class Currencies(object):
 
 class Currency(object):
 
+    r"""
+    Currency objects can be pickled and unpickled using protocol 2:
+
+        >>> import pickle
+        >>> import abo.money
+        >>> pickle.loads(pickle.dumps(Currencies.AUD, 2))
+        Currencies.AUD
+        >>> pickle.loads(pickle.dumps(Currencies.AUD, 2)) is Currencies.AUD
+        True
+    """
+
     _registry = Currencies
 
     def __new__(cls, code, local_frac_digits=0, local_symbol=None, local_symbol_precedes=False, local_symbol_separated_by_space=False):
@@ -50,6 +61,24 @@ class Currency(object):
                 traps= (decimal.DivisionByZero, decimal.InvalidOperation, decimal.Inexact))
         self.zero = decimal.Decimal(10, context=self.decimal_context) ** -self.local_frac_digits
         return self
+
+    def __getnewargs__(self):
+        r'''Pickle protocol 2 support.  Return a tuple of args that will be
+        passed to __new__() when unpickled.
+        '''
+        return self.code, self.local_frac_digits, self.local_symbol, self.local_symbol_precedes, self.local_symbol_separated_by_space
+
+    def __setstate__(self, state):
+        r'''Catch an unpickling by a protocol that does not support
+        __getnewargs__()/__new__().  If it does, then __new__() has already
+        been called, so we check that it has produced the correct result.
+        '''
+        try:
+            assert self.code == state['code']
+        except (AttributeError, AssertionError):
+            raise pickle.UnpicklingError(
+                    '%s.enum does not support this protocol' % enum.__module__)
+        assert self is Currencies.__dict__.get(self.code)
 
     def register(self, registry=None):
         r'''Register this Currency object in the registry, to make it available globally.
