@@ -3,6 +3,7 @@
 # Copyright 2013 Andrew Bettison
 
 '''Usage:
+    pyabo chart [-f] [AL|PL|EQ]
     pyabo acc [-fw] <account> [<period>...]
     pyabo journal [-fw] [<period>...]
     pyabo -h | --help
@@ -46,25 +47,40 @@ def main():
         func = cmd_acc
     elif opts['journal']:
         func = cmd_journal
+    elif opts['chart']:
+        func = cmd_chart
     else:
         assert False, 'unknown command'
     config = abo.config.config()
-    transactions = []
+    config.read_from('.pyabo')
+    try:
+        for line in func(config, opts):
+            print line.encode(output_encoding)
+    except InvalidArg, e:
+        print unicode(e).encode(output_encoding)
+        sys.exit(1)
+    sys.exit(0)
+
+def get_chart(config, opts):
+    return abo.cache.FileCache(config.chart_file_path, lambda: abo.account.Chart.from_file(file(config.chart_file_path))).get(force=opts['--force'])
+
+def get_transactions(config, opts):
+    chart = get_chart(config, opts)
     caches = []
     for path in config.input_file_paths:
-        caches.append(abo.cache.TransactionCache(path, abo.journal.Journal(file(path))))
+        caches.append(abo.cache.TransactionCache(path, abo.journal.Journal(file(path), chart=chart)))
+    transactions = []
     for cache in caches:
         transactions += cache.transactions(force=opts['--force'])
     transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
-    for line in func(transactions, opts):
-        print line.encode(output_encoding)
+    return transactions
 
-def cmd_journal(transactions, opts):
-    range, bf, transactions = filter_period(transactions, opts)
-    width = max(50, abo.config.output_width())
+def cmd_journal(config, opts):
+    range, bf, transactions = filter_period(get_transactions(config, opts), opts)
+    width = max(50, config.output_width())
     aw = 15
     dw = 11
-    bw = abo.config.balance_column_width()
+    bw = config.balance_column_width()
     pw = max(1, width - dw - 2 - 1 - aw - 1 - bw - 1 - 2)
     fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-{aw}.{aw}s'.format(**locals())
     yield 'JOURNAL OF TRANSACTIONS'.center(width)
@@ -73,7 +89,7 @@ def cmd_journal(transactions, opts):
     yield fmt % ('Date', 'Particulars', 'Amount', 'DC', 'Account')
     yield fmt % ('-' * dw, '-' * pw, '-' * bw, '--', '-' * aw)
     def entry_fields(e):
-        return (abo.config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), e.account)
+        return (config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), e.account.label)
     if bf:
         for e in bf.entries():
             yield fmt % (('',
@@ -90,13 +106,29 @@ def cmd_journal(transactions, opts):
                 yield fmt % ('', desc.pop(0), '', '', '')
     yield fmt % ('-' * dw, '-' * pw, '-' * bw, '--', '-' * aw)
 
-def cmd_acc(transactions, opts):
+def cmd_chart(config, opts):
+    typesel = (opts['AL'] or '').upper()
+    if typesel == 'AL':
+        pred = lambda a: a.atype == abo.account.AccountType.AssetLiability
+    elif typesel == 'PL':
+        pred = lambda a: a.atype == abo.account.AccountType.ProfitLoss
+    elif typesel == 'EQ':
+        pred = lambda a: a.atype == abo.account.AccountType.Equity
+    elif typesel == '':
+        pred = lambda a: True
+    else:
+        raise InvalidArg('invalid argument: %r' % (opts['AL'],))
+    for account in get_chart(config, opts).accounts():
+        if pred(account):
+            yield unicode(account)
+
+def cmd_acc(config, opts):
     account = opts['<account>']
-    range, bf, transactions = filter_period(transactions, opts)
-    width = max(50, abo.config.output_width())
+    range, bf, transactions = filter_period(get_transactions(config, opts), opts)
+    width = max(50, config.output_width())
     dw = 11
-    mw = abo.config.money_column_width()
-    bw = abo.config.balance_column_width()
+    mw = config.money_column_width()
+    bw = config.balance_column_width()
     pw = max(1, width - dw - 2 - 2 * (mw + 1) - 1 - bw)
     fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
     yield 'STATEMENT OF ACCOUNT'.center(width)
@@ -109,15 +141,15 @@ def cmd_acc(transactions, opts):
     totcr = 0
     if bf:
         for e in bf.entries():
-            if e.account == account:
+            if e.account.label == account:
                 balance += e.amount
                 yield fmt % ('', 'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),
-                        abo.config.format_money(-e.amount) if e.amount < 0 else '',
-                        abo.config.format_money(e.amount) if e.amount > 0 else '',
-                        abo.config.format_money(balance))
+                        config.format_money(-e.amount) if e.amount < 0 else '',
+                        config.format_money(e.amount) if e.amount > 0 else '',
+                        config.format_money(balance))
     for t in transactions:
         for e in t.entries:
-            if e.account == account:
+            if e.account.label == account:
                 balance += e.amount
                 if e.amount < 0:
                     totdb += e.amount
@@ -126,18 +158,18 @@ def cmd_acc(transactions, opts):
                 desc = textwrap.wrap(e.description(), width=pw)
                 yield fmt % (e.transaction.date.strftime(ur'%_d-%b-%Y'),
                         desc.pop(0),
-                        abo.config.format_money(-e.amount) if e.amount < 0 else '',
-                        abo.config.format_money(e.amount) if e.amount > 0 else '',
-                        abo.config.format_money(balance))
+                        config.format_money(-e.amount) if e.amount < 0 else '',
+                        config.format_money(e.amount) if e.amount > 0 else '',
+                        config.format_money(balance))
                 if opts['--wrap']:
                     while desc:
                         yield fmt % ('', desc.pop(0), '', '', '')
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
     yield fmt % ('', 'Totals for period',
-            abo.config.format_money(-totdb),
-            abo.config.format_money(totcr),
+            config.format_money(-totdb),
+            config.format_money(totcr),
             '')
-    yield fmt % ('', 'Balance', '', '', abo.config.format_money(balance))
+    yield fmt % ('', 'Balance', '', '', config.format_money(balance))
 
 def parse_range(words):
     periods = abo.period.parse_periods(words)
@@ -165,6 +197,9 @@ def range_line(range):
         p.append('TO')
         p.append(range.end.strftime(ur'%_d-%b-%Y'))
     return ' '.join(p) if p else 'ALL'
+
+class InvalidArg(ValueError):
+    pass
 
 if __name__ == '__main__':
     main()

@@ -10,37 +10,47 @@ import os.path
 import sys
 import abo.money
 
-currency = abo.money.Currencies.AUD
-
-def parse_money(text):
-    return currency.parse_amount_money(text)
-
-def money(amount):
-    return currency.money(amount)
-
-def format_money(amount):
-    if not isinstance(amount, abo.money.Money):
-        amount = money(amount)
-    return amount.format(symbol=False, thousands=True)
-
-def money_column_width():
-    return len(format_money(money(1000000)))
-
-def balance_column_width():
-    return money_column_width() + 1
-
 class Config(object):
 
-    def __init__(self, path):
-        cwd = os.getcwd()
-        self.input_file_paths = [os.path.join(cwd, line.rstrip('\n')) for line in open(path, 'rU')]
+    def __init__(self):
+        self.input_file_paths = []
+        self.chart_file_path = None
+
+    def read_from(self, path):
+        basedir = os.path.dirname(path)
+        self.input_file_paths = [os.path.join(basedir, line.rstrip('\n')) for line in open(path, 'rU')]
+        self.chart_file_path = os.path.join(basedir, 'accounts')
+
+    currency = abo.money.Currencies.AUD
+
+    def parse_money(self, text):
+        return self.currency.parse_amount_money(text)
+
+    def money(self, amount):
+        return self.currency.money(amount)
+
+    def format_money(self, amount):
+        if not isinstance(amount, abo.money.Money):
+            amount = self.money(amount)
+        return amount.format(symbol=False, thousands=True)
+
+    def money_column_width(self):
+        return len(self.format_money(self.money(1000000)))
+
+    def balance_column_width(self):
+        return self.money_column_width() + 1
+
+    def output_width(self):
+        return int(os.environ.get('COLUMNS', 80))
+
+    def cache_dir_path(self):
+        return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo')
+
+_config = None
 
 def config():
-    return Config('.pyabo')
-
-def output_width():
-    return int(os.environ.get('COLUMNS', 80))
-
-def cache_dir_path():
-    return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo')
+    global _config
+    if _config is None:
+        _config = Config()
+    return _config
 

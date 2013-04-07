@@ -45,25 +45,25 @@
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 3, 16),
     who=u'Somebody', what=u'something',
-    entries=(Entry(account=u'account1', amount=Money(-21.90, Currencies.AUD), detail=u'a debit'),
-             Entry(account=u'account2', amount=Money(-0.10, Currencies.AUD), detail=u'another debit'),
-             Entry(account=u'account3', amount=Money(22.00, Currencies.AUD), detail=u'a credit'))),
+    entries=(Entry(account=Account(label='account1'), amount=Money(-21.90, Currencies.AUD), detail=u'a debit'),
+             Entry(account=Account(label='account2'), amount=Money(-0.10, Currencies.AUD), detail=u'another debit'),
+             Entry(account=Account(label='account3'), amount=Money(22.00, Currencies.AUD), detail=u'a credit'))),
  Transaction(date=datetime.date(2013, 3, 17),
     who=u'Some body', what=u'Invoice text',
-    entries=(Entry(account=u'account1', amount=Money(-100.00, Currencies.AUD)),
-             Entry(account=u'income', amount=Money(100.00, Currencies.AUD), detail=u'at last'))),
+    entries=(Entry(account=Account(label='account1'), amount=Money(-100.00, Currencies.AUD)),
+             Entry(account=Account(label='income'), amount=Money(100.00, Currencies.AUD), detail=u'at last'))),
  Transaction(date=datetime.date(2013, 3, 18),
     who=u'Another body',
-    entries=(Entry(account=u'expense', amount=Money(-81.18, Currencies.AUD)),
-             Entry(account=u'account2', amount=Money(81.18, Currencies.AUD)))),
+    entries=(Entry(account=Account(label='expense'), amount=Money(-81.18, Currencies.AUD)),
+             Entry(account=Account(label='account2'), amount=Money(81.18, Currencies.AUD)))),
  Transaction(date=datetime.date(2013, 4, 17),
     who=u'Some body', what=u'Receipt text',
-    entries=(Entry(account=u'cash', amount=Money(-55.65, Currencies.AUD)),
-             Entry(account=u'account1', amount=Money(55.65, Currencies.AUD)))),
+    entries=(Entry(account=Account(label='cash'), amount=Money(-55.65, Currencies.AUD)),
+             Entry(account=Account(label='account1'), amount=Money(55.65, Currencies.AUD)))),
  Transaction(date=datetime.date(2013, 4, 18),
     who=u'Some body', what=u'Remittance text',
-    entries=(Entry(account=u'account2', amount=Money(-81.11, Currencies.AUD)),
-             Entry(account=u'cash', amount=Money(81.11, Currencies.AUD))))]
+    entries=(Entry(account=Account(label='account2'), amount=Money(-81.11, Currencies.AUD)),
+             Entry(account=Account(label='cash'), amount=Money(81.11, Currencies.AUD))))]
 
 """
 
@@ -80,7 +80,8 @@ from abo.types import struct
 
 class Journal(object):
 
-    def __init__(self, source_file):
+    def __init__(self, source_file, chart=None):
+        self.chart = chart
         self.source_file = source_file
         self._transactions = None
 
@@ -255,7 +256,7 @@ class Journal(object):
             raise ParseException(amt, 'zero amount not allowed: %s' % amount)
         entries = []
         acc = tagline('acc')
-        account = self._parse_account_name(acc)
+        account = self._parse_account_label(acc)
         total = 0
         entry_noamt = None
         for line in tagline('item'):
@@ -292,9 +293,9 @@ class Journal(object):
     def _parse_remittance_receipt(self, firstline, kwargs, tagline, sign):
         amount = self._parse_money(tagline('amt'))
         acc = tagline('acc')
-        account = self._parse_account_name(acc)
+        account = self._parse_account_label(acc)
         bank = tagline('bank')
-        bank_account = self._parse_account_name(bank)
+        bank_account = self._parse_account_label(bank)
         entries = []
         entries.append({'line': acc, 'account': account, 'amount': amount * sign})
         entries.append({'line': bank, 'account': bank_account, 'amount': amount * -sign})
@@ -317,34 +318,32 @@ class Journal(object):
                 return relative_to + datetime.timedelta(int(line.text))
             raise ParseException(line, 'invalid date %r' % line.text)
 
-    @classmethod
-    def _parse_account_name(cls, line):
+    def _parse_account_label(self, line):
         try:
-            return abo.account.parse_account_name(line.text)
-        except ValueError, e:
+            return self.chart.account(line.text) if self.chart else abo.account.Account(label=line.text)
+        except (ValueError, KeyError), e:
             raise ParseException(line, e)
 
     @classmethod
     def _parse_money(cls, line):
         try:
-            return abo.config.parse_money(line.text)
+            return abo.config.config().parse_money(line.text)
         except ValueError:
             raise ParseException(line, 'invalid amount %r' % line.text)
 
-    @classmethod
-    def _parse_dbcr(cls, line):
+    def _parse_dbcr(self, line):
         entry = {'line': line}
-        word, text = cls._popword(line.text)
+        word, text = self._popword(line.text)
         #print 'line=%r word=%r text=%r' % (line, word, text)
         try:
-            entry['account'] = abo.account.parse_account_name(word)
-        except ValueError:
+            entry['account'] = self.chart.account(word) if self.chart else abo.account.Account(label=word)
+        except (KeyError, ValueError), e:
             raise ParseException(line, e)
         money = None
-        word, detail = cls._popword(text)
-        if word and cls.appears_money(word):
+        word, detail = self._popword(text)
+        if word and self.appears_money(word):
             try:
-                money = abo.config.parse_money(word)
+                money = abo.config.config().parse_money(word)
             except ValueError:
                 raise ParseException(line, 'invalid amount %r' % word)
         else:
@@ -391,8 +390,8 @@ __test__ = {
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who=u'Somebody', what=u'something',
-    entries=(Entry(account=u'food', amount=Money(-10.00, Currencies.AUD)),
-             Entry(account=u'bank', amount=Money(10.00, Currencies.AUD))))]
+    entries=(Entry(account=Account(label='food'), amount=Money(-10.00, Currencies.AUD)),
+             Entry(account=Account(label='bank'), amount=Money(10.00, Currencies.AUD))))]
 
 >>> Journal(r'''
 ... type transaction
@@ -405,9 +404,9 @@ __test__ = {
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 22),
     who=u'Somebody Else', what=u'another thing',
-    entries=(Entry(account=u'food', amount=Money(-7.00, Currencies.AUD)),
-             Entry(account=u'drink', amount=Money(-3.00, Currencies.AUD), detail=u'beer'),
-             Entry(account=u'bank', amount=Money(10.00, Currencies.AUD))))]
+    entries=(Entry(account=Account(label='food'), amount=Money(-7.00, Currencies.AUD)),
+             Entry(account=Account(label='drink'), amount=Money(-3.00, Currencies.AUD), detail=u'beer'),
+             Entry(account=Account(label='bank'), amount=Money(10.00, Currencies.AUD))))]
 
 >>> Journal(r'''
 ... type transaction
@@ -422,10 +421,10 @@ __test__ = {
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 23),
     who=u'Whoever', what=u'whatever',
-    entries=(Entry(account=u'food', amount=Money(-7.00, Currencies.AUD)),
-             Entry(account=u'drink', amount=Money(-3.00, Currencies.AUD), detail=u'beer'),
-             Entry(account=u'cash', amount=Money(2.00, Currencies.AUD)),
-             Entry(account=u'bank', amount=Money(8.00, Currencies.AUD))))]
+    entries=(Entry(account=Account(label='food'), amount=Money(-7.00, Currencies.AUD)),
+             Entry(account=Account(label='drink'), amount=Money(-3.00, Currencies.AUD), detail=u'beer'),
+             Entry(account=Account(label='cash'), amount=Money(2.00, Currencies.AUD)),
+             Entry(account=Account(label='bank'), amount=Money(8.00, Currencies.AUD))))]
 
 >>> Journal(r'''
 ... %default type transaction
@@ -441,9 +440,9 @@ __test__ = {
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 23),
     who=u'Whoever', what=u'whatever',
-    entries=(Entry(account=u'food', amount=Money(-7.00, Currencies.AUD)),
-             Entry(account=u'drink', amount=Money(-3.00, Currencies.AUD), detail=u'beer'),
-             Entry(account=u'cash', amount=Money(10.00, Currencies.AUD))))]
+    entries=(Entry(account=Account(label='food'), amount=Money(-7.00, Currencies.AUD)),
+             Entry(account=Account(label='drink'), amount=Money(-3.00, Currencies.AUD), detail=u'beer'),
+             Entry(account=Account(label='cash'), amount=Money(10.00, Currencies.AUD))))]
 
 >>> Journal(r'''
 ... date 23/2/2013
@@ -494,8 +493,8 @@ ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who=u'Somebody', what=u'something',
-    entries=(Entry(account=u'food', amount=Money(-10.00, Currencies.AUD)),
-             Entry(account=u'bank', amount=Money(10.00, Currencies.AUD))))]
+    entries=(Entry(account=Account(label='food'), amount=Money(-10.00, Currencies.AUD)),
+             Entry(account=Account(label='bank'), amount=Money(10.00, Currencies.AUD))))]
 
 """,
 'invoice':r"""
@@ -512,8 +511,8 @@ ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who=u'Somebody', what=u'something',
-    entries=(Entry(account=u'body', amount=Money(-100.00, Currencies.AUD), cdate=datetime.date(2013, 3, 21)),
-             Entry(account=u'thing', amount=Money(100.00, Currencies.AUD), detail=u'comment')))]
+    entries=(Entry(account=Account(label='body'), amount=Money(-100.00, Currencies.AUD), cdate=datetime.date(2013, 3, 21)),
+             Entry(account=Account(label='thing'), amount=Money(100.00, Currencies.AUD), detail=u'comment')))]
 
 """,
 'bill':r"""
@@ -531,9 +530,9 @@ ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 1),
     who=u'Somebody', what=u'something',
-    entries=(Entry(account=u'thing', amount=Money(-1.00, Currencies.AUD), detail=u'comment'),
-             Entry(account=u'round', amount=Money(-0.01, Currencies.AUD), detail=u'oops'),
-             Entry(account=u'body', amount=Money(1.01, Currencies.AUD), cdate=datetime.date(2013, 2, 15))))]
+    entries=(Entry(account=Account(label='thing'), amount=Money(-1.00, Currencies.AUD), detail=u'comment'),
+             Entry(account=Account(label='round'), amount=Money(-0.01, Currencies.AUD), detail=u'oops'),
+             Entry(account=Account(label='body'), amount=Money(1.01, Currencies.AUD), cdate=datetime.date(2013, 2, 15))))]
 
 """,
 'remittance':r"""
@@ -549,8 +548,8 @@ ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who=u'Somebody', what=u'something',
-    entries=(Entry(account=u'body', amount=Money(-1.01, Currencies.AUD)),
-             Entry(account=u'cash', amount=Money(1.01, Currencies.AUD))))]
+    entries=(Entry(account=Account(label='body'), amount=Money(-1.01, Currencies.AUD)),
+             Entry(account=Account(label='cash'), amount=Money(1.01, Currencies.AUD))))]
 
 """,
 'receipt':r"""
@@ -566,8 +565,8 @@ ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who=u'Somebody', what=u'something',
-    entries=(Entry(account=u'cash', amount=Money(-55.65, Currencies.AUD)),
-             Entry(account=u'body', amount=Money(55.65, Currencies.AUD))))]
+    entries=(Entry(account=Account(label='cash'), amount=Money(-55.65, Currencies.AUD)),
+             Entry(account=Account(label='body'), amount=Money(55.65, Currencies.AUD))))]
 
 """,
 'filter':r"""
@@ -585,8 +584,8 @@ ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who=u'any body', what=u'any thing',
-    entries=(Entry(account=u'cash', amount=Money(-55.65, Currencies.AUD)),
-             Entry(account=u'body', amount=Money(55.65, Currencies.AUD))))]
+    entries=(Entry(account=Account(label='cash'), amount=Money(-55.65, Currencies.AUD)),
+             Entry(account=Account(label='body'), amount=Money(55.65, Currencies.AUD))))]
 
 """,
 }

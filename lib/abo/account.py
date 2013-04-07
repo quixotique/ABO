@@ -8,12 +8,7 @@
 import re
 import abo.text
 from abo.enum import enum
-
-def parse_account_label(text):
-    m = Account._regex_label.match(text)
-    if m:
-        return m.group(0)
-    raise ValueError('invalid account label: %r' % (text,))
+import abo.cache
 
 class AccountType(enum('AssetLiability', 'ProfitLoss', 'Equity')):
     pass
@@ -55,7 +50,7 @@ class Account(object):
         assert parent is None or isinstance(parent, Account)
         assert name or label
         self.name = name or label
-        self.label = label
+        self.label = label and str(label)
         self.parent = parent
         self.atype = atype
         self._hash = hash(self.name) ^ hash(self.parent)
@@ -100,7 +95,7 @@ class Chart(object):
 
     r"""A Chart is a set of accounts.
 
-    >>> c = Chart(r'''
+    >>> c = Chart.from_file(r'''
     ... "Expenses"
     ...   "Household"
     ...     "Utilities"
@@ -140,17 +135,39 @@ class Chart(object):
 
     """
 
-    def __init__(self, source_file):
-        self.source_file = source_file
+    def __init__(self):
         self._accounts = None
         self._labels = None
 
+    @classmethod
+    def from_file(cls, source_file):
+        self = cls()
+        self._parse(source_file)
+        return self
+
+    @classmethod
+    def from_accounts(cls, accounts):
+        accounts = list(accounts)
+        labels = dict()
+        for account in accounts:
+            if account.label:
+                if account.label in labels:
+                    raise ValueError('duplicate account label %r' % (account.label,))
+                labels[account.label] = account
+        self = cls()
+        self._accounts = accounts
+        self._labels = labels
+        return self
+
+    def account(self, label):
+        if label in self._labels:
+            return self._labels[label]
+        raise KeyError('invalid account label: %r' % (label,))
+
     def accounts(self):
-        if self._accounts is None:
-            self._parse(self.source_file)
         return sorted(self._accounts, key= lambda a: unicode(a))
 
-    _regex_line = re.compile('^(' + Account._rxpat_label + ')?\s*(?:"([^"]+)"|“([^”]+)”)$')
+    _regex_line = re.compile('^(?P<label>' + Account._rxpat_label + ')?\s*(?P<type>\w+)?(?::(?P<qual>\w+))?\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
 
     def _parse(self, source_file):
         self._accounts = set()
@@ -172,12 +189,18 @@ class Chart(object):
             m = self._regex_line.match(line)
             if not m:
                 raise abo.text.LineError('malformed line', line=line)
-            label = m.group(1)
-            name = m.group(2)
+            label = m.group('label')
+            actype = m.group('type')
+            qual = m.group('qual')
+            if actype and (actype.startswith('ass') or actype.startswith('lia') or actype.startswith('pay') or actype.startswith('rec')):
+                atype = AccountType.Equity if qual == 'equity' else AccountType.AssetLiability
+            else:
+                atype = AccountType.ProfitLoss
+            name = m.group('name1') or m.group('name2')
             assert line.indent <= len(stack)
             if line.indent < len(stack):
                 stack = stack[:line.indent]
-            account = Account(name=name, label=label, parent= stack[-1] if stack else None)
+            account = Account(name=name, label=label, parent= (stack[-1] if stack else None), atype=atype)
             if account in self._accounts:
                 raise abo.text.LineError('duplicate account %r' % unicode(account), line=line)
             self._accounts.add(account)
@@ -186,6 +209,14 @@ class Chart(object):
                     raise abo.text.LineError('duplicate account label %r' % (account.label,), line=line)
                 self._labels[account.label] = account
             stack.append(account)
+
+class ChartCache(abo.cache.FileCache):
+
+    def __init__(self, path, chart):
+        super(ChartCache, self).__init__(path, lambda: chart.accounts())
+
+    def chart(self, **kwargs):
+        accounts = self.get(**kwargs)
 
 def _test():
     import doctest

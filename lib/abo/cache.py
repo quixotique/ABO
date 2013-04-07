@@ -11,26 +11,26 @@ import errno
 import cPickle as pickle
 import abo.config
 
-class TransactionCache(object):
+class FileCache(object):
 
-    def __init__(self, path, transaction_source):
+    def __init__(self, path, contentfunc):
         self.path = path
-        self.transaction_source = transaction_source
+        self.contentfunc = contentfunc
 
     def cache_path(self):
-        return os.path.join(abo.config.cache_dir_path(), os.path.abspath(self.path).replace('/', '%%'))
+        return os.path.join(abo.config.config().cache_dir_path(), os.path.abspath(self.path).replace('/', '%%'))
 
-    def transactions(self, force=False):
+    def get(self, force=False):
         cpath = self.cache_path()
         if force or self.mtime(cpath) < self.mtime(self.path):
-            transactions = self.transaction_source.transactions()
+            content = self.contentfunc()
             try:
                 os.makedirs(os.path.dirname(cpath))
             except OSError, e:
                 if e.errno != errno.EEXIST:
                     raise
-            pickle.dump(transactions, file(cpath, 'w'))
-            return transactions
+            pickle.dump(content, file(cpath, 'w'), 2)
+            return content
         return pickle.load(file(cpath))
 
     @staticmethod
@@ -41,3 +41,11 @@ class TransactionCache(object):
             if e.errno != errno.ENOENT:
                 raise
             return -1
+
+class TransactionCache(FileCache):
+
+    def __init__(self, path, transaction_source):
+        super(TransactionCache, self).__init__(path, lambda: transaction_source.transactions())
+
+    def transactions(self, **kwargs):
+        return self.get(**kwargs)

@@ -20,7 +20,7 @@ sub init
 {
 	my $self = shift;
 	local $_ = shift;
-	if (/^(\w+)(\s+(\S.*))?$/o)
+	if (/^\s*(\w+)(\s+(\S.*))?$/o)
 	{
 		$self->{'name'} = $1;
 		$self->{'details'} = $3;
