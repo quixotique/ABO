@@ -42,6 +42,12 @@
 ... what Remittance text
 ... acc account2
 ... amt 81.11
+...
+... 7/5/2013 Modern text
+...  account1  45.06
+...  account2  -60.00
+...  account3
+...
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 3, 16),
     who=u'Somebody', what=u'something',
@@ -63,7 +69,12 @@
  Transaction(date=datetime.date(2013, 4, 18),
     who=u'Some body', what=u'Remittance text',
     entries=(Entry(account=Account(label='account2'), amount=Money(-81.11, Currencies.AUD)),
-             Entry(account=Account(label='cash'), amount=Money(81.11, Currencies.AUD))))]
+             Entry(account=Account(label='cash'), amount=Money(81.11, Currencies.AUD)))),
+ Transaction(date=datetime.date(2013, 5, 7),
+    what=u'Modern text',
+    entries=(Entry(account=Account(name=u'account2'), amount=Money(-60.00, Currencies.AUD)),
+             Entry(account=Account(name=u'account3'), amount=Money(14.94, Currencies.AUD)),
+             Entry(account=Account(name=u'account1'), amount=Money(45.06, Currencies.AUD))))]
 
 """
 
@@ -135,8 +146,12 @@ class Journal(object):
             'amt': None,
         }
         defaults = copy.deepcopy(template)
+        self._period = None
         for block in blocks:
             firstline = None
+            ledger_date = None
+            ledger_what = None
+            ledger_lines = []
             tags = copy.deepcopy(template)
             for line in block:
                 words = line.split(None, 1)
@@ -154,51 +169,117 @@ class Journal(object):
                     else:
                         defaults[line.tag] = line
                     continue
+                if words[0] == '%period':
+                    self._period = None
+                    try:
+                        start, end = map(self._parse_date, words[1].split(None, 1))
+                    except (IndexError, ValueError):
+                        raise ParseException(line, 'invalid %%period arguments')
+                    if end <= start or end >= start + datetime.timedelta(366) or end.replace(year=start.year) >= start:
+                        raise ParseException(line, 'invalid %%period date range')
+                    self._period = (start, end)
                 if words[0].startswith('%'):
                     continue
-                self._parse_line_tagtext(line, line)
-                if line.tag not in tags:
-                    raise ParseException(line, 'invalid tag %r' % line.tag)
-                if not firstline:
-                    firstline = line
-                if type(tags[line.tag]) is list:
-                    tags[line.tag].append(line)
-                elif tags[line.tag] is None:
-                    tags[line.tag] = line
+                if ledger_date:
+                    if line[0].isspace():
+                        ledger_lines.append(line.lstrip())
+                    else:
+                        raise ParseException(line, 'should be indented')
                 else:
-                    raise ParseException(line, 'duplicate tag %r' % line.tag)
-            if not firstline:
-                continue
-            used = dict((tag, False) for tag in tags if tags[tag])
-            def tagline(tag, optional=False):
+                    self._parse_line_tagtext(line, line)
+                    if line.tag in tags:
+                        if not firstline:
+                            firstline = line
+                        if type(tags[line.tag]) is list:
+                            tags[line.tag].append(line)
+                        elif tags[line.tag] is None:
+                            tags[line.tag] = line
+                        else:
+                            raise ParseException(line, 'duplicate tag %r' % line.tag)
+                        continue
+                    elif not firstline:
+                        try:
+                            ledger_date = self._parse_date(line.tag)
+                            ledger_what = line.text
+                        except ValueError:
+                            raise ParseException(line, 'invalid tag %r' % line.tag)
+                    else:
+                        raise ParseException(line, 'invalid tag %r' % line.tag)
+            kwargs = None
+            if firstline:
+                kwargs = self._parse_legacy_block(firstline, tags, defaults)
+            elif ledger_date:
+                kwargs = self._parse_ledger_block(ledger_date, ledger_what, ledger_lines)
+            if kwargs:
+                for entry in kwargs['entries']:
+                    del entry['line']
+                self._transactions.append(Transaction(**kwargs))
+
+    def _parse_ledger_block(self, ledger_date, ledger_what, ledger_lines):
+        entries = []
+        noamt = None
+        for line in ledger_lines:
+            entry = {'line': line}
+            if '  ' in line:
+                acc, amt = line.rsplit('  ', 1)
+                acc = unicode(acc.strip())
+                amt = amt.strip()
+                try:
+                    amount = abo.config.config().parse_money(amt)
+                except ValueError:
+                    raise ParseException(line, 'invalid amount %r' % amt)
+                if amount == 0:
+                    raise ParseException(line, 'zero amount')
+                entry['amount'] = amount
+            else:
+                acc = unicode(line.strip())
+                if noamt:
+                    raise ParseException(line, 'missing amount')
+                noamt = entry
+            try:
+                entry['account'] = self.chart.account(acc) if self.chart else abo.account.Account(name=acc)
+            except (ValueError, KeyError), e:
+                raise ParseException(line, e)
+            entries.append(entry)
+        if noamt:
+            total = sum(entry['amount'] for entry in entries if 'amount' in entry)
+            if total == 0:
+                raise ParseException(noamt['line'], 'other entries sum to zero')
+            noamt['amount'] = -total
+        kwargs = {}
+        kwargs['date'] = ledger_date
+        kwargs['what'] = ledger_what
+        kwargs['entries'] = entries
+        return kwargs
+
+    def _parse_legacy_block(self, firstline, tags, defaults):
+        used = dict((tag, False) for tag in tags if tags[tag])
+        def tagline(tag, optional=False):
+            line = tags[tag]
+            if line is None or (type(line) is list and not line):
+                line = defaults[tag]
+            #print 'tag=%r line=%r' % (tag, line,)
+            if not line and not optional:
+                raise ParseException(firstline, 'missing tag %r' % tag)
+            used[tag] = True
+            return line
+        meth = getattr(self, '_parse_type_' + tagline('type').text, None)
+        if not meth:
+            raise ParseException(tags['type'], 'unknown type %r' % (tags['type'].text,))
+        kwargs = {}
+        kwargs['date'] = self._parse_date(tagline('date').text)
+        who = tagline('who', optional=True)
+        kwargs['who'] = unicode(who.text) if who else None
+        what = tagline('what', optional=True)
+        kwargs['what'] = unicode(what.text) if what else None
+        kwargs['entries'] = meth(firstline, kwargs, tagline)
+        for tag in used:
+            if not used[tag]:
                 line = tags[tag]
-                if line is None or (type(line) is list and not line):
-                    line = defaults[tag]
-                #print 'tag=%r line=%r' % (tag, line,)
-                if not line and not optional:
-                    raise ParseException(firstline, 'missing tag %r' % tag)
-                used[tag] = True
-                return line
-            meth = getattr(self, '_parse_type_' + tagline('type').text, None)
-            if not meth:
-                raise ParseException(tags['type'], 'unknown type %r' % (tags['type'].text,))
-            kwargs = {}
-            kwargs['date'] = self._parse_date(tagline('date'))
-            who = tagline('who', optional=True)
-            kwargs['who'] = who.text if who else None
-            what = tagline('what', optional=True)
-            kwargs['what'] = what.text if what else None
-            entries = meth(firstline, kwargs, tagline)
-            for tag in used:
-                if not used[tag]:
-                    line = tags[tag]
-                    if type(line) is list:
-                        line = line[0]
-                    raise ParseException(line, 'spurious %r tag' % (tag,))
-            for entry in entries:
-                del entry['line']
-            kwargs['entries'] = entries
-            self._transactions.append(Transaction(**kwargs))
+                if type(line) is list:
+                    line = line[0]
+                raise ParseException(line, 'spurious %r tag' % (tag,))
+        return kwargs
 
     def _parse_line_tagtext(cls, line, text):
         words = text.split(None, 1)
@@ -249,7 +330,7 @@ class Journal(object):
 
     def _parse_invoice_bill(self, firstline, kwargs, tagline, sign):
         due = tagline('due', optional=True)
-        cdate = self._parse_date(due, relative_to=kwargs['date']) if due else None
+        cdate = self._parse_date(due.text, relative_to=kwargs['date']) if due else None
         amt = tagline('amt', optional=True)
         amount = self._parse_money(amt) if amt else None
         if amount is not None and amount == 0:
@@ -309,18 +390,30 @@ class Journal(object):
 
     _regex_relative = re.compile(r'^[+-]\d+$')
 
-    @classmethod
-    def _parse_date(cls, line, relative_to=None):
+    def _parse_date(self, text, relative_to=None):
+        d = None
         try:
-            return datetime.datetime.strptime(line.text, '%d/%m/%Y').date()
+            d = datetime.datetime.strptime(text, '%d/%m/%Y').date()
         except ValueError:
-            if relative_to is not None and cls._regex_relative.match(line.text):
-                return relative_to + datetime.timedelta(int(line.text))
-            raise ParseException(line, 'invalid date %r' % line.text)
+            if self._period:
+                try:
+                    d = datetime.datetime.strptime(text + '/%04u' % self._period[0].year, '%d/%m/%Y').date()
+                    if d < self._period[0]:
+                        d = None
+                        d = datetime.datetime.strptime(text + '/%04u' % self._period[1].year, '%d/%m/%Y').date()
+                except ValueError:
+                    pass
+        if d is not None:
+            if self._period and (d < self._period[0] or d > self._period[1]):
+                raise ParseException(text, 'date %s outside period' % text)
+            return d
+        if relative_to is not None and self._regex_relative.match(text):
+            return relative_to + datetime.timedelta(int(text))
+        raise ParseException(text, 'invalid date %r' % text)
 
     def _parse_account_label(self, line):
         try:
-            return self.chart.account(line.text) if self.chart else abo.account.Account(label=line.text)
+            return self.chart.account(unicode(line.text)) if self.chart else abo.account.Account(label=str(line.text))
         except (ValueError, KeyError), e:
             raise ParseException(line, e)
 
@@ -333,7 +426,7 @@ class Journal(object):
 
     def _parse_dbcr(self, line):
         entry = {'line': line}
-        word, text = self._popword(line.text)
+        word, text = self._popword(unicode(line.text))
         #print 'line=%r word=%r text=%r' % (line, word, text)
         try:
             entry['account'] = self.chart.account(word) if self.chart else abo.account.Account(label=word)
@@ -586,6 +679,38 @@ ParseException: StringIO, 8: spurious 'item' tag
     who=u'any body', what=u'any thing',
     entries=(Entry(account=Account(label='cash'), amount=Money(-55.65, Currencies.AUD)),
              Entry(account=Account(label='body'), amount=Money(55.65, Currencies.AUD))))]
+
+""",
+'period':r"""
+
+>>> Journal(r'''
+... %period 1/7/2012 30/6/2013
+... type transaction
+... date 28/2
+... who Somebody
+... what something
+... db food
+... cr bank
+... amt 10.00
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 2, 28),
+    who=u'Somebody', what=u'something',
+    entries=(Entry(account=Account(label='food'), amount=Money(-10.00, Currencies.AUD)),
+             Entry(account=Account(label='bank'), amount=Money(10.00, Currencies.AUD))))]
+
+>>> Journal(r'''
+... %period 1/7/2012 30/6/2013
+... type transaction
+... date 29/2
+... who Somebody
+... what something
+... db food
+... cr bank
+... amt 10.00
+... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+Traceback (most recent call last):
+ParseException: StringIO, 4: invalid date u'29/2'
+
 
 """,
 }

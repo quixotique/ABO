@@ -123,7 +123,8 @@ def cmd_chart(config, opts):
             yield unicode(account)
 
 def cmd_acc(config, opts):
-    account = opts['<account>']
+    chart = get_chart(config, opts)
+    account = chart.account(opts['<account>'])
     range, bf, transactions = filter_period(get_transactions(config, opts), opts)
     width = max(50, config.output_width())
     dw = 11
@@ -141,7 +142,7 @@ def cmd_acc(config, opts):
     totcr = 0
     if bf:
         for e in bf.entries():
-            if e.account.label == account:
+            if e.account in account:
                 balance += e.amount
                 yield fmt % ('', 'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),
                         config.format_money(-e.amount) if e.amount < 0 else '',
@@ -149,7 +150,7 @@ def cmd_acc(config, opts):
                         config.format_money(balance))
     for t in transactions:
         for e in t.entries:
-            if e.account.label == account:
+            if e.account in account:
                 balance += e.amount
                 if e.amount < 0:
                     totdb += e.amount

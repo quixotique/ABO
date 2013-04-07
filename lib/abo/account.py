@@ -49,24 +49,27 @@ class Account(object):
     def __init__(self, name=None, label=None, parent=None, atype=None):
         assert parent is None or isinstance(parent, Account)
         assert name or label
-        self.name = name or label
+        self.name = name
         self.label = label and str(label)
         self.parent = parent
         self.atype = atype
         self._hash = hash(self.label) ^ hash(self.name) ^ hash(self.parent) ^ hash(self.atype)
         self._children = dict()
-        assert self.name
+        self.wildchild = False
+        assert self.name or self.label
 
     def __unicode__(self):
-        return (unicode(self.parent) if self.parent else u'') + u':' + unicode(self.name)
+        return (unicode(self.parent) if self.parent else u'') + u':' + unicode(self.name or self.label)
 
     def __str__(self):
-        return (str(self.parent) if self.parent else '') + ':' + str(self.name)
+        return (str(self.parent) if self.parent else '') + ':' + str(self.name or self.label)
 
     def __repr__(self):
         r = []
         if self.label is not None:
             r.append('label=%r' % (self.label,))
+        if self.name is not None:
+            r.append('name=%r' % (self.name,))
         if self.parent is not None:
             r.append('parent=%r' % (self.parent,))
         if self.atype is not None:
@@ -90,9 +93,14 @@ class Account(object):
         return not self.__eq__(other)
 
     def __contains__(self, account):
-        if account in self._children:
-            return self._children[account]
-        return isinstance(account, Account) and (account == self or account.parent in self)
+        if account not in self._children:
+            self._children[account] = isinstance(account, Account) and (account == self or account.parent in self)
+        return self._children[account]
+
+    def make_child(self, name=None, label=None, atype=None):
+        child = type(self)(name=name, label=label, atype=atype, parent=self)
+        self._children[child] = True
+        return child
 
 class Chart(object):
 
@@ -168,11 +176,31 @@ class Chart(object):
     >>> c1.accounts() == c2.accounts()
     True
 
+    >>> c3 = Chart.from_file(r'''
+    ... Fertile
+    ...   Eve
+    ...   *
+    ...   Adam
+    ... Infertile
+    ... ''')
+    >>> for a in c3.accounts(): print repr(unicode(a)), repr(a.label), repr(a.atype), repr(a.wildchild)
+    u':Fertile' None None True
+    u':Fertile:Adam' None None False
+    u':Fertile:Eve' None None False
+    u':Infertile' None None False
+    >>> c3.account(u':Fertile')
+    Account(name=u'Fertile')
+    >>> c3.account(u':Fertile:Somebody')
+    Account(name=u'Somebody', parent=Account(name=u'Fertile'))
+    >>> c3.account(u':Infertile:Somebody')
+    Traceback (most recent call last):
+    KeyError: "unknown account u':Infertile:Somebody'"
+
     """
 
     def __init__(self):
         self._accounts = None
-        self._labels = None
+        self._index = None
 
     @classmethod
     def from_file(cls, source_file):
@@ -182,22 +210,43 @@ class Chart(object):
 
     @classmethod
     def from_accounts(cls, accounts):
-        accounts = list(accounts)
-        labels = dict()
-        for account in accounts:
-            if account.label:
-                if account.label in labels:
-                    raise ValueError('duplicate account label %r' % (account.label,))
-                labels[account.label] = account
         self = cls()
-        self._accounts = accounts
-        self._labels = labels
+        self._accounts = []
+        self._index = {}
+        for account in accounts:
+            self._add_to_index(account)
         return self
 
-    def account(self, label):
-        if label in self._labels:
-            return self._labels[label]
-        raise KeyError('invalid account label: %r' % (label,))
+    def _add_account(self, account):
+        if account in self._accounts:
+            return False
+        fullname = unicode(account)
+        if fullname in self._index:
+            raise ValueError('duplicate account %r' % (fullname,))
+        if account.label and account.label in self._index:
+            raise ValueError('duplicate account label %r' % (account.label,))
+        self._accounts.add(account)
+        self._index[fullname] = account
+        self._index[account.label] = account
+        return True
+
+    def account(self, key):
+        try:
+            if key in self._index:
+                return self._index[key]
+            if ':' in key[1:]:
+                parentname, childname = key.rsplit(':', 1)
+                parent = self._index[parentname]
+                fullname = unicode(parent) + ':' + childname
+                if fullname in self._index:
+                    return self._index[fullname]
+                if parent.wildchild:
+                    child = parent.make_child(name=childname)
+                    self._add_account(child)
+                    return child
+        except KeyError, e:
+            pass
+        raise KeyError('unknown account %r' % (key,))
 
     def accounts(self):
         return sorted(self._accounts, key= lambda a: unicode(a))
@@ -205,9 +254,10 @@ class Chart(object):
     _regex_legacy_line = re.compile(r'^(?P<label>' + Account._rxpat_label + r')?\s*(?P<type>\w+)?(?::(?P<qual>\w+))?\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
     _regex_label = re.compile(r'\[(' + Account._rxpat_label + r')]')
     _regex_type = re.compile(r'=(\w+)')
+
     def _parse(self, source_file):
         self._accounts = set()
-        self._labels = {}
+        self._index = {}
         if isinstance(source_file, basestring):
             # To facilitate testing.
             import StringIO
@@ -223,6 +273,9 @@ class Chart(object):
         for line in lines:
             if not line or line.startswith('#'):
                 continue
+            name = None
+            if line.indent < len(stack):
+                stack = stack[:line.indent]
             if is_legacy:
                 m = self._regex_legacy_line.match(line)
                 if not m:
@@ -238,34 +291,37 @@ class Chart(object):
             else:
                 label = None
                 atype = None
-                m = self._regex_label.search(line)
-                if m:
-                    label = str(m.group(1))
-                    line = line[:m.start(0)] + line[m.end(0):]
-                m = self._regex_type.search(line)
-                if m:
-                    try:
-                        atype = {'AL': AccountType.AssetLiability,
-                                 'PL': AccountType.ProfitLoss,
-                                 'EQ': AccountType.Equity}[m.group(1)]
-                    except KeyError:
-                        raise abo.text.LineError('invalid account type %r' % (m.group(1),), line=line)
-                    line = line[:m.start(0)] + line[m.end(0):]
-                elif stack:
-                    atype = stack[-1].atype
-                name = ' '.join(line.split())
-            assert line.indent <= len(stack)
-            if line.indent < len(stack):
-                stack = stack[:line.indent]
-            account = Account(name=name, label=label, parent= (stack[-1] if stack else None), atype=atype)
-            if account in self._accounts:
-                raise abo.text.LineError('duplicate account %r' % unicode(account), line=line)
-            self._accounts.add(account)
-            if account.label:
-                if account.label in self._labels:
-                    raise abo.text.LineError('duplicate account label %r' % (account.label,), line=line)
-                self._labels[account.label] = account
-            stack.append(account)
+                if line == '*':
+                    if not stack:
+                        raise abo.text.LineError('wild child must have parent', line=line)
+                    stack[-1].wildchild = True
+                else:
+                    m = self._regex_label.search(line)
+                    if m:
+                        label = str(m.group(1))
+                        line = line[:m.start(0)] + line[m.end(0):]
+                    m = self._regex_type.search(line)
+                    if m:
+                        try:
+                            atype = {'AL': AccountType.AssetLiability,
+                                    'PL': AccountType.ProfitLoss,
+                                    'EQ': AccountType.Equity}[m.group(1)]
+                        except KeyError:
+                            raise abo.text.LineError('invalid account type %r' % (m.group(1),), line=line)
+                        line = line[:m.start(0)] + line[m.end(0):]
+                    elif stack:
+                        atype = stack[-1].atype
+                    name = ' '.join(line.split())
+                    if not name and not label:
+                        raise abo.text.LineError('missing name or label', line=line)
+            assert line.indent == len(stack)
+            if name:
+                account = Account(name=name, label=label, parent= (stack[-1] if stack else None), atype=atype)
+                try:
+                    self._add_account(account)
+                except ValueError:
+                    raise abo.text.LineError('duplicate account %r' % unicode(account), line=line)
+                stack.append(account)
 
 class ChartCache(abo.cache.FileCache):
 

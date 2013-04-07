@@ -102,6 +102,13 @@ class numbered_line(unicode):
     >>> (u'xxx' + i).name
     'wah'
 
+    >>> j = numbered_line(u'a b cde fgh ')
+    >>> j.name = 'wah'
+    >>> j.split(None, 2)
+    [u'a', u'b', u'cde fgh ']
+    >>> j.split(None, 2)[2].name
+    'wah'
+
     Cannot pickle instances of numbered_line:
 
     >>> import abo.text
@@ -129,11 +136,11 @@ class numbered_line(unicode):
 
     def __getstate__(self):
         import pickle
-        raise pickle.PicklingError('cannot pickle instances of %r' % type(self))
+        raise pickle.PicklingError('cannot pickle %r with type %r' % (self, type(self)))
 
     def __getnewargs__(self):
         import pickle
-        raise pickle.PicklingError('cannot pickle instances of %r' % type(self))
+        raise pickle.PicklingError('cannot pickle %r with type %r' % (self, type(self)))
 
     def __wrap(self, value):
         obj = type(self)(value)
@@ -160,6 +167,12 @@ class numbered_line(unicode):
         
     def __radd__(self, other):
         return self.__wrap(other.__add__(self))
+
+    def split(self, *args):
+        return map(self.__wrap, super(numbered_line, self).split(*args))
+
+    def rsplit(self, *args):
+        return map(self.__wrap, super(numbered_line, self).rsplit(*args))
 
 class LineError(ValueError):
 
