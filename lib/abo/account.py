@@ -66,12 +66,12 @@ class Account(object):
         self.label = label and str(label)
         self.parent = parent
         self.atype = atype
-        self._hash = hash(self.label) ^ hash(self.name) ^ hash(self.parent) ^ hash(self.atype)
-        self._children = dict()
         self.wildchild = False
+        self._hash = hash(self.label) ^ hash(self.name) ^ hash(self.parent) ^ hash(self.atype)
+        self._childcount = 0
         assert self.name or self.label
         if self.parent:
-            self.parent._children[self] = True
+            self.parent._childcount += 1
 
     def __unicode__(self):
         return (unicode(self.parent) if self.parent else u'') + u':' + unicode(self.name or self.label)
@@ -110,12 +110,10 @@ class Account(object):
     def __contains__(self, account):
         if not isinstance(account, Account):
             return False
-        if account not in self._children:
-            self._children[account] = account == self or account.parent in self
-        return self._children[account]
+        return account == self or account.parent in self
 
     def is_substantial(self):
-        return not filter(bool, self._children.values())
+        return self._childcount == 0
 
     def make_child(self, name=None, label=None, atype=None):
         return type(self)(name=name, label=label, atype=atype, parent=self)
