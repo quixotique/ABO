@@ -220,6 +220,10 @@ class Journal(object):
         noamt = None
         for line in ledger_lines:
             entry = {'line': line}
+            if ';' in line:
+                line, detail = line.split(';', 1)
+                entry['detail'] = unicode(detail).strip()
+                line = line.rstrip()
             if '  ' in line:
                 acc, amt = line.rsplit('  ', 1)
                 acc = unicode(acc.strip())
