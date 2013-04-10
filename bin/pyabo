@@ -55,7 +55,6 @@ def main():
     else:
         assert False, 'unknown command'
     config = abo.config.config()
-    config.read_from('.pyabo')
     try:
         for line in func(config, opts):
             print line.encode(output_encoding)

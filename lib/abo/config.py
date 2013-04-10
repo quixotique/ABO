@@ -10,6 +10,9 @@ import os.path
 import sys
 import abo.money
 
+class ConfigException(Exception):
+    pass
+
 class Config(object):
 
     def __init__(self):
@@ -20,6 +23,16 @@ class Config(object):
         basedir = os.path.dirname(path)
         self.input_file_paths = [os.path.join(basedir, line.rstrip('\n')) for line in open(path, 'rU')]
         self.chart_file_path = os.path.join(basedir, 'accounts')
+        return self
+
+    def load(self):
+        trydir = os.path.abspath('.')
+        while trydir != '/':
+            trypath = os.path.join(trydir, '.pyabo')
+            if os.path.isfile(trypath):
+                return self.read_from(trypath)
+            trydir = os.path.dirname(trydir)
+        raise ConfigException('no configuration file')
 
     currency = abo.money.Currencies.AUD
 
@@ -52,5 +65,6 @@ def config():
     global _config
     if _config is None:
         _config = Config()
+        _config.load()
     return _config
 
