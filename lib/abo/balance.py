@@ -54,13 +54,14 @@ class Balance(object):
                 if self.last_date is None or t.date > self.last_date:
                     self.last_date = t.date
                 for e in t.entries:
-                    if e.account not in self._balances:
-                        self._balances[e.account] = defaultdict(lambda: 0)
-                    if e.cdate is None or self.date_range is None or e.cdate in self.date_range:
-                        self._balances[e.account][None] += e.amount
-                    else:
-                        self._balances[e.account][e.cdate] += e.amount
-        self.accounts = tuple(sorted(self._balances))
+                    cdate = None if e.cdate is None or self.date_range is None or e.cdate in self.date_range else e.cdate
+                    acc = e.account
+                    while acc:
+                        if acc not in self._balances:
+                            self._balances[acc] = defaultdict(lambda: 0)
+                        self._balances[acc][cdate] += e.amount
+                        acc = getattr(acc, 'parent', None)
+        self.accounts = tuple(sorted(self._balances, key=unicode))
 
     def balance(self, account):
         return sum(self._balances[account].itervalues()) if account in self._balances else 0

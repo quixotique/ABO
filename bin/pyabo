@@ -6,6 +6,7 @@
     pyabo chart [-f] [AL|PL|EQ]
     pyabo acc [-fw] <account> [<period>...]
     pyabo journal [-fw] [<period>...]
+    pyabo balance [-f] [<period>...]
     pyabo -h | --help
     pyabo --version
 Options:
@@ -49,6 +50,8 @@ def main():
         func = cmd_journal
     elif opts['chart']:
         func = cmd_chart
+    elif opts['balance']:
+        func = cmd_balance
     else:
         assert False, 'unknown command'
     config = abo.config.config()
@@ -171,6 +174,23 @@ def cmd_acc(config, opts):
             config.format_money(totcr),
             '')
     yield fmt % ('', 'Balance', '', '', config.format_money(balance))
+
+def cmd_balance(config, opts):
+    chart = get_chart(config, opts)
+    range, bf, transactions = filter_period(get_transactions(config, opts), opts)
+    balance = abo.balance.Balance(transactions)
+    bw = config.balance_column_width()
+    aw = max(len(unicode(a)) for a in chart.accounts())
+    width = max(bw + 2 + aw, config.output_width())
+    fmt = u'%{bw}s  %s'.format(**locals())
+    yield 'ACCOUNT BALANCES'.center(width)
+    yield range_line(range).center(width)
+    yield ''
+    yield fmt % ('Balance', 'Account')
+    yield fmt % ('-' * bw, '-' * aw)
+    for account in balance.accounts:
+        yield fmt % (config.format_money(balance.balance(account)), unicode(account))
+    yield fmt % ('-' * bw, '-' * aw)
 
 def parse_range(words):
     periods = abo.period.parse_periods(words)
