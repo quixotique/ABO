@@ -723,12 +723,13 @@ ParseException: StringIO, 8: spurious 'item' tag
 Traceback (most recent call last):
 ParseException: StringIO, 4: invalid date u'29/2'
 
-
 """,
 }
 
 def _test():
     import doctest
+    import abo.config
+    abo.config._config = abo.config.Config()
     return doctest.testmod()
 
 if __name__ == "__main__":

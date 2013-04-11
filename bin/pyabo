@@ -6,7 +6,7 @@
     pyabo chart [-f] [AL|PL|EQ]
     pyabo acc [-fw] <account> [<period>...]
     pyabo journal [-fw] [<period>...]
-    pyabo balance [-f] [<period>...]
+    pyabo balance [-fa] [<when>...]
     pyabo -h | --help
     pyabo --version
 Options:
@@ -14,6 +14,7 @@ Options:
     --version               Show version and exit
     -f --force              Force re-population of transaction cache
     -w --wrap               Wrap long lines
+    -a --all                Show all accounts
 '''
 
 import sys
@@ -21,6 +22,7 @@ import locale
 import codecs
 import os.path
 import textwrap
+import datetime
 from itertools import chain
 
 try:
@@ -176,19 +178,21 @@ def cmd_acc(config, opts):
 
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
-    range, bf, transactions = filter_period(get_transactions(config, opts), opts)
-    balance = abo.balance.Balance(transactions)
+    all_transactions = get_transactions(config, opts)
+    when, balance, transactions = filter_at(all_transactions, opts)
     bw = config.balance_column_width()
     aw = max(len(unicode(a)) for a in chart.accounts())
     width = max(bw + 2 + aw, config.output_width())
     fmt = u'%{bw}s  %s'.format(**locals())
     yield 'ACCOUNT BALANCES'.center(width)
-    yield range_line(range).center(width)
+    yield when.strftime(ur'%_d-%b-%Y').center(width)
     yield ''
     yield fmt % ('Balance', 'Account')
     yield fmt % ('-' * bw, '-' * aw)
     for account in balance.accounts:
-        yield fmt % (config.format_money(balance.balance(account)), unicode(account))
+        bal = balance.balance(account)
+        if bal or opts['--all']:
+            yield fmt % (config.format_money(bal), unicode(account))
     yield fmt % ('-' * bw, '-' * aw)
 
 def parse_range(words):
@@ -207,6 +211,14 @@ def filter_period(transactions, opts):
     else:
         range = abo.balance.Range(None, None)
     return range, brought_forward, transactions
+
+def filter_at(transactions, opts):
+    if opts['<when>']:
+        when = abo.period.parse_when(opts['<when>'])
+        range = abo.balance.Range(None, when + datetime.timedelta(1))
+        balance = abo.balance.Balance(transactions, range)
+        transactions = [t for t in transactions if t.date in range]
+    return when, balance, transactions
 
 def range_line(range):
     p = []

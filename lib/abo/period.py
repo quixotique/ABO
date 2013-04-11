@@ -4,7 +4,8 @@
 
 """Time period language.
 
->>> def _today(): return date(2013, 3, 20)
+>>> import abo.period
+>>> abo.period._today = lambda: date(2013, 3, 20)
 
 >>> parse_periods(['from', '1/3/2012', 'to', '16/3/2013'])
 [(datetime.date(2012, 3, 1), datetime.date(2013, 3, 16))]
@@ -130,11 +131,40 @@ def parse_periods(args):
             raise ValueError("unrecognised argument '%s'" % args[0])
     return periods
 
+def parse_when(args):
+    r"""
+    >>> import abo.period
+    >>> abo.period._today = lambda: date(2013, 3, 20)
+
+    >>> parse_when(['today'])
+    datetime.date(2013, 3, 20)
+    >>> parse_when(['five', 'days', 'ago'])
+    datetime.date(2013, 3, 15)
+    >>> parse_when(['yesterday'])
+    datetime.date(2013, 3, 19)
+    >>> parse_when(['start', 'of', 'last', 'year'])
+    datetime.date(2012, 1, 1)
+    >>> parse_when(['end', 'this', 'fy'])
+    datetime.date(2013, 6, 30)
+
+    """
+    startend = None
+    if args and args[0] in ('start', 'end'):
+        startend = args.pop(0)
+        if args and args[0] == 'of':
+            args.pop(0)
+        periods = parse_periods(args)
+        if len(periods) > 1:
+            raise ValueError('too many periods')
+        d = periods[0][1] if startend == 'end' else periods[0][0]
+    else:
+        d = parse_date(args)
+        if args:
+            raise ValueError("unrecognised argument '%s'" % args[0])
+    return d
+
 def parse_fromto(args):
-    if args[0] in ('now', 'today'):
-        args.pop(0)
-        d = _today()
-    elif args[0] == 'this':
+    if args[0] == 'this':
         args.pop(0)
         return parse_this(args)
     elif args[0] == 'last':
@@ -150,9 +180,29 @@ def parse_fromto(args):
             amount = -amount
         return enclosing_range(advance_date_unit(_today(), unit, amount), unit)
     else:
+        d = parse_date(args)
+    return d, d
+
+def parse_date(args):
+    if args[0] in ('now', 'today'):
+        d = _today()
+        args.pop(0)
+    elif args[0] in ('yesterday'):
+        d = _today() - timedelta(1)
+        args.pop(0)
+    elif args[0] in ('tomorrow'):
+        d = _today() + timedelta(1)
+        args.pop(0)
+    elif len(args) >= 3 and args[2] in ('ago', 'hence'):
+        amount = parse_amount(args.pop(0))
+        unit = args.pop(0)
+        if args.pop(0) == 'ago':
+            amount = -amount
+        d = advance_date_unit(_today(), unit, amount)
+    else:
         d = datetime.strptime(args[0], '%d/%m/%Y').date()
         args.pop(0)
-    return d, d
+    return d
 
 def parse_this(args):
     if not args:
@@ -304,7 +354,8 @@ def advance_date(start, months=0, quarters=0, years=0):
 
 def _test():
     import doctest
-    return doctest.testmod()
+    import abo.period
+    return doctest.testmod(abo.period)
 
 if __name__ == "__main__":
     _test()

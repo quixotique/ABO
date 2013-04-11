@@ -95,6 +95,13 @@ class Range(object):
             return False
         return True
 
+    _undef = object()
+
+    def replace(self, start=_undef, end=_undef):
+        return type(self)(start= self.start if start is self._undef else start,
+                          end= self.end if end is end._undef else end)
+
+
 def _test():
     import doctest
     return doctest.testmod()
