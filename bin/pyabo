@@ -228,7 +228,7 @@ def range_line(range):
     if range.end is not None:
         p.append('TO')
         p.append(range.end.strftime(ur'%_d-%b-%Y'))
-    return ' '.join(p) if p else 'ALL'
+    return ' '.join(p) if p else 'ALL DATES'
 
 class InvalidArg(ValueError):
     pass
