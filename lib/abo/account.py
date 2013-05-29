@@ -62,7 +62,7 @@ class Account(object):
     def __init__(self, name=None, label=None, parent=None, atype=None):
         assert parent is None or isinstance(parent, Account)
         assert name or label
-        self.name = name
+        self.name = name and unicode(name)
         self.label = label and str(label)
         self.parent = parent
         self.atype = atype
@@ -117,6 +117,16 @@ class Account(object):
 
     def make_child(self, name=None, label=None, atype=None):
         return type(self)(name=name, label=label, atype=atype, parent=self)
+
+    def all_full_names(self):
+        if self.label:
+            yield self.label
+        if self.name:
+            if self.parent:
+                for pname in self.parent.all_full_names():
+                    yield pname + ':' + self.name
+            else:
+                yield ':' + self.name
 
 class Chart(object):
 
@@ -198,24 +208,24 @@ class Chart(object):
     True
 
     >>> c3 = Chart.from_file(r'''
-    ... Fertile
+    ... People
     ...   Eve
     ...   *
     ...   Adam
-    ... Infertile
+    ... Things
     ... ''')
     >>> for a in c3.accounts(): print repr(unicode(a)), repr(a.label), repr(a.atype), repr(a.wildchild)
-    u':Fertile' None None True
-    u':Fertile:Adam' None None False
-    u':Fertile:Eve' None None False
-    u':Infertile' None None False
-    >>> c3.account(u':Fertile')
-    Account(name=u'Fertile')
-    >>> c3.account(u':Fertile:Somebody')
-    Account(name=u'Somebody', parent=Account(name=u'Fertile'))
-    >>> c3.account(u':Infertile:Somebody')
+    u':People' None None True
+    u':People:Adam' None None False
+    u':People:Eve' None None False
+    u':Things' None None False
+    >>> c3.account(u':People')
+    Account(name=u'People')
+    >>> c3.account(u':People:Somebody')
+    Account(name=u'Somebody', parent=Account(name=u'People'))
+    >>> c3.account(u':Things:Somebody')
     Traceback (most recent call last):
-    KeyError: "unknown account u':Infertile:Somebody'"
+    KeyError: "unknown account u':Things:Somebody'"
 
     """
 
@@ -232,35 +242,37 @@ class Chart(object):
     @classmethod
     def from_accounts(cls, accounts):
         self = cls()
-        self._accounts = []
+        self._accounts = set()
         self._index = {}
         for account in accounts:
-            self._add_to_index(account)
+            self._add_account(account)
         return self
 
     def _add_account(self, account):
         if account in self._accounts:
+            for name in account.all_full_names():
+                assert self._index.get(name) is account
             return False
-        fullname = unicode(account)
-        if fullname in self._index:
-            raise ValueError('duplicate account %r' % (fullname,))
-        if account.label and account.label in self._index:
-            raise ValueError('duplicate account label %r' % (account.label,))
+        for name in account.all_full_names():
+            if name in self._index:
+                raise ValueError('duplicate account %r' % (name,))
         self._accounts.add(account)
-        self._index[fullname] = account
-        self._index[account.label] = account
+        for name in account.all_full_names():
+            import sys
+            print >>sys.stderr, name
+            self._index[name] = account
         return True
 
     def account(self, key):
+        assert key
         try:
-            if key in self._index:
-                return self._index[key]
+            return self._index[key]
+        except KeyError, e:
+            pass
+        try:
             if ':' in key[1:]:
                 parentname, childname = key.rsplit(':', 1)
                 parent = self._index[parentname]
-                fullname = unicode(parent) + ':' + childname
-                if fullname in self._index:
-                    return self._index[fullname]
                 if parent.wildchild:
                     child = parent.make_child(name=childname)
                     self._add_account(child)
@@ -271,6 +283,9 @@ class Chart(object):
 
     def accounts(self):
         return sorted(self._accounts, key= lambda a: unicode(a))
+
+    def iterkeys(self):
+        return self._index.iterkeys()
 
     _regex_legacy_line = re.compile(r'^(?P<label>' + Account._rxpat_label + r')?\s*(?P<type>\w+)?(?::(?P<qual>\w+))?\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
     _regex_label = re.compile(r'\[(' + Account._rxpat_label + r')]')
@@ -340,8 +355,8 @@ class Chart(object):
                 account = Account(name=name, label=label, parent= (stack[-1] if stack else None), atype=atype)
                 try:
                     self._add_account(account)
-                except ValueError:
-                    raise abo.text.LineError('duplicate account %r' % unicode(account), line=line)
+                except KeyError, e:
+                    raise abo.text.LineError(unicode(e), line=line)
                 stack.append(account)
 
 class ChartCache(abo.cache.FileCache):

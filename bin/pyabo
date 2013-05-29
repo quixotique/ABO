@@ -4,6 +4,7 @@
 
 '''Usage:
     pyabo chart [-f] [AL|PL|EQ]
+    pyabo index [-f]
     pyabo acc [-fw] <account> [<period>...]
     pyabo journal [-fw] [<period>...]
     pyabo balance [-fa] [<when>...]
@@ -52,6 +53,8 @@ def main():
         func = cmd_journal
     elif opts['chart']:
         func = cmd_chart
+    elif opts['index']:
+        func = cmd_index
     elif opts['balance']:
         func = cmd_balance
     else:
@@ -125,6 +128,12 @@ def cmd_chart(config, opts):
     for account in get_chart(config, opts).accounts():
         if pred(account):
             yield unicode(account)
+
+def cmd_index(config, opts):
+    chart = get_chart(config, opts)
+    get_transactions(config, opts)
+    for key in chart.iterkeys():
+        yield key
 
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
