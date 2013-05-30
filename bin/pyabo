@@ -106,7 +106,7 @@ def get_transactions(chart, config, opts):
 
 def cmd_journal(config, opts):
     chart = get_chart(config, opts)
-    range, bf, transactions = filter_period(get_transactions(chart, config, opts), opts)
+    range, bf, transactions = filter_period(chart, get_transactions(chart, config, opts), opts)
     dw = 11
     bw = config.balance_column_width()
     aw = max(len(a.shortname()) for a in chart.accounts())
@@ -191,7 +191,7 @@ def shell_quote(text):
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
     account = chart.account(opts['<account>'])
-    range, bf, transactions = filter_period(get_transactions(chart, config, opts), opts)
+    range, bf, transactions = filter_period(chart, get_transactions(chart, config, opts), opts)
     dw = 11
     mw = config.money_column_width()
     bw = config.balance_column_width()
@@ -245,7 +245,7 @@ def cmd_acc(config, opts):
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
     all_transactions = get_transactions(chart, config, opts)
-    when, balance, transactions = filter_at(all_transactions, opts)
+    when, balance, transactions = filter_at(chart, all_transactions, opts)
     bw = config.balance_column_width()
     aw = max(len(unicode(a)) for a in chart.accounts())
     width = bw + 2 + aw
@@ -269,21 +269,21 @@ def parse_range(words):
         raise ValueError('too many periods')
     return abo.balance.Range(*periods[0])
 
-def filter_period(transactions, opts):
+def filter_period(chart, transactions, opts):
     brought_forward = None
     if opts['<period>']:
         range = parse_range(opts['<period>'])
         if range.start is not None:
-            brought_forward = abo.balance.Balance(transactions, abo.balance.Range(None, range.start))
+            brought_forward = abo.balance.Balance(chart, transactions, abo.balance.Range(None, range.start))
         transactions = [t for t in transactions if t.date in range]
     else:
         range = abo.balance.Range(None, None)
     return range, brought_forward, transactions
 
-def filter_at(transactions, opts):
+def filter_at(chart, transactions, opts):
     when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
     range = abo.balance.Range(None, when + datetime.timedelta(1))
-    balance = abo.balance.Balance(transactions, range)
+    balance = abo.balance.Balance(chart, transactions, range)
     transactions = [t for t in transactions if t.date in range]
     return when, balance, transactions
 

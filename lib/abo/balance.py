@@ -20,7 +20,7 @@ at a single point in time.
 >>> b.last_date
 4
 >>> b.accounts
-('a1', 'a2')
+(u'a1', u'a2')
 >>> b.balance('a1')
 122.07
 >>> b.cbalance('a1')
@@ -30,10 +30,10 @@ at a single point in time.
 >>> b.cbalance('a2')
 -24.57
 >>> b.entries() #doctest: +NORMALIZE_WHITESPACE
-(Entry(account='a2', amount=-24.57),
- Entry(account='a1', amount=122.07),
- Entry(account='a2', amount=-100.0, cdate=5),
- Entry(account='a2', amount=2.5, cdate=6))
+(Entry(account=u'a2', amount=-24.57),
+ Entry(account=u'a1', amount=122.07),
+ Entry(account=u'a2', amount=-100.0, cdate=5),
+ Entry(account=u'a2', amount=2.5, cdate=6))
 
 """
 
@@ -42,7 +42,7 @@ import abo.transaction
 
 class Balance(object):
 
-    def __init__(self, transactions, date_range=None):
+    def __init__(self, chart, transactions, date_range=None):
         self.date_range = date_range
         self.first_date = None
         self.last_date = None
@@ -55,7 +55,7 @@ class Balance(object):
                     self.last_date = t.date
                 for e in t.entries:
                     cdate = None if e.cdate is None or self.date_range is None or e.cdate in self.date_range else e.cdate
-                    acc = e.account
+                    acc = chart.account(e.account)
                     while acc:
                         if acc not in self._balances:
                             self._balances[acc] = defaultdict(lambda: 0)
