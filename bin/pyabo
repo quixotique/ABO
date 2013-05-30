@@ -68,22 +68,41 @@ def main():
         sys.exit(1)
     sys.exit(0)
 
-def get_chart(config, opts):
-    return abo.cache.FileCache(config.chart_file_path, lambda: abo.account.Chart.from_file(file(config.chart_file_path))).get(force=opts['--force'])
+_chart_cache = None
+_transaction_caches = None
 
-def get_transactions(config, opts):
-    chart = get_chart(config, opts)
-    caches = []
-    for path in config.input_file_paths:
-        caches.append(abo.cache.TransactionCache(path, abo.journal.Journal(file(path), chart=chart)))
+def chart_cache(config, opts):
+    global _chart_cache
+    if _chart_cache is None:
+        def compile_chart():
+            chart = abo.account.Chart.from_file(file(config.chart_file_path))
+            for tc in transaction_caches(chart, config, opts):
+                tc.get()
+            return chart
+        _chart_cache = abo.cache.FileCache(config, config.chart_file_path, compile_chart, config.input_file_paths, force=opts['--force'])
+    return _chart_cache
+
+def transaction_caches(chart, config, opts):
+    global _transaction_caches
+    if _transaction_caches is None:
+        _transaction_caches = []
+        for path in config.input_file_paths:
+            _transaction_caches.append(abo.cache.TransactionCache(config, path, abo.journal.Journal(file(path), chart=chart), [config.chart_file_path], force=opts['--force']))
+    return _transaction_caches
+
+def get_chart(config, opts):
+    return chart_cache(config, opts).get()
+
+def get_transactions(chart, config, opts):
     transactions = []
-    for cache in caches:
-        transactions += cache.transactions(force=opts['--force'])
+    for cache in transaction_caches(chart, config, opts):
+        transactions += cache.transactions()
     transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
     return transactions
 
 def cmd_journal(config, opts):
-    range, bf, transactions = filter_period(get_transactions(config, opts), opts)
+    chart = get_chart(config, opts)
+    range, bf, transactions = filter_period(get_transactions(chart, config, opts), opts)
     width = max(50, config.output_width())
     aw = 15
     dw = 11
@@ -96,7 +115,7 @@ def cmd_journal(config, opts):
     yield fmt % ('Date', 'Particulars', 'Amount', 'DC', 'Account')
     yield fmt % ('-' * dw, '-' * pw, '-' * bw, '--', '-' * aw)
     def entry_fields(e):
-        return (config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), e.account.label)
+        return (config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), chart.account(e.account).shortname())
     if bf:
         for e in bf.entries():
             yield fmt % (('',
@@ -131,14 +150,14 @@ def cmd_chart(config, opts):
 
 def cmd_index(config, opts):
     chart = get_chart(config, opts)
-    get_transactions(config, opts)
+    get_transactions(chart, config, opts)
     for key in chart.iterkeys():
         yield key
 
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
     account = chart.account(opts['<account>'])
-    range, bf, transactions = filter_period(get_transactions(config, opts), opts)
+    range, bf, transactions = filter_period(get_transactions(chart, config, opts), opts)
     width = max(50, config.output_width())
     dw = 11
     mw = config.money_column_width()
@@ -155,7 +174,7 @@ def cmd_acc(config, opts):
     totcr = 0
     if bf:
         for e in bf.entries():
-            if e.account in account:
+            if chart.account(e.account) in account:
                 balance += e.amount
                 yield fmt % ('', 'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),
                         config.format_money(-e.amount) if e.amount < 0 else '',
@@ -163,7 +182,7 @@ def cmd_acc(config, opts):
                         config.format_money(balance))
     for t in transactions:
         for e in t.entries:
-            if e.account in account:
+            if chart.account(e.account) in account:
                 balance += e.amount
                 if e.amount < 0:
                     totdb += e.amount
@@ -187,7 +206,7 @@ def cmd_acc(config, opts):
 
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
-    all_transactions = get_transactions(config, opts)
+    all_transactions = get_transactions(chart, config, opts)
     when, balance, transactions = filter_at(all_transactions, opts)
     bw = config.balance_column_width()
     aw = max(len(unicode(a)) for a in chart.accounts())

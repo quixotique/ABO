@@ -15,18 +15,18 @@ Transaction must balance to zero, and no Entry can be for a zero amount.
 >>> t1.entries[0].transaction is t1
 True
 >>> t1.entries[0].account
-'a1'
+u'a1'
 >>> t1.entries[0].amount
 -14.56
 >>> t1.entries[1].description()
-'Someone; something, else'
+u'Someone; something, else'
 >>> t1
-Transaction(date=1, who='Someone', what='something', entries=(Entry(account='a1', amount=-14.56), Entry(account='a2', amount=14.56, detail='else')))
+Transaction(date=1, who='Someone', what='something', entries=(Entry(account=u'a1', amount=-14.56), Entry(account=u'a2', amount=14.56, detail=u'else')))
 >>> t2 = Transaction(date=2, who="Them", what="whatever", entries=t1.entries)
 >>> t2.entries[0].transaction is t2
 True
 >>> t2.entries[1].description()
-'Them; whatever, else'
+u'Them; whatever, else'
 >>>
 """
 
@@ -48,10 +48,10 @@ class Entry(abo.base.Base):
         assert amount != 0, 'zero amount'
         self.id = self._make_unique_id()
         self.transaction = transaction
-        self.account = account
+        self.account = unicode(account)
         self.amount = amount
         self.cdate = cdate
-        self.detail = detail
+        self.detail = unicode(detail) if detail is not None else None
 
     def __repr__(self):
         r = []
@@ -163,24 +163,24 @@ __test__ = {
     >>> t.amount()
     14.56
     >>> t.entries[0].account
-    'a1'
+    u'a1'
     >>> t.entries[0].amount
     -14.56
     >>> t.entries[0].cdate
     >>> t.entries[0].detail
-    'else'
+    u'else'
     >>> t.entries[0].description()
-    'Someone; something, else'
+    u'Someone; something, else'
     >>> t.entries[0].transaction is t
     True
     >>> t.entries[1].account
-    'a2'
+    u'a2'
     >>> t.entries[1].amount
     14.56
     >>> t.entries[1].cdate
     7
     >>> t.entries[1].detail
-    ''
+    u''
     >>> t.entries[1].description()
     'Someone; something'
     >>> t.id == t.entries[0].id

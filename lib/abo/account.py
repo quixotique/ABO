@@ -118,6 +118,9 @@ class Account(object):
     def make_child(self, name=None, label=None, atype=None):
         return type(self)(name=name, label=label, atype=atype, parent=self)
 
+    def shortname(self):
+        return min(self.all_full_names(), key=len)
+
     def all_full_names(self):
         if self.label:
             yield self.label
@@ -258,8 +261,6 @@ class Chart(object):
                 raise ValueError('duplicate account %r' % (name,))
         self._accounts.add(account)
         for name in account.all_full_names():
-            import sys
-            print >>sys.stderr, name
             self._index[name] = account
         return True
 
