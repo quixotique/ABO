@@ -10,19 +10,18 @@ import os.path
 import errno
 import cPickle as pickle
 
-class FileCache(object):
+class Cache(object):
 
-    def __init__(self, config, path, contentfunc, otherpaths=(), force=False):
+    def __init__(self, config, ident, contentfunc, deppaths=(), force=False):
         self.config = config
-        self.path = path
-        self.cpath = self.cache_path(path)
+        self.ident = ident
+        self.cpath = os.path.join(self.config.cache_dir_path(), self.ident.replace('/', '%%'))
         self.ctime = -1 if force else self.mtime(self.cpath)
         self.contentfunc = contentfunc
-        self.otherpaths = list(otherpaths)
+        self.deppaths = list(deppaths)
 
     def source_paths(self):
-        yield self.path
-        for path in self.otherpaths:
+        for path in self.deppaths:
             yield path
 
     def source_mtime(self):
@@ -33,9 +32,9 @@ class FileCache(object):
 
     def get(self):
         stime = self.source_mtime()
+        #import sys
         if self.ctime < stime:
-            import sys
-            print >>sys.stderr, "compile %r" % self.path
+            #print >>sys.stderr, "compile %r" % self.ident
             try:
                 os.makedirs(os.path.dirname(self.cpath))
             except OSError, e:
@@ -45,10 +44,8 @@ class FileCache(object):
             pickle.dump(content, file(self.cpath, 'w'), 2)
             self.ctime = stime
             return content
+        #print >>sys.stderr, "load %r" % self.ident
         return pickle.load(file(self.cpath))
-
-    def cache_path(self, path):
-        return os.path.join(self.config.cache_dir_path(), os.path.abspath(path).replace('/', '%%'))
 
     @staticmethod
     def mtime(path):
@@ -58,6 +55,12 @@ class FileCache(object):
             if e.errno != errno.ENOENT:
                 raise
             return -1
+
+class FileCache(Cache):
+
+    def __init__(self, config, path, contentfunc, otherpaths=(), force=False):
+        self.path = os.path.abspath(path)
+        super(FileCache, self).__init__(config, self.path, contentfunc, [self.path] + list(otherpaths), force=force)
 
 class TransactionCache(FileCache):
 

@@ -8,6 +8,7 @@
     pyabo acc [-fwW] [--width=COLUMNS] [--wide] <account> [<period>...]
     pyabo journal [-fwW] [--width=COLUMNS] [<period>...]
     pyabo balance [-faW] [--width=COLUMNS] [<when>...]
+    pyabo compa <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
 Options:
@@ -26,7 +27,6 @@ import codecs
 import os.path
 import textwrap
 import datetime
-from itertools import chain
 
 try:
     import docopt
@@ -59,6 +59,8 @@ def main():
         func = cmd_index
     elif opts['balance']:
         func = cmd_balance
+    elif opts['compa']:
+        func = cmd_compa
     else:
         assert False, 'unknown command'
     config = abo.config.Config().load(opts)
@@ -157,9 +159,34 @@ def cmd_chart(config, opts):
 
 def cmd_index(config, opts):
     chart = get_chart(config, opts)
-    get_transactions(chart, config, opts)
-    for key in chart.iterkeys():
-        yield key
+    return sorted(chart.iterkeys())
+
+def cmd_compa(config, opts):
+    word, preword = opts['<word>'], opts['<preword>']
+    #print >>sys.stderr, 'word=%r preword=%r' % (word, preword),
+    chart = get_chart(config, opts)
+    keys = set()
+    if preword not in ('--width',):
+        for key in chart.iterkeys():
+            if key.startswith(word) and len(key) > len(word):
+                comp = key[len(word):]
+                end = ''
+                if ':' in comp:
+                    comp = comp.split(':', 1)[0] + ':'
+                else:
+                    end = ' '
+                keys.add(shell_quote(word + comp) + end)
+    keys = sorted(keys)
+    #print >>sys.stderr, ' keys=%r' % keys,
+    return keys
+
+def shell_quote(text):
+    return (text.replace('\\', '\\\\')
+                .replace('"', '\\"')
+                .replace("'", "\\'")
+                .replace('$', '\\$')
+                .replace('`', '\\`')
+                .replace(' ', '\\ '))
 
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
