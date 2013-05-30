@@ -9,7 +9,6 @@ import os
 import os.path
 import errno
 import cPickle as pickle
-import abo.config
 
 class FileCache(object):
 

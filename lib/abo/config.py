@@ -18,6 +18,7 @@ class Config(object):
     def __init__(self):
         self.input_file_paths = []
         self.chart_file_path = None
+        self.width = None
 
     def read_from(self, path):
         basedir = os.path.dirname(path)
@@ -25,12 +26,16 @@ class Config(object):
         self.chart_file_path = os.path.join(basedir, 'accounts')
         return self
 
-    def load(self):
+    def apply_options(self, opts):
+        self.width = 0 if opts['--wide'] else int(opts['--width']) if opts['--width'] else None
+        return self
+
+    def load(self, opts):
         trydir = os.path.abspath('.')
         while trydir != '/':
             trypath = os.path.join(trydir, '.pyabo')
             if os.path.isfile(trypath):
-                return self.read_from(trypath)
+                return self.read_from(trypath).apply_options(opts)
             trydir = os.path.dirname(trydir)
         raise ConfigException('no configuration file')
 
@@ -54,17 +59,7 @@ class Config(object):
         return self.money_column_width() + 1
 
     def output_width(self):
-        return int(os.environ.get('COLUMNS', 80))
+        return self.width if self.width is not None else int(os.environ.get('COLUMNS', 80))
 
     def cache_dir_path(self):
         return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo')
-
-_config = None
-
-def config():
-    global _config
-    if _config is None:
-        _config = Config()
-        _config.load()
-    return _config
-

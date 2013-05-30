@@ -5,9 +5,9 @@
 '''Usage:
     pyabo chart [-f] [AL|PL|EQ]
     pyabo index [-f]
-    pyabo acc [-fw] <account> [<period>...]
-    pyabo journal [-fw] [<period>...]
-    pyabo balance [-fa] [<when>...]
+    pyabo acc [-fwW] [--width=COLUMNS] [--wide] <account> [<period>...]
+    pyabo journal [-fwW] [--width=COLUMNS] [<period>...]
+    pyabo balance [-faW] [--width=COLUMNS] [<when>...]
     pyabo -h | --help
     pyabo --version
 Options:
@@ -15,6 +15,8 @@ Options:
     --version               Show version and exit
     -f --force              Force re-population of transaction cache
     -w --wrap               Wrap long lines
+    --width=COLUMNS         Maximum line length (default from 'COLUMNS' env var)
+    -W --wide               Wide output, no maximum width
     -a --all                Show all accounts
 '''
 
@@ -59,7 +61,7 @@ def main():
         func = cmd_balance
     else:
         assert False, 'unknown command'
-    config = abo.config.config()
+    config = abo.config.Config().load(opts)
     try:
         for line in func(config, opts):
             print line.encode(output_encoding)
@@ -87,7 +89,7 @@ def transaction_caches(chart, config, opts):
     if _transaction_caches is None:
         _transaction_caches = []
         for path in config.input_file_paths:
-            _transaction_caches.append(abo.cache.TransactionCache(config, path, abo.journal.Journal(file(path), chart=chart), [config.chart_file_path], force=opts['--force']))
+            _transaction_caches.append(abo.cache.TransactionCache(config, path, abo.journal.Journal(config, file(path), chart=chart), [config.chart_file_path], force=opts['--force']))
     return _transaction_caches
 
 def get_chart(config, opts):
@@ -103,12 +105,17 @@ def get_transactions(chart, config, opts):
 def cmd_journal(config, opts):
     chart = get_chart(config, opts)
     range, bf, transactions = filter_period(get_transactions(chart, config, opts), opts)
-    width = max(50, config.output_width())
-    aw = 15
     dw = 11
     bw = config.balance_column_width()
-    pw = max(1, width - dw - 2 - 1 - aw - 1 - bw - 1 - 2)
-    fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-{aw}.{aw}s'.format(**locals())
+    aw = max(len(a.shortname()) for a in chart.accounts())
+    if config.output_width():
+        width = max(50, config.output_width())
+        aw = min(15, aw)
+        pw = max(1, width - (dw + 2 + 1 + bw + 1 + 2 + 1 + aw))
+    else:
+        pw = 35
+        width = dw + 2 + pw + 1 + bw + 1 + 2 + 1 + aw
+    fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-.{aw}s'.format(**locals())
     yield 'JOURNAL OF TRANSACTIONS'.center(width)
     yield range_line(range).center(width)
     yield ''
@@ -158,11 +165,15 @@ def cmd_acc(config, opts):
     chart = get_chart(config, opts)
     account = chart.account(opts['<account>'])
     range, bf, transactions = filter_period(get_transactions(chart, config, opts), opts)
-    width = max(50, config.output_width())
     dw = 11
     mw = config.money_column_width()
     bw = config.balance_column_width()
-    pw = max(1, width - dw - 2 - 2 * (mw + 1) - 1 - bw)
+    if config.output_width():
+        width = max(50, config.output_width())
+        pw = max(1, width - (dw + 2 + 2 * (mw + 1) + 1 + bw))
+    else:
+        pw = 35
+        width = dw + 2 + pw + 2 * (mw + 1) + 1 + bw
     fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
     yield 'STATEMENT OF ACCOUNT'.center(width)
     yield range_line(range).center(width)
@@ -210,8 +221,10 @@ def cmd_balance(config, opts):
     when, balance, transactions = filter_at(all_transactions, opts)
     bw = config.balance_column_width()
     aw = max(len(unicode(a)) for a in chart.accounts())
-    width = max(bw + 2 + aw, config.output_width())
-    fmt = u'%{bw}s  %s'.format(**locals())
+    width = bw + 2 + aw
+    if config.output_width() and width > config.output_width():
+        aw = max(10, config.output_width() - (bw + 2))
+    fmt = u'%{bw}s  %.{aw}s'.format(**locals())
     yield 'ACCOUNT BALANCES'.center(width)
     yield when.strftime(ur'%_d-%b-%Y').center(width)
     yield ''
@@ -241,11 +254,10 @@ def filter_period(transactions, opts):
     return range, brought_forward, transactions
 
 def filter_at(transactions, opts):
-    if opts['<when>']:
-        when = abo.period.parse_when(opts['<when>'])
-        range = abo.balance.Range(None, when + datetime.timedelta(1))
-        balance = abo.balance.Balance(transactions, range)
-        transactions = [t for t in transactions if t.date in range]
+    when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
+    range = abo.balance.Range(None, when + datetime.timedelta(1))
+    balance = abo.balance.Balance(transactions, range)
+    transactions = [t for t in transactions if t.date in range]
     return when, balance, transactions
 
 def range_line(range):

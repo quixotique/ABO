@@ -4,7 +4,7 @@
 
 """A Journal is a source of Transactions parsed from a text file.
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... type transaction
 ... date 16/3/2013
 ... who Somebody
@@ -84,14 +84,14 @@ import subprocess
 import datetime
 import copy
 from abo.transaction import Transaction
-import abo.config
 import abo.account
 import abo.text
 from abo.types import struct
 
 class Journal(object):
 
-    def __init__(self, source_file, chart=None):
+    def __init__(self, config, source_file, chart=None):
+        self.config = config
         self.chart = chart
         self.source_file = source_file
         self._transactions = None
@@ -229,7 +229,7 @@ class Journal(object):
                 acc = unicode(acc.strip())
                 amt = amt.strip()
                 try:
-                    amount = abo.config.config().parse_money(amt)
+                    amount = self.config.parse_money(amt)
                 except ValueError:
                     raise ParseException(line, 'invalid amount %r' % amt)
                 if amount == 0:
@@ -427,10 +427,9 @@ class Journal(object):
         except (ValueError, KeyError), e:
             raise ParseException(line, e)
 
-    @classmethod
-    def _parse_money(cls, line):
+    def _parse_money(self, line):
         try:
-            return abo.config.config().parse_money(line.text)
+            return self.config.parse_money(line.text)
         except ValueError:
             raise ParseException(line, 'invalid amount %r' % line.text)
 
@@ -448,7 +447,7 @@ class Journal(object):
         word, detail = self._popword(text)
         if word and self.appears_money(word):
             try:
-                money = abo.config.config().parse_money(word)
+                money = self.config.parse_money(word)
             except ValueError:
                 raise ParseException(line, 'invalid amount %r' % word)
         else:
@@ -484,7 +483,7 @@ class ParseException(Exception):
 __test__ = {
 'transaction':r"""
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... type transaction
 ... date 21/2/2013
 ... who Somebody
@@ -498,7 +497,7 @@ __test__ = {
     entries=(Entry(account=u':food', amount=Money(-10.00, Currencies.AUD)),
              Entry(account=u':bank', amount=Money(10.00, Currencies.AUD))))]
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... type transaction
 ... date 22/2/2013
 ... who Somebody Else
@@ -513,7 +512,7 @@ __test__ = {
              Entry(account=u':drink', amount=Money(-3.00, Currencies.AUD), detail=u'beer'),
              Entry(account=u':bank', amount=Money(10.00, Currencies.AUD))))]
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... type transaction
 ... date 23/2/2013
 ... who Whoever
@@ -531,7 +530,7 @@ __test__ = {
              Entry(account=u':cash', amount=Money(2.00, Currencies.AUD)),
              Entry(account=u':bank', amount=Money(8.00, Currencies.AUD))))]
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... %default type transaction
 ... %default cr cash
 ... %default db games
@@ -549,7 +548,7 @@ __test__ = {
              Entry(account=u':drink', amount=Money(-3.00, Currencies.AUD), detail=u'beer'),
              Entry(account=u':cash', amount=Money(10.00, Currencies.AUD))))]
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... date 23/2/2013
 ... type transaction
 ... # comment
@@ -561,7 +560,7 @@ __test__ = {
 Traceback (most recent call last):
 ParseException: "wah", 21: empty tag 'db'
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... type transaction
 ... date 21/2/2013
 ... due 21/3/2013
@@ -574,7 +573,7 @@ ParseException: "wah", 21: empty tag 'db'
 Traceback (most recent call last):
 ParseException: StringIO, 4: spurious 'due' tag
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... type transaction
 ... date 21/2/2013
 ... who Somebody
@@ -587,7 +586,7 @@ ParseException: StringIO, 4: spurious 'due' tag
 Traceback (most recent call last):
 ParseException: StringIO, 8: spurious 'item' tag
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... %default due 21/3/2013
 ... type transaction
 ... date 21/2/2013
@@ -604,7 +603,7 @@ ParseException: StringIO, 8: spurious 'item' tag
 """,
 'invoice':r"""
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... type invoice
 ... date 21/2/2013
 ... due 21/3/2013
@@ -622,7 +621,7 @@ ParseException: StringIO, 8: spurious 'item' tag
 """,
 'bill':r"""
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... type bill
 ... date 1/2/2013
 ... due +14
@@ -642,7 +641,7 @@ ParseException: StringIO, 8: spurious 'item' tag
 """,
 'remittance':r"""
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... type remittance
 ... date 15/2/2013
 ... who Somebody
@@ -659,7 +658,7 @@ ParseException: StringIO, 8: spurious 'item' tag
 """,
 'receipt':r"""
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... type receipt
 ... date 15/2/2013
 ... who Somebody
@@ -676,7 +675,7 @@ ParseException: StringIO, 8: spurious 'item' tag
 """,
 'filter':r"""
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... %filter m4 --synclines
 ... define(`some', `any')
 ... type receipt
@@ -695,7 +694,7 @@ ParseException: StringIO, 8: spurious 'item' tag
 """,
 'period':r"""
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... %period 1/7/2012 30/6/2013
 ... type transaction
 ... date 28/2
@@ -710,7 +709,7 @@ ParseException: StringIO, 8: spurious 'item' tag
     entries=(Entry(account=u':food', amount=Money(-10.00, Currencies.AUD)),
              Entry(account=u':bank', amount=Money(10.00, Currencies.AUD))))]
 
->>> Journal(r'''
+>>> Journal(_testconfig, r'''
 ... %period 1/7/2012 30/6/2013
 ... type transaction
 ... date 29/2
@@ -729,7 +728,8 @@ ParseException: StringIO, 4: invalid date u'29/2'
 def _test():
     import doctest
     import abo.config
-    abo.config._config = abo.config.Config()
+    global _testconfig
+    _testconfig = abo.config.Config()
     return doctest.testmod()
 
 if __name__ == "__main__":
