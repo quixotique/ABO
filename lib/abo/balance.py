@@ -3,7 +3,7 @@
 # Copyright 2013 Andrew Bettison
 
 """A Balance is an immutable object representing the state of a set of accounts
-at a single point in time.  
+at the end of a range of time.
 
 >>> from abo.transaction import Transaction, Entry
 >>> t1 = Transaction(date=1, what="One",

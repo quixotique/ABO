@@ -44,6 +44,9 @@ class Account(object):
     False
     >>> c.is_substantial()
     True
+    >>> a.atype
+    >>> d.atype
+    AccountType.ProfitLoss
 
     Account objects can be pickled and unpickled using protocol 2:
 
@@ -71,6 +74,7 @@ class Account(object):
         self._childcount = 0
         assert self.name or self.label
         if self.parent:
+            assert parent.atype is None or self.atype == parent.atype
             self.parent._childcount += 1
 
     def __unicode__(self):

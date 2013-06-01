@@ -8,6 +8,7 @@
     pyabo acc [-fwW] [--width=COLUMNS] [--wide] <account> [<period>...]
     pyabo journal [-fwW] [--width=COLUMNS] [<period>...]
     pyabo balance [-faW] [--width=COLUMNS] [<when>...]
+    pyabo profloss [-faW] [--width=COLUMNS] [<period>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
@@ -57,6 +58,8 @@ def main():
         func = cmd_chart
     elif opts['index']:
         func = cmd_index
+    elif opts['profloss']:
+        func = cmd_profloss
     elif opts['balance']:
         func = cmd_balance
     elif opts['compa']:
@@ -242,6 +245,40 @@ def cmd_acc(config, opts):
             '')
     yield fmt % ('', 'Balance', '', '', config.format_money(balance))
 
+def cmd_profloss(config, opts):
+    chart = get_chart(config, opts)
+    balances = filter_periods(chart, get_transactions(chart, config, opts), opts)
+    accounts = set()
+    for balance in balances:
+        for account in balance.accounts:
+            if account.atype in (None, abo.account.AccountType.ProfitLoss) and (opts['--all'] or balance.balance(account)):
+                accounts.add(account)
+    bw = config.balance_column_width()
+    aw = max(len(unicode(a)) for a in accounts)
+    width = (bw + 1) * len(balances) +  1 + aw
+    if config.output_width() and width > config.output_width():
+        aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
+    fmt = (u'%{bw}s ' * len(balances) + u' %.{aw}s').format(**locals())
+    yield 'PROFIT LOSS STATEMENT'.center(width)
+    line = []
+    for balance in balances:
+        line.append(balance.date_range.start.strftime(ur'%_d-%b-%Y') if balance.date_range.start else '')
+    line.append('')
+    yield fmt % tuple(line)
+    line = []
+    for balance in balances:
+        line.append(balance.date_range.end.strftime(ur'%_d-%b-%Y') if balance.date_range.end else '')
+    line.append('Account')
+    yield fmt % tuple(line)
+    yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
+    for account in sorted(accounts, key=unicode):
+        line = []
+        for balance in balances:
+            line.append(config.format_money(balance.balance(account)))
+        line.append(unicode(account))
+        yield fmt % tuple(line)
+    yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
+
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
     all_transactions = get_transactions(chart, config, opts)
@@ -262,6 +299,18 @@ def cmd_balance(config, opts):
         if bal or opts['--all']:
             yield fmt % (config.format_money(bal), unicode(account))
     yield fmt % ('-' * bw, '-' * aw)
+
+def parse_ranges(words):
+    periods = abo.period.parse_periods(words)
+    return [abo.balance.Range(*p) for p in periods]
+
+def filter_periods(chart, transactions, opts):
+    brought_forward = None
+    if opts['<period>']:
+        ranges = parse_ranges(opts['<period>'])
+    else:
+        ranges = [abo.balance.Range(None, datetime.date.today())]
+    return [abo.balance.Balance(chart, transactions, range) for range in ranges]
 
 def parse_range(words):
     periods = abo.period.parse_periods(words)
