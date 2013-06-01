@@ -249,7 +249,7 @@ def cmd_acc(config, opts):
 
 def cmd_profloss(config, opts):
     chart = get_chart(config, opts)
-    balances = filter_periods(chart, get_transactions(chart, config, opts), opts)
+    balances = parse_balances(chart, get_transactions(chart, config, opts), opts)
     accounts = set()
     acc_pred = parse_account_predicate(opts)
     for balance in balances:
@@ -273,7 +273,7 @@ def cmd_profloss(config, opts):
     yield fmt % tuple(line)
     line = []
     for balance in balances:
-        line.append(balance.date_range.end.strftime(ur'%_d-%b-%Y') if balance.date_range.end else '')
+        line.append((balance.date_range.end - datetime.timedelta(1)).strftime(ur'%_d-%b-%Y') if balance.date_range.end else '')
     line.append('Account')
     yield fmt % tuple(line)
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
@@ -314,17 +314,16 @@ def parse_account_predicate(opts):
         return lambda a: tag[1:] not in a.tags
     return lambda a: tag in a.tags
 
-def parse_ranges(words):
-    periods = abo.period.parse_periods(words)
-    return [abo.balance.Range(*p) for p in periods]
-
-def filter_periods(chart, transactions, opts):
+def parse_balances(chart, transactions, opts):
     brought_forward = None
     if opts['<period>']:
-        ranges = parse_ranges(opts['<period>'])
+        periods = abo.period.parse_periods(opts['<period>'])
     else:
-        ranges = [abo.balance.Range(None, datetime.date.today())]
-    return [abo.balance.Balance(chart, transactions, range) for range in ranges]
+        periods = [(None, None)]
+    for p in periods:
+        if p[1] is None:
+            p[1] = datetime.date.today()
+    return [abo.balance.Balance(chart, transactions, abo.balance.Range(p[0], p[1] + datetime.timedelta(1))) for p in periods]
 
 def parse_range(words):
     periods = abo.period.parse_periods(words)
