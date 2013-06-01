@@ -42,11 +42,11 @@ import abo.transaction
 
 class Balance(object):
 
-    def __init__(self, chart, transactions, date_range=None):
+    def __init__(self, chart, transactions, date_range=None, pred=lambda a, c, m: True):
         self.date_range = date_range
         self.first_date = None
         self.last_date = None
-        self._balances = {}
+        balances = defaultdict(lambda: defaultdict(lambda: 0))
         for t in transactions:
             if self.date_range is None or t.date in self.date_range:
                 if self.first_date is None or t.date < self.first_date:
@@ -56,11 +56,20 @@ class Balance(object):
                 for e in t.entries:
                     cdate = None if e.cdate is None or self.date_range is None or e.cdate in self.date_range else e.cdate
                     acc = chart.account(e.account)
-                    while acc:
-                        if acc not in self._balances:
-                            self._balances[acc] = defaultdict(lambda: 0)
-                        self._balances[acc][cdate] += e.amount
-                        acc = getattr(acc, 'parent', None)
+                    assert acc is not None
+                    balances[acc][cdate] += e.amount
+        for acc, cdates in balances.items():
+            for cdate, amount in cdates.items():
+                if not pred(acc, cdate, amount):
+                    del cdates[cdate]
+            if not cdates:
+                del balances[acc]
+        self._balances = defaultdict(lambda: defaultdict(lambda: 0))
+        for acc, cdates in balances.iteritems():
+            for cdate, amount in cdates.iteritems():
+                while acc:
+                    self._balances[acc][cdate] += amount
+                    acc = getattr(acc, 'parent', None)
         self.accounts = tuple(sorted(self._balances, key=unicode))
 
     def balance(self, account):

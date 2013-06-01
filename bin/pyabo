@@ -46,6 +46,7 @@ import abo.config
 import abo.period
 import abo.balance
 import abo.cache
+from abo.types import struct
 
 def main():
     locale.setlocale(locale.LC_ALL, '')
@@ -248,19 +249,20 @@ def cmd_acc(config, opts):
     yield fmt % ('', 'Balance', '', '', config.format_money(balance))
 
 def cmd_profloss(config, opts):
-    chart = get_chart(config, opts)
-    balances = parse_balances(chart, get_transactions(chart, config, opts), opts)
-    accounts = set()
     acc_pred = parse_account_predicate(opts)
-    for balance in balances:
-        for account in balance.accounts:
-            if (    account.atype == abo.account.AccountType.ProfitLoss
-                and (opts['--all'] or balance.balance(account))
-                and acc_pred(account)
-            ):
-                accounts.update(account.lineage())
+    periods = parse_periods(opts)
+    chart = get_chart(config, opts)
+    transactions = get_transactions(chart, config, opts)
+    sections = []
+    all_accounts = set()
+    for pred in ((lambda a, c, m: m > 0), (lambda a, c, m: m < 0)):
+        bpred = lambda a, c, m: a.atype == abo.account.AccountType.ProfitLoss and (opts['--all'] or m) and acc_pred(a) and pred(a, c, m)
+        balances = [abo.balance.Balance(chart, transactions, abo.balance.Range(p[0], p[1] + datetime.timedelta(1)), bpred) for p in periods]
+        accounts = reduce(lambda x, y: x | y, (b.accounts for b in balances))
+        sections.append(struct(balances=balances, accounts=accounts))
+        all_accounts.update(accounts)
     bw = config.balance_column_width()
-    aw = max(chain([10], (len(unicode(a)) for a in accounts)))
+    aw = max(chain([10], (len(unicode(a)) for a in all_accounts)))
     width = (bw + 1) * len(balances) +  1 + aw
     if config.output_width() and width > config.output_width():
         aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
@@ -277,13 +279,14 @@ def cmd_profloss(config, opts):
     line.append('Account')
     yield fmt % tuple(line)
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
-    for account in sorted(accounts, key=unicode):
-        line = []
-        for balance in balances:
-            line.append(config.format_money(balance.balance(account)))
-        line.append(unicode(account))
-        yield fmt % tuple(line)
-    yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
+    for section in sections:
+        for account in sorted(section.accounts, key=unicode):
+            line = []
+            for balance in section.balances:
+                line.append(config.format_money(balance.balance(account)))
+            line.append(unicode(account))
+            yield fmt % tuple(line)
+        yield fmt % (('-' * bw,) * len(section.balances) + ('-' * aw,))
 
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
@@ -314,16 +317,13 @@ def parse_account_predicate(opts):
         return lambda a: tag[1:] not in a.tags
     return lambda a: tag in a.tags
 
-def parse_balances(chart, transactions, opts):
+def parse_periods(opts):
     brought_forward = None
     if opts['<period>']:
         periods = abo.period.parse_periods(opts['<period>'])
     else:
         periods = [(None, None)]
-    for p in periods:
-        if p[1] is None:
-            p[1] = datetime.date.today()
-    return [abo.balance.Balance(chart, transactions, abo.balance.Range(p[0], p[1] + datetime.timedelta(1))) for p in periods]
+    return [(p[0], p[1] if p[1] is not None else datetime.date.today()) for p in periods]
 
 def parse_range(words):
     periods = abo.period.parse_periods(words)
