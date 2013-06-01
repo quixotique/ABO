@@ -19,12 +19,12 @@ class Account(object):
     Accounts.
 
     >>> a = Account(label='a')
-    >>> b = Account(label='b', parent=a)
-    >>> c = Account(label='c', parent=b)
+    >>> b = Account(label='b', parent=a, tags=['x'])
+    >>> c = Account(label='c', parent=b, tags=['y'])
     >>> d = Account(label='d', parent=a, atype=AccountType.ProfitLoss)
-    >>> e = Account(label='e')
+    >>> e = Account(label='e', tags=['a', 'b'])
     >>> c
-    Account(label='c', parent=Account(label='b', parent=Account(label='a')))
+    Account(label='c', parent=Account(label='b', parent=Account(label='a'), tags=('x',)), tags=('x', 'y'))
     >>> unicode(c)
     u':a:b:c'
     >>> d
@@ -47,6 +47,14 @@ class Account(object):
     >>> a.atype
     >>> d.atype
     AccountType.ProfitLoss
+    >>> a.tags
+    set([])
+    >>> b.tags
+    set(['x'])
+    >>> c.tags == set(['x', 'y'])
+    True
+    >>> e.tags == set(['a', 'b'])
+    True
 
     Account objects can be pickled and unpickled using protocol 2:
 
@@ -62,19 +70,21 @@ class Account(object):
     _rxpat_label = r'[A-Za-z0-9_]+'
     _regex_label = re.compile('^' + _rxpat_label + '$')
 
-    def __init__(self, name=None, label=None, parent=None, atype=None):
+    def __init__(self, name=None, label=None, parent=None, atype=None, tags=()):
         assert parent is None or isinstance(parent, Account)
         assert name or label
         self.name = name and unicode(name)
         self.label = label and str(label)
         self.parent = parent
         self.atype = atype
+        self.tags = set(map(str, tags))
         self.wildchild = False
         self._hash = hash(self.label) ^ hash(self.name) ^ hash(self.parent) ^ hash(self.atype)
         self._childcount = 0
         assert self.name or self.label
         if self.parent:
-            assert parent.atype is None or self.atype == parent.atype
+            assert parent.atype is None or self.atype == parent.atype, 'self.atype=%r parent.atype=%r' % (self.atype, parent.atype)
+            self.tags |= parent.tags
             self.parent._childcount += 1
 
     def __unicode__(self):
@@ -93,6 +103,8 @@ class Account(object):
             r.append('parent=%r' % (self.parent,))
         if self.atype is not None:
             r.append('atype=%r' % (self.atype,))
+        if self.tags:
+            r.append('tags=%r' % (tuple(sorted(self.tags)),))
         return '%s(%s)' % (type(self).__name__, ', '.join(r))
 
     def __hash__(self):
@@ -116,11 +128,17 @@ class Account(object):
             return False
         return account == self or account.parent in self
 
+    def lineage(self):
+        acc = self
+        while acc:
+            yield acc
+            acc = acc.parent
+
     def is_substantial(self):
         return self._childcount == 0
 
-    def make_child(self, name=None, label=None, atype=None):
-        return type(self)(name=name, label=label, atype=atype, parent=self)
+    def make_child(self, name=None, label=None, tags=()):
+        return type(self)(name=name, label=label, atype=self.atype, tags=tags, parent=self)
 
     def shortname(self):
         return min(self.all_full_names(), key=len)
@@ -142,46 +160,46 @@ class Chart(object):
     >>> c1 = Chart.from_file(r'''#ABO-Legacy-Accounts
     ... exp "Expenses"
     ...   "Household"
-    ...     "Utilities"
+    ...     :nd "Utilities"
     ...       gas "Gas"
     ...       elec "Electricity"
     ...       water "Water usage"
-    ...     "Consumibles"
+    ...     :nd "Consumibles"
     ...       food "Food"
     ...     "Transport"
-    ...       "Car"
+    ...       :nd "Car"
     ...         car "Car rego, insurance, maintenance"
     ...         petrol "Petrol for cars"
     ...       taxi "Taxi journeys"
     ... inc "Income"
-    ...     "Salary"
-    ...     rent "Rent"
+    ...     :nd "Salary"
+    ...     rent :nd "Rent"
     ...     prizes "Prizes"
     ... cash_assets asset "Cash assets"
     ...   bank asset:cash "Bank account"
     ...   loose_change asset:cash "Loose change"
     ... ''')
-    >>> for a in c1.accounts(): print repr(unicode(a)), repr(a.label), repr(a.atype)
-    u':Cash assets' 'cash_assets' AccountType.AssetLiability
-    u':Cash assets:Bank account' 'bank' AccountType.AssetLiability
-    u':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability
-    u':Expenses' 'exp' AccountType.ProfitLoss
-    u':Expenses:Household' None AccountType.ProfitLoss
-    u':Expenses:Household:Consumibles' None AccountType.ProfitLoss
-    u':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss
-    u':Expenses:Household:Transport' None AccountType.ProfitLoss
-    u':Expenses:Household:Transport:Car' None AccountType.ProfitLoss
-    u':Expenses:Household:Transport:Car:Car rego, insurance, maintenance' 'car' AccountType.ProfitLoss
-    u':Expenses:Household:Transport:Car:Petrol for cars' 'petrol' AccountType.ProfitLoss
-    u':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss
-    u':Expenses:Household:Utilities' None AccountType.ProfitLoss
-    u':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss
-    u':Expenses:Household:Utilities:Gas' 'gas' AccountType.ProfitLoss
-    u':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss
-    u':Income' 'inc' AccountType.ProfitLoss
-    u':Income:Prizes' 'prizes' AccountType.ProfitLoss
-    u':Income:Rent' 'rent' AccountType.ProfitLoss
-    u':Income:Salary' None AccountType.ProfitLoss
+    >>> for a in c1.accounts(): print repr(unicode(a)), repr(a.label), repr(a.atype), repr(tuple(a.tags))
+    u':Cash assets' 'cash_assets' AccountType.AssetLiability ()
+    u':Cash assets:Bank account' 'bank' AccountType.AssetLiability ()
+    u':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability ()
+    u':Expenses' 'exp' AccountType.ProfitLoss ()
+    u':Expenses:Household' None AccountType.ProfitLoss ()
+    u':Expenses:Household:Consumibles' None AccountType.ProfitLoss ('nd',)
+    u':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss ('nd',)
+    u':Expenses:Household:Transport' None AccountType.ProfitLoss ()
+    u':Expenses:Household:Transport:Car' None AccountType.ProfitLoss ('nd',)
+    u':Expenses:Household:Transport:Car:Car rego, insurance, maintenance' 'car' AccountType.ProfitLoss ('nd',)
+    u':Expenses:Household:Transport:Car:Petrol for cars' 'petrol' AccountType.ProfitLoss ('nd',)
+    u':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss ()
+    u':Expenses:Household:Utilities' None AccountType.ProfitLoss ('nd',)
+    u':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss ('nd',)
+    u':Expenses:Household:Utilities:Gas' 'gas' AccountType.ProfitLoss ('nd',)
+    u':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss ('nd',)
+    u':Income' 'inc' AccountType.ProfitLoss ()
+    u':Income:Prizes' 'prizes' AccountType.ProfitLoss ()
+    u':Income:Rent' 'rent' AccountType.ProfitLoss ('nd',)
+    u':Income:Salary' None AccountType.ProfitLoss ('nd',)
 
     >>> c1.account('food') in c1.account('exp')
     True
@@ -317,6 +335,7 @@ class Chart(object):
             name = None
             if line.indent < len(stack):
                 stack = stack[:line.indent]
+            tags = set()
             if is_legacy:
                 m = self._regex_legacy_line.match(line)
                 if not m:
@@ -328,6 +347,8 @@ class Chart(object):
                     atype = AccountType.Equity if qual == 'equity' else AccountType.AssetLiability
                 else:
                     atype = AccountType.ProfitLoss
+                    if qual:
+                        tags.add(qual)
                 name = m.group('name1') or m.group('name2')
             else:
                 label = None
@@ -341,23 +362,22 @@ class Chart(object):
                     if m:
                         label = str(m.group(1))
                         line = line[:m.start(0)] + line[m.end(0):]
-                    m = self._regex_type.search(line)
-                    if m:
+                    for m in self._regex_type.finditer(line):
                         try:
                             atype = {'AL': AccountType.AssetLiability,
                                     'PL': AccountType.ProfitLoss,
                                     'EQ': AccountType.Equity}[m.group(1)]
                         except KeyError:
-                            raise abo.text.LineError('invalid account type %r' % (m.group(1),), line=line)
+                            tags.add(m.group(1))
                         line = line[:m.start(0)] + line[m.end(0):]
-                    elif stack:
+                    if atype is None and stack:
                         atype = stack[-1].atype
                     name = ' '.join(line.split())
                     if not name and not label:
                         raise abo.text.LineError('missing name or label', line=line)
             assert line.indent == len(stack)
             if name:
-                account = Account(name=name, label=label, parent= (stack[-1] if stack else None), atype=atype)
+                account = Account(name=name, label=label, parent= (stack[-1] if stack else None), atype=atype, tags=tags)
                 try:
                     self._add_account(account)
                 except KeyError, e:

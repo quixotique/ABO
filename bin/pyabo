@@ -8,7 +8,7 @@
     pyabo acc [-fwW] [--width=COLUMNS] [--wide] <account> [<period>...]
     pyabo journal [-fwW] [--width=COLUMNS] [<period>...]
     pyabo balance [-faW] [--width=COLUMNS] [<when>...]
-    pyabo profloss [-faW] [--width=COLUMNS] [<period>...]
+    pyabo profloss [-faW] [--width=COLUMNS] [--tag=TAG] [<period>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
@@ -16,6 +16,7 @@ Options:
     -h --help               Show this message
     --version               Show version and exit
     -f --force              Force re-population of transaction cache
+    --tag=TAG               Only show tagged accounts
     -w --wrap               Wrap long lines
     --width=COLUMNS         Maximum line length (default from 'COLUMNS' env var)
     -W --wide               Wide output, no maximum width
@@ -28,6 +29,7 @@ import codecs
 import os.path
 import textwrap
 import datetime
+from itertools import chain
 
 try:
     import docopt
@@ -249,12 +251,16 @@ def cmd_profloss(config, opts):
     chart = get_chart(config, opts)
     balances = filter_periods(chart, get_transactions(chart, config, opts), opts)
     accounts = set()
+    acc_pred = parse_account_predicate(opts)
     for balance in balances:
         for account in balance.accounts:
-            if account.atype in (None, abo.account.AccountType.ProfitLoss) and (opts['--all'] or balance.balance(account)):
-                accounts.add(account)
+            if (    account.atype == abo.account.AccountType.ProfitLoss
+                and (opts['--all'] or balance.balance(account))
+                and acc_pred(account)
+            ):
+                accounts.update(account.lineage())
     bw = config.balance_column_width()
-    aw = max(len(unicode(a)) for a in accounts)
+    aw = max(chain([10], (len(unicode(a)) for a in accounts)))
     width = (bw + 1) * len(balances) +  1 + aw
     if config.output_width() and width > config.output_width():
         aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
@@ -299,6 +305,14 @@ def cmd_balance(config, opts):
         if bal or opts['--all']:
             yield fmt % (config.format_money(bal), unicode(account))
     yield fmt % ('-' * bw, '-' * aw)
+
+def parse_account_predicate(opts):
+    tag = opts['--tag']
+    if not tag:
+        return lambda a: True
+    if tag.startswith('!'):
+        return lambda a: tag[1:] not in a.tags
+    return lambda a: tag in a.tags
 
 def parse_ranges(words):
     periods = abo.period.parse_periods(words)
