@@ -130,7 +130,7 @@ def cmd_journal(config, opts):
     yield fmt % ('Date', 'Particulars', 'Amount', 'DC', 'Account')
     yield fmt % ('-' * dw, '-' * pw, '-' * bw, '--', '-' * aw)
     def entry_fields(e):
-        return (config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), chart.account(e.account).shortname())
+        return (config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), chart[e.account].shortname())
     if bf:
         for e in bf.entries():
             yield fmt % (('',
@@ -196,7 +196,7 @@ def shell_quote(text):
 
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
-    account = chart.account(opts['<account>'])
+    account = chart[opts['<account>']]
     range, bf, transactions = filter_period(chart, get_transactions(chart, config, opts), opts)
     dw = 11
     mw = config.money_column_width()
@@ -218,7 +218,7 @@ def cmd_acc(config, opts):
     totcr = 0
     if bf:
         for e in bf.entries():
-            if chart.account(e.account) in account:
+            if chart[e.account] in account:
                 balance += e.amount
                 yield fmt % ('', 'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),
                         config.format_money(-e.amount) if e.amount < 0 else '',
@@ -226,7 +226,7 @@ def cmd_acc(config, opts):
                         config.format_money(balance))
     for t in transactions:
         for e in t.entries:
-            if chart.account(e.account) in account:
+            if chart[e.account] in account:
                 balance += e.amount
                 if e.amount < 0:
                     totdb += e.amount
@@ -257,7 +257,7 @@ def cmd_profloss(config, opts):
     all_accounts = set()
     for pred in ((lambda a, c, m: m > 0), (lambda a, c, m: m < 0)):
         bpred = lambda a, c, m: a.atype == abo.account.AccountType.ProfitLoss and (opts['--all'] or m) and acc_pred(a) and pred(a, c, m)
-        balances = [abo.balance.Balance(chart, transactions, abo.balance.Range(p[0], p[1] + datetime.timedelta(1)), bpred) for p in periods]
+        balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1] + datetime.timedelta(1)), chart=chart, pred=bpred) for p in periods]
         accounts = reduce(lambda x, y: x | y, (b.accounts for b in balances))
         sections.append(struct(balances=balances, accounts=accounts))
         all_accounts.update(accounts)
@@ -336,7 +336,7 @@ def filter_period(chart, transactions, opts):
     if opts['<period>']:
         range = parse_range(opts['<period>'])
         if range.start is not None:
-            brought_forward = abo.balance.Balance(chart, transactions, abo.balance.Range(None, range.start))
+            brought_forward = abo.balance.Balance(transactions, abo.balance.Range(None, range.start), chart=chart)
         transactions = [t for t in transactions if t.date in range]
     else:
         range = abo.balance.Range(None, None)
@@ -345,7 +345,7 @@ def filter_period(chart, transactions, opts):
 def filter_at(chart, transactions, opts):
     when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
     range = abo.balance.Range(None, when + datetime.timedelta(1))
-    balance = abo.balance.Balance(chart, transactions, range)
+    balance = abo.balance.Balance(transactions, range, chart=chart)
     transactions = [t for t in transactions if t.date in range]
     return when, balance, transactions
 

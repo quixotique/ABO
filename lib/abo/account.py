@@ -128,12 +128,6 @@ class Account(object):
             return False
         return account == self or account.parent in self
 
-    def lineage(self):
-        acc = self
-        while acc:
-            yield acc
-            acc = acc.parent
-
     def is_substantial(self):
         return self._childcount == 0
 
@@ -201,9 +195,9 @@ class Chart(object):
     u':Income:Rent' 'rent' AccountType.ProfitLoss ('nd',)
     u':Income:Salary' None AccountType.ProfitLoss ('nd',)
 
-    >>> c1.account('food') in c1.account('exp')
+    >>> c1['food'] in c1['exp']
     True
-    >>> c1.account('food') in c1.account('inc')
+    >>> c1['food'] in c1['inc']
     False
 
     >>> c2 = Chart.from_file(r'''
@@ -244,11 +238,11 @@ class Chart(object):
     u':People:Adam' None None False
     u':People:Eve' None None False
     u':Things' None None False
-    >>> c3.account(u':People')
+    >>> c3[u':People']
     Account(name=u'People')
-    >>> c3.account(u':People:Somebody')
+    >>> c3[u':People:Somebody']
     Account(name=u'Somebody', parent=Account(name=u'People'))
-    >>> c3.account(u':Things:Somebody')
+    >>> c3[u':Things:Somebody']
     Traceback (most recent call last):
     KeyError: "unknown account u':Things:Somebody'"
 
@@ -286,7 +280,10 @@ class Chart(object):
             self._index[name] = account
         return True
 
-    def account(self, key):
+    def __len__(self):
+        return len(self._index)
+
+    def __getitem__(self, key):
         assert key
         try:
             return self._index[key]

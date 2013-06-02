@@ -42,7 +42,7 @@ import abo.transaction
 
 class Balance(object):
 
-    def __init__(self, chart, transactions, date_range=None, pred=lambda a, c, m: True):
+    def __init__(self, transactions, date_range=None, chart=None, pred=lambda a, c, m: True):
         self.date_range = date_range
         self.first_date = None
         self.last_date = None
@@ -55,7 +55,7 @@ class Balance(object):
                     self.last_date = t.date
                 for e in t.entries:
                     cdate = None if e.cdate is None or self.date_range is None or e.cdate in self.date_range else e.cdate
-                    acc = chart.account(e.account)
+                    acc = chart[e.account] if chart else e.account
                     assert acc is not None
                     balances[acc][cdate] += e.amount
         for acc, cdates in balances.items():
@@ -65,11 +65,10 @@ class Balance(object):
             if not cdates:
                 del balances[acc]
         self._balances = defaultdict(lambda: defaultdict(lambda: 0))
-        for acc, cdates in balances.iteritems():
+        for account, cdates in balances.iteritems():
             for cdate, amount in cdates.iteritems():
-                while acc:
+                for acc in iter_lineage(account):
                     self._balances[acc][cdate] += amount
-                    acc = getattr(acc, 'parent', None)
         self.accounts = tuple(sorted(self._balances, key=unicode))
 
     def balance(self, account):
@@ -89,6 +88,11 @@ class Balance(object):
         without_cdate.sort(key= lambda e: (e.amount, e.account))
         with_cdate.sort(key= lambda e: (e.cdate, e.amount, e.account))
         return tuple(without_cdate + with_cdate)
+
+def iter_lineage(account):
+    while account:
+        yield account
+        account = getattr(account, 'parent', None)
 
 class Range(object):
 
