@@ -241,7 +241,7 @@ class Journal(object):
                     raise ParseException(line, 'missing amount')
                 noamt = entry
             try:
-                entry['account'] = self.chart.account(acc) if self.chart else abo.account.Account(name=acc)
+                entry['account'] = self.chart[acc] if self.chart else abo.account.Account(name=acc)
             except (ValueError, KeyError), e:
                 raise ParseException(line, e)
             if not entry['account'].is_substantial():
@@ -423,7 +423,7 @@ class Journal(object):
 
     def _parse_account_label(self, line):
         try:
-            return self.chart.account(unicode(line.text)) if self.chart else abo.account.Account(label=str(line.text))
+            return self.chart[unicode(line.text)] if self.chart else abo.account.Account(label=str(line.text))
         except (ValueError, KeyError), e:
             raise ParseException(line, e)
 
@@ -438,7 +438,7 @@ class Journal(object):
         word, text = self._popword(unicode(line.text))
         #print 'line=%r word=%r text=%r' % (line, word, text)
         try:
-            entry['account'] = self.chart.account(word) if self.chart else abo.account.Account(label=word)
+            entry['account'] = self.chart[word] if self.chart else abo.account.Account(label=word)
         except (KeyError, ValueError), e:
             raise ParseException(line, e)
         if not entry['account'].is_substantial():
