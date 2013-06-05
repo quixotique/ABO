@@ -34,6 +34,9 @@ import re
 import datetime
 import abo.base
 
+def sign(number):
+    return -1 if number < 0 else 1 if number > 0 else 0
+
 class Entry(abo.base.Base):
     """An Entry is an immutable object reprenting a single debit or credit to a
     single account.
@@ -75,6 +78,9 @@ class Entry(abo.base.Base):
             return self
         return Entry(transaction, account=self.account, amount=self.amount, detail=self.detail)
 
+    def sign(self):
+        return sign(self.amount)
+
     def description(self):
         """Return the full description for this Entry, by appending its detail
         string to the description string of its Transaction, separated by a
@@ -82,6 +88,65 @@ class Entry(abo.base.Base):
         """
         return ', '.join([s for s in (self.transaction.description(), self.detail) if s])
 
+    def replace(self, amount=None):
+        """Return a copy of this Entry with new attributes and no transaction.
+        """
+        return type(self)(None, account=self.account, amount= self.amount if amount is None else amount, detail=self.detail)
+
+    def split(self, amount):
+        """Split this Entry's transaction into two transactions by splitting
+        this Entry into two Entries and dividing all remaining Entries
+        proportionally between the two transactions.
+        >>> t1 = Transaction(date=1, who="Someone", what="something",
+        ...         entries=({'account':'a1', 'amount':1476, 'detail':'else'},
+        ...                  {'account':'a2', 'amount':500, 'detail':'new'},
+        ...                  {'account':'a3', 'amount':-1020},
+        ...                  {'account':'a4', 'amount':-956}))
+        >>> t1.entries[0].split(-1000) #doctest: +NORMALIZE_WHITESPACE
+        (Transaction(date=1, who='Someone', what='something', \
+                     entries=(Entry(account=u'a3', amount=-1000),
+                              Entry(account=u'a2', amount=253, detail=u'new'),
+                              Entry(account=u'a1', amount=747, detail=u'else'))),
+         Transaction(date=1, who='Someone', what='something', \
+                     entries=(Entry(account=u'a4', amount=-956),
+                              Entry(account=u'a3', amount=-20),
+                              Entry(account=u'a2', amount=247, detail=u'new'),
+                              Entry(account=u'a1', amount=729, detail=u'else'))))
+        """
+        assert abs(amount) > 0
+        assert abs(amount) < abs(self.amount)
+        assert sign(amount) == self.sign()
+        assert self.transaction is not None
+        orig_entries = set(self.transaction.entries)
+        assert self in orig_entries
+        entries1 = [self.replace(amount= amount)]
+        entries2 = [self.replace(amount= self.amount - amount)]
+        orig_entries.remove(self)
+        for e in list(orig_entries):
+            if e.sign() == self.sign():
+                entries2.append(e.replace())
+                orig_entries.remove(e)
+        assert orig_entries
+        prop = float(abs(amount)) / float(self.transaction.amount())
+        orig_entries = sorted(orig_entries, key=lambda e: abs(e.amount))
+        total = 0
+        while orig_entries:
+            e = orig_entries.pop(0)
+            assert e.sign() != self.sign()
+            if orig_entries:
+                amt = type(e.amount)(prop * e.amount)
+                total += amt
+                assert abs(total) < abs(amount)
+            else:
+                amt = -amount - total
+            assert type(amt) is type(e.amount), 'type(amt)=%r type(e.amount)=%r' % (type(amt), type(e.amount))
+            if amt:
+                entries1.append(e.replace(amount= amt))
+            if amt != e.amount:
+                entries2.append(e.replace(amount= e.amount - amt))
+        t1 = self.transaction.replace(entries= entries1)
+        t2 = self.transaction.replace(entries= entries2)
+        return t1, t2
 
 class Transaction(abo.base.Base):
     """A Transaction is an immutable object that has a date, an optional
@@ -134,6 +199,11 @@ class Transaction(abo.base.Base):
         strings if needed.
         """
         return '; '.join([s for s in (self.who, self.what) if s])
+
+    def replace(self, entries=None):
+        """Return a copy of this Transaction with new attributes.
+        """
+        return type(self)(date=self.date, who=self.who, what=self.what, entries= self.entries if entries is None else entries)
 
     _regex_expand_field = re.compile(r'%{(\w+)([+-]\d+)?}')
 
@@ -189,6 +259,15 @@ __test__ = {
     False
     >>> t.entries[0].id == t.entries[1].id
     False
+""",
+'replace':"""
+    >>> t = Transaction(date=1, who="Someone", what="something", \\
+    ...         entries=({'account':'a1', 'amount':-14.56, 'detail':'else'}, \\
+    ...                  {'account':'a2', 'amount':14.56, 'cdate': 7}))
+    >>> t.entries[0].replace(amount=-22.01)
+    Entry(account=u'a1', amount=-22.01, detail=u'else')
+    >>> t.entries[0]
+    Entry(account=u'a1', amount=-14.56, detail=u'else')
 """,
 'errors':"""
     >>> t = Transaction(who="Someone", what="something", \\

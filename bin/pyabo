@@ -309,6 +309,26 @@ def cmd_balance(config, opts):
             yield fmt % (config.format_money(bal), unicode(account))
     yield fmt % ('-' * bw, '-' * aw)
 
+def remove_account(chart, pred, transactions):
+    queues = defaultdict(list)
+    for t in transactions:
+        for e in t.entries:
+            acc = chart[e.account]
+            if pred(acc):
+                q = queues[acc]
+                amount = e.amount
+                while amount:
+                    if q and ((q[0].amount < 0 and amount > 0) or (q[0].amount > 0 and amount < 0)):
+                        if abs(q[0].amount) > abs(amount):
+                            q[0] = q[0].replace(amount=q[0].amount + amount)
+                            amount = 0
+                        else:
+                            amount -= q[0].amount
+                            q.pop(0)
+                    else:
+                        q.append(e.replace(amount=amount))
+
+
 def parse_account_predicate(opts):
     tag = opts['--tag']
     if not tag:
