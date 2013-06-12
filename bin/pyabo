@@ -3,7 +3,7 @@
 # Copyright 2013 Andrew Bettison
 
 '''Usage:
-    pyabo chart [-f] [AL|PL|EQ]
+    pyabo chart [-fv] [AL|PL|EQ]
     pyabo index [-f]
     pyabo acc [-fwW] [--width=COLUMNS] [--wide] <account> [<period>...]
     pyabo journal [-fwW] [--width=COLUMNS] [<period>...]
@@ -21,6 +21,7 @@ Options:
     --width=COLUMNS         Maximum line length (default from 'COLUMNS' env var)
     -W --wide               Wide output, no maximum width
     -a --all                Show all accounts
+    -v --verbose            Show more information
 '''
 
 import sys
@@ -149,19 +150,24 @@ def cmd_journal(config, opts):
 
 def cmd_chart(config, opts):
     typesel = (opts['AL'] or '').upper()
-    if typesel == 'AL':
-        pred = lambda a: a.atype == abo.account.AccountType.AssetLiability
-    elif typesel == 'PL':
-        pred = lambda a: a.atype == abo.account.AccountType.ProfitLoss
-    elif typesel == 'EQ':
-        pred = lambda a: a.atype == abo.account.AccountType.Equity
-    elif typesel == '':
+    if typesel == '':
         pred = lambda a: True
     else:
-        raise InvalidArg('invalid argument: %r' % (opts['AL'],))
+        try:
+            atype = abo.account.tag_to_atype[typesel]
+            pred = lambda a: a.atype == atype
+        except KeyError:
+            raise InvalidArg('invalid argument: %r' % (typesel,))
     for account in get_chart(config, opts).accounts():
         if pred(account):
-            yield unicode(account)
+            line = [unicode(account)]
+            if opts['--verbose']:
+                if account.label:
+                    line.append('[%s]' % (account.label,))
+                if account.atype and not (account.parent and account.parent.atype == account.atype):
+                    line.append('=%s' % (abo.account.atype_to_tag[account.atype]))
+
+            yield ' '.join(line)
 
 def cmd_index(config, opts):
     chart = get_chart(config, opts)

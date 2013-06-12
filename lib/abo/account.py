@@ -13,6 +13,14 @@ import abo.cache
 class AccountType(enum('AssetLiability', 'ProfitLoss', 'Equity')):
     pass
 
+tag_to_atype = {
+    'AL': AccountType.AssetLiability,
+    'PL': AccountType.ProfitLoss,
+    'EQ': AccountType.Equity,
+}
+
+atype_to_tag = dict(zip(tag_to_atype.values(), tag_to_atype.keys()))
+
 class Account(object):
 
     r"""Account objects are related hierarchically with any number of root
@@ -361,9 +369,7 @@ class Chart(object):
                         line = line[:m.start(0)] + line[m.end(0):]
                     for m in self._regex_type.finditer(line):
                         try:
-                            atype = {'AL': AccountType.AssetLiability,
-                                    'PL': AccountType.ProfitLoss,
-                                    'EQ': AccountType.Equity}[m.group(1)]
+                            atype = tag_to_atype[m.group(1)]
                         except KeyError:
                             tags.add(m.group(1))
                         line = line[:m.start(0)] + line[m.end(0):]
