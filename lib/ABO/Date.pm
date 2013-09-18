@@ -10,7 +10,7 @@ use Carp;
 
 use overload (
 	'bool'	=> "as_bool",
-	'+0'	=> "as_number",
+	'0+'	=> "as_number",
 	'""'	=> "as_string",
 	'~'	=> "as_number",
 	'neg'	=> "_o_negate",
@@ -80,11 +80,11 @@ sub implementor
 
     no strict 'refs';
     # check we actually have one for the lang:
-    unless (defined @{"${ic}::ISA"}) {
+    unless (@{"${ic}::ISA"}) {
         # Try to load it
         eval "require $ic";
         die $@ if $@ && $@ !~ /Can\'t locate.*in \@INC/o;
-        return unless defined @{"${ic}::ISA"};
+        return unless @{"${ic}::ISA"};
     }
 
     $ic->_init_implementor($lang);

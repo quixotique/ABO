@@ -12,7 +12,7 @@ use Carp qw(carp);
 
 use overload (
 	'bool'	=> "as_bool",
-	'+0'	=> "as_number",
+	'0+'	=> "as_number",
 	'""'	=> "as_string",
 	'neg'	=> "negate",
 	'+'	=> "add",
@@ -68,11 +68,11 @@ sub implementor
 
     no strict 'refs';
     # check we actually have one for the code:
-    unless (defined @{"${ic}::ISA"}) {
+    unless (@{"${ic}::ISA"}) {
         # Try to load it
         eval "require $ic";
         die $@ if $@ && $@ !~ /Can\'t locate.*in \@INC/o;
-        return unless defined @{"${ic}::ISA"};
+        return unless @{"${ic}::ISA"};
     }
 
     $ic->_init_implementor($code);
