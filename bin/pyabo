@@ -70,13 +70,15 @@ def main():
         func = cmd_compa
     else:
         assert False, 'unknown command'
-    config = abo.config.Config().load(opts)
+    try:
+        config = abo.config.Config().load(opts)
+    except abo.config.ConfigException, e:
+        fatal(unicode(e).encode(output_encoding))
     try:
         for line in func(config, opts):
             print line.encode(output_encoding)
     except InvalidArg, e:
-        print unicode(e).encode(output_encoding)
-        sys.exit(1)
+        fatal(unicode(e).encode(output_encoding))
     sys.exit(0)
 
 _chart_cache = None
@@ -387,6 +389,10 @@ def range_line(range):
 
 class InvalidArg(ValueError):
     pass
+
+def fatal(message, status=1):
+    print >>sys.stderr, "%s: %s" % (os.path.basename(sys.argv[0]), message)
+    sys.exit(status)
 
 if __name__ == '__main__':
     main()
