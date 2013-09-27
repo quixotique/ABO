@@ -39,7 +39,7 @@ class Config(object):
             trydir = os.path.dirname(trydir)
         raise ConfigException('no configuration file')
 
-    currency = abo.money.Currencies.AUD
+    currency = abo.money.Currency.AUD
 
     def parse_money(self, text):
         return self.currency.parse_amount_money(text)

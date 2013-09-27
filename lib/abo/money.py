@@ -15,9 +15,6 @@ class RegistryError(Exception):
 class CurrencyMismatch(Exception):
     pass
 
-class Currencies(object):
-    pass
-
 class Currency(object):
 
     r"""
@@ -25,13 +22,11 @@ class Currency(object):
 
         >>> import pickle
         >>> import abo.money
-        >>> pickle.loads(pickle.dumps(Currencies.AUD, 2))
-        Currencies.AUD
-        >>> pickle.loads(pickle.dumps(Currencies.AUD, 2)) is Currencies.AUD
+        >>> pickle.loads(pickle.dumps(Currency.AUD, 2))
+        Currency.AUD
+        >>> pickle.loads(pickle.dumps(Currency.AUD, 2)) is Currency.AUD
         True
     """
-
-    _registry = Currencies
 
     def __new__(cls, code, local_frac_digits=0, local_symbol=None, local_symbol_precedes=False, local_symbol_separated_by_space=False):
         try:
@@ -41,7 +36,7 @@ class Currency(object):
         if not currency:
             raise ValueError('invalid ISO 4217 currency code: %r' % (code,))
         code = str(code)
-        singleton = getattr(cls._registry, code, None)
+        singleton = getattr(cls, code, None)
         if singleton:
             assert singleton.code == code
             if (    singleton.local_frac_digits == local_frac_digits
@@ -59,6 +54,9 @@ class Currency(object):
                 prec= 15,
                 rounding= decimal.ROUND_HALF_UP,
                 traps= (decimal.DivisionByZero, decimal.InvalidOperation, decimal.Inexact))
+        self.float_context = self.decimal_context.copy()
+        self.float_context.rounding = decimal.ROUND_DOWN
+        self.float_context.traps[decimal.Inexact] = False
         self.zero = decimal.Decimal(10, context=self.decimal_context) ** -self.local_frac_digits
         return self
 
@@ -78,22 +76,22 @@ class Currency(object):
         except (AttributeError, AssertionError):
             raise pickle.UnpicklingError(
                     '%s.enum does not support this protocol' % enum.__module__)
-        assert self is Currencies.__dict__.get(self.code)
+        assert self is Currency.__dict__.get(self.code)
 
     def register(self, registry=None):
         r'''Register this Currency object in the registry, to make it available globally.
         >>> Currency('USD')
         Currency('USD')
         >>> Currency('USD').register()
-        Currencies.USD
+        Currency.USD
         >>> Currency('USD')
-        Currencies.USD
-        >>> del Currencies.USD
+        Currency.USD
+        >>> del Currency.USD
         >>> Currency('USD')
         Currency('USD')
         '''
         if registry is None:
-            registry = self._registry
+            registry = self.__class__
         singleton = getattr(registry, self.code, None)
         if not singleton:
             setattr(registry, self.code, self)
@@ -121,9 +119,9 @@ class Currency(object):
         return self.code
 
     def __repr__(self):
-        singleton = getattr(self._registry, self.code, None)
+        singleton = getattr(self.__class__, self.code, None)
         if singleton is self:
-            return '%s.%s' % (self._registry.__name__, self.code)
+            return '%s.%s' % (self.__class__.__name__, self.code)
         r = []
         for attr in ('local_frac_digits', 'local_symbol', 'local_symbol_precedes', 'local_symbol_separated_by_space'):
             value = getattr(self, attr)
@@ -162,16 +160,16 @@ class Currency(object):
         r'''Extract an ISO 4217 currency code prefix or suffix from the given text,
         and return the corresponding Currency object.
         >>> Currency.extract_currency('AUD 27.30')
-        (Currencies.AUD, '27.30')
+        (Currency.AUD, '27.30')
         >>> Currency.extract_currency('1AUD')
-        (Currencies.AUD, '1')
+        (Currency.AUD, '1')
         >>> Currency.extract_currency('USD 18.45')
         (None, 'USD 18.45')
         '''
         code, rest = cls.extract_code(text)
         if code:
             try:
-                return getattr(cls._registry, code), rest
+                return getattr(cls, code), rest
             except AttributeError:
                 pass
         return None, text
@@ -185,20 +183,20 @@ class Currency(object):
         Traceback (most recent call last):
         ValueError: missing currency code in '123'
         >>> Currency.parse_amount_currency('AUD 123')
-        (Currencies.AUD, Decimal('123'))
+        (Currency.AUD, Decimal('123'))
         >>> Currency.parse_amount_currency('AUD $-4,567')
-        (Currencies.AUD, Decimal('-4567'))
+        (Currency.AUD, Decimal('-4567'))
         >>> Currency.parse_amount_currency('AUD -$4,567')
-        (Currencies.AUD, Decimal('-4567'))
+        (Currency.AUD, Decimal('-4567'))
         >>> Currency.parse_amount_currency('AUD -$-4,567')
         Traceback (most recent call last):
         ValueError: invalid amount: '-$-4,567'
         >>> Currency.parse_amount_currency('AUD $-4,567.8')
-        (Currencies.AUD, Decimal('-4567.8'))
+        (Currency.AUD, Decimal('-4567.8'))
         >>> Currency.parse_amount_currency('AUD $+34,567.891')
-        (Currencies.AUD, Decimal('34567.891'))
+        (Currency.AUD, Decimal('34567.891'))
         >>> Currency.parse_amount_currency('123AUD')
-        (Currencies.AUD, Decimal('123'))
+        (Currency.AUD, Decimal('123'))
         >>> Currency.parse_amount_currency('AUD 1.2.3')
         Traceback (most recent call last):
         ValueError: invalid amount: '1.2.3'
@@ -212,7 +210,7 @@ class Currency(object):
                 raise ValueError('missing currency code in %r' % (text,))
             currency = default_currency
         else:
-            currency = getattr(cls._registry, code, None)
+            currency = getattr(cls, code, None)
             if currency is None:
                 raise ValueError('unknown currency %r in %r' % (code, text,))
         m = cls._amount_regex.search(amount)
@@ -238,35 +236,35 @@ class Currency(object):
 
     def parse_amount(self, text):
         r'''Parse given text as a decimal amount of this currency.
-        >>> Currencies.AUD.parse_amount('123')
+        >>> Currency.AUD.parse_amount('123')
         Decimal('123.00')
-        >>> Currencies.AUD.parse_amount('AUD 123')
+        >>> Currency.AUD.parse_amount('AUD 123')
         Decimal('123.00')
-        >>> Currencies.AUD.parse_amount('123 AUD')
+        >>> Currency.AUD.parse_amount('123 AUD')
         Decimal('123.00')
-        >>> Currencies.AUD.parse_amount('70.45')
+        >>> Currency.AUD.parse_amount('70.45')
         Decimal('70.45')
-        >>> Currencies.AUD.parse_amount('-$1,234,567.89')
+        >>> Currency.AUD.parse_amount('-$1,234,567.89')
         Decimal('-1234567.89')
-        >>> Currencies.AUD.parse_amount('+.05')
+        >>> Currency.AUD.parse_amount('+.05')
         Decimal('0.05')
-        >>> Currencies.AUD.parse_amount('123,456,789.10')
+        >>> Currency.AUD.parse_amount('123,456,789.10')
         Decimal('123456789.10')
-        >>> Currencies.AUD.parse_amount('AUD $-4,567.8')
+        >>> Currency.AUD.parse_amount('AUD $-4,567.8')
         Traceback (most recent call last):
-        ValueError: invalid literal for Currencies.AUD: 'AUD $-4,567.8'
-        >>> Currencies.AUD.parse_amount('AUD $-4,567.80')
+        ValueError: invalid literal for Currency.AUD: 'AUD $-4,567.8'
+        >>> Currency.AUD.parse_amount('AUD $-4,567.80')
         Decimal('-4567.80')
-        >>> Currencies.AUD.parse_amount('70.456')
+        >>> Currency.AUD.parse_amount('70.456')
         Traceback (most recent call last):
-        ValueError: invalid literal for Currencies.AUD: '70.456'
-        >>> Currencies.AUD.parse_amount('EUR 123')
-        Traceback (most recent call last):
-        ValueError: currency code of 'EUR 123' should be 'AUD'
-        >>> Currencies.AUD.parse_amount('EUR 123')
+        ValueError: invalid literal for Currency.AUD: '70.456'
+        >>> Currency.AUD.parse_amount('EUR 123')
         Traceback (most recent call last):
         ValueError: currency code of 'EUR 123' should be 'AUD'
-        >>> Currencies.AUD.parse_amount('AUD 1.2.3')
+        >>> Currency.AUD.parse_amount('EUR 123')
+        Traceback (most recent call last):
+        ValueError: currency code of 'EUR 123' should be 'AUD'
+        >>> Currency.AUD.parse_amount('AUD 1.2.3')
         Traceback (most recent call last):
         ValueError: invalid amount: '1.2.3'
         '''
@@ -286,28 +284,37 @@ class Currency(object):
         number of decimal places for this currency.  Raise ValueError if the
         given amount would have to be rounded (ie, has too many decimal
         places).
-        >>> Currencies.AUD.quantize(1)
+        >>> Currency.AUD.quantize(1)
         Decimal('1.00')
+        >>> Currency.AUD.quantize(1.01)
+        Decimal('1.01')
+        >>> Currency.AUD.quantize(1.011)
+        Traceback (most recent call last):
+        ValueError: invalid literal for Currency.AUD: 1.011
         '''
         try:
-            return self.decimal_context.quantize(amount, self.zero)
+            if isinstance(amount, float):
+                tmp = self.float_context.create_decimal_from_float(amount)
+            else:
+                tmp = amount
+            return self.decimal_context.quantize(tmp, self.zero)
         except decimal.Inexact:
             raise ValueError('invalid literal for %r: %r' % (self, amount))
 
     def format(self, amount, symbol=True, thousands=False, positive_sign='', positive_prefix='', positive_suffix='', negative_sign='-', negative_prefix='', negative_suffix=''):
         ur'''Return a string representation of the Decimal amount with the
         currency symbol as prefix or suffix.
-        >>> Currencies.AUD.format(1)
+        >>> Currency.AUD.format(1)
         u'$1.00'
-        >>> Currencies.AUD.format(-1)
+        >>> Currency.AUD.format(-1)
         u'$-1.00'
-        >>> Currencies.AUD.format(-100, negative_prefix='(', negative_sign='', negative_suffix=')')
+        >>> Currency.AUD.format(-100, negative_prefix='(', negative_sign='', negative_suffix=')')
         u'($100.00)'
-        >>> Currencies.AUD.format(10000000)
+        >>> Currency.AUD.format(10000000)
         u'$10000000.00'
-        >>> Currencies.AUD.format(10000000, thousands=True)
+        >>> Currency.AUD.format(10000000, thousands=True)
         u'$10,000,000.00'
-        >>> Currencies.EUR.format(1) == u'1.00 €'
+        >>> Currency.EUR.format(1) == u'1.00 €'
         True
         '''
         amt = self.quantize(amount)
@@ -322,8 +329,8 @@ class Currency(object):
 
     def parse_amount_money(self, text):
         r'''Parse given text into a Money object with this currency.
-        >>> Currencies.EUR.parse_amount_money('60001')
-        Money(60001.00, Currencies.EUR)
+        >>> Currency.EUR.parse_amount_money('60001')
+        Money.EUR(60001.00)
         '''
         return Money.from_text(text, currency=self)
 
@@ -331,38 +338,81 @@ class Currency(object):
         r'''Convert the given number into a Money object for this currency.
         Raise ValueError if the given amount would have to be rounded (ie, has
         too many decimal places.
-        >>> Currencies.AUD.money(1)
-        Money(1.00, Currencies.AUD)
+        >>> Currency.AUD.money(1)
+        Money.AUD(1.00)
         '''
-        return Money(amount, self)
+        return self.money_factory(amount)
 
 class Money(object):
 
     r'''Represents an exact amount (not fractional) of a given single currency.
-    >>> Money(140, Currencies.AUD)
-    Money(140.00, Currencies.AUD)
+    >>> class AUD(Money):
+    ...    currency = Currency.AUD
+    >>> AUD(140)
+    AUD(140.00)
     '''
 
-    def __init__(self, amount, currency):
-        self.currency = currency
-        self.amount = currency.quantize(amount)
+    def __init__(self, amount):
+        assert isinstance(self.currency, Currency)
+        self.amount = self.currency.quantize(amount)
+
+    @classmethod
+    def register(cls, currency=None):
+        r'''Create a subclass of Money which is bound to a specific currency.
+        >>> Money.register(Currency('HKD', 2))
+        <class '__main__.HKD'>
+        >>> Money.HKD(-6.99)
+        Money.HKD(-6.99)
+        >>> class Vatu(Money):
+        ...    currency = Currency('VUV', 0, 'Vt', True, True)
+        >>> Vatu(1200)
+        Vatu(1200)
+        >>> Vatu.register()
+        <class '__main__.Vatu'>
+        >>> Vatu(1200)
+        Money.VUV(1200)
+        '''
+        if currency is not None:
+            assert getattr(cls, 'currency', None) is None
+            singleton = getattr(Money, currency.code, None)
+            if singleton:
+                assert singleton.currency is currency
+                assert currency.money_factory is singleton
+                return singleton
+            singleton = type(currency.code, (Money,), dict(currency=currency))
+        else:
+            assert cls is not Money
+            assert issubclass(cls, Money)
+            currency = cls.currency
+            singleton = getattr(Money, currency.code, None)
+            if singleton:
+                assert singleton is cls
+                assert singleton.currency is currency
+                assert currency.money_factory is singleton
+                return singleton
+            singleton = cls
+        assert getattr(currency, 'money_factory', None) is None
+        assert currency.code not in globals()
+        setattr(Money, currency.code, singleton)
+        globals()[currency.code] = singleton
+        currency.money_factory = singleton
+        return singleton
 
     @classmethod
     def from_text(cls, text, currency=None):
         r'''Parse a text string into a Money object.
         >>> Money.from_text('8071.51 AUD')
-        Money(8071.51, Currencies.AUD)
+        Money.AUD(8071.51)
         >>> Money.from_text('-6.99 AUD')
-        Money(-6.99, Currencies.AUD)
+        Money.AUD(-6.99)
         '''
-        if currency is not None:
-            amount = currency.parse_amount(text)
-        else:
+        if currency is None:
             currency, number = Currency.extract_currency(text)
             if currency is None:
                 raise ValueError('invalid literal for %r.from_text(currency=None): %r' % (type(self).__name__, text,))
-            amount = currency.parse_amount(number)
-        return cls(amount, currency)
+        else:
+            number = text
+        return currency.money(currency.parse_amount(number))
 
     def format(self, **kwargs):
         return self.currency.format(self.amount, **kwargs)
@@ -371,10 +421,29 @@ class Money(object):
         return '%s %s' % (self.amount, self.currency)
 
     def __repr__(self):
-        return '%s(%s, %r)' % (type(self).__name__, self.amount, self.currency)
+        r'''
+        >>> class Greenback(Money):
+        ...     currency = Currency('USD')
+        >>> Greenback(100)
+        Greenback(100)
+        >>> Greenback.register()
+        <class '__main__.Greenback'>
+        >>> Money.USD(100)
+        Money.USD(100)
+        >>> Greenback(100)
+        Money.USD(100)
+        '''
+        if getattr(Money, self.currency.code, None) is self.__class__:
+            classname = 'Money.%s' % (self.currency.code,)
+        else:
+            classname = type(self).__name__
+        return '%s(%s)' % (classname, self.amount)
 
     def __nonzero__(self):
         return bool(self.amount)
+
+    def __float__(self):
+        return float(self.amount)
 
     def _unmoney(self, other, fmt):
         if isinstance(other, Money):
@@ -384,52 +453,57 @@ class Money(object):
         return other
 
     def __eq__(self, other):
-        return type(self)(self.amount == self._unmoney(other, '{0} == {1}'), self.currency)
+        return type(self)(self.amount == self._unmoney(other, '{0} == {1}'))
 
     def __ne__(self, other):
-        return type(self)(self.amount != self._unmoney(other, '{0} != {1}'), self.currency)
+        return type(self)(self.amount != self._unmoney(other, '{0} != {1}'))
 
     def __lt__(self, other):
-        return type(self)(self.amount < self._unmoney(other, '{0} < {1}'), self.currency)
+        return type(self)(self.amount < self._unmoney(other, '{0} < {1}'))
 
     def __le__(self, other):
-        return type(self)(self.amount <= self._unmoney(other, '{0} <= {1}'), self.currency)
+        return type(self)(self.amount <= self._unmoney(other, '{0} <= {1}'))
 
     def __gt__(self, other):
-        return type(self)(self.amount > self._unmoney(other, '{0} > {1}'), self.currency)
+        return type(self)(self.amount > self._unmoney(other, '{0} > {1}'))
 
     def __ge__(self, other):
-        return type(self)(self.amount >= self._unmoney(other, '{0} >= {1}'), self.currency)
+        return type(self)(self.amount >= self._unmoney(other, '{0} >= {1}'))
 
     def __neg__(self):
-        return type(self)(-self.amount, self.currency)
+        return type(self)(-self.amount)
 
     def __pos__(self):
-        return type(self)(+self.amount, self.currency)
+        return type(self)(+self.amount)
 
     def __abs__(self):
-        return type(self)(abs(self.amount), self.currency)
+        return type(self)(abs(self.amount))
 
     def __add__(self, other):
-        return type(self)(self.amount + self._unmoney(other, '{0} + {1}'), self.currency)
+        return type(self)(self.amount + self._unmoney(other, '{0} + {1}'))
 
     def __sub__(self, other):
-        return type(self)(self.amount - self._unmoney(other, '{0} - {1}'), self.currency)
+        return type(self)(self.amount - self._unmoney(other, '{0} - {1}'))
 
     def __radd__(self, other):
-        return type(self)(self._unmoney(other, '{1} + {0}') + self.amount, self.currency)
+        return type(self)(self._unmoney(other, '{1} + {0}') + self.amount)
 
     def __rsub__(self, other):
-        return type(self)(self._unmoney(other, '{1} - {0}') - self.amount, self.currency)
+        return type(self)(self._unmoney(other, '{1} - {0}') - self.amount)
 
     def __mul__(self, other):
-        return type(self)(self.amount * self._unmoney(other, '{0} * {1}'), self.currency)
+        other = self._unmoney(other, '{1} * {0}')
+        if isinstance(other, float):
+            value = decimal.Decimal(other * float(self.amount)).quantize(self.currency.zero)
+        else:
+            value = other * self.amount
+        return type(self)(value)
 
     def __rmul__(self, other):
-        return type(self)(self._unmoney(other, '{1} * {0}') * self.amount, self.currency)
+        return self.__mul__(other)
 
-Currency('AUD', 2, '$', True).register()
-Currency('EUR', 2, u'€', False, True).register()
+Money.register(Currency('AUD', 2, '$', True).register())
+Money.register(Currency('EUR', 2, u'€', False, True).register())
 
 def _test():
     import doctest
