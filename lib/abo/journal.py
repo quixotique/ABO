@@ -29,6 +29,7 @@
 ... who Another body
 ... acc account2
 ... item expense
+... gst 8.12
 ... amt 81.18
 ...
 ... type receipt
@@ -60,7 +61,8 @@
              Entry(account=u':income', amount=Money.AUD(100.00), detail=u'at last'))),
  Transaction(date=datetime.date(2013, 3, 18),
     who=u'Another body',
-    entries=(Entry(account=u':expense', amount=Money.AUD(-81.18)),
+    entries=(Entry(account=u':expense', amount=Money.AUD(-73.06)),
+             Entry(account=u':gst', amount=Money.AUD(-8.12)),
              Entry(account=u':account2', amount=Money.AUD(81.18)))),
  Transaction(date=datetime.date(2013, 4, 17),
     who=u'Some body', what=u'Receipt text',
@@ -143,6 +145,7 @@ class Journal(object):
             'acc': None,
             'item': [],
             'bank': None,
+            'gst': None,
             'amt': None,
         }
         defaults = copy.deepcopy(template)
@@ -342,11 +345,19 @@ class Journal(object):
         if amount is not None and amount == 0:
             raise ParseException(amt, 'zero amount not allowed: %s' % amount)
         entries = []
-        acc = tagline('acc')
+        acc = tagline('acc', optional=True)
         account = self._parse_account_label(acc)
         if not account.is_substantial():
             raise ParseException(line, 'insubstantial account %r' % account.label)
         total = 0
+        gst = tagline('gst', optional=True)
+        gst_amount = self._parse_money(gst) if gst else None
+        if gst_amount is not None:
+            if gst_amount == 0:
+                raise ParseException(amt, 'zero gst amount not allowed: %s' % gst_amount)
+            gst_account = self._gst_account_label(gst)
+            total += gst_amount
+            entries.append({'line': gst, 'account': gst_account, 'amount': gst_amount * -sign})
         entry_noamt = None
         for line in tagline('item'):
             entry = self._parse_dbcr(line)
@@ -420,6 +431,12 @@ class Journal(object):
         if relative_to is not None and self._regex_relative.match(text):
             return relative_to + datetime.timedelta(int(text))
         raise ParseException(text, 'invalid date %r' % text)
+
+    def _gst_account_label(self, line):
+        try:
+            return self.chart[u'gst'] if self.chart else abo.account.Account(label='gst')
+        except (ValueError, KeyError), e:
+            raise ParseException(line, e)
 
     def _parse_account_label(self, line):
         try:
@@ -630,11 +647,13 @@ ParseException: StringIO, 8: spurious 'item' tag
 ... acc body
 ... item thing comment
 ... item round .01 oops
+... gst .11
 ... amt 1.01
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 1),
     who=u'Somebody', what=u'something',
-    entries=(Entry(account=u':thing', amount=Money.AUD(-1.00), detail=u'comment'),
+    entries=(Entry(account=u':thing', amount=Money.AUD(-0.89), detail=u'comment'),
+             Entry(account=u':gst', amount=Money.AUD(-0.11)),
              Entry(account=u':round', amount=Money.AUD(-0.01), detail=u'oops'),
              Entry(account=u':body', amount=Money.AUD(1.01), cdate=datetime.date(2013, 2, 15))))]
 
