@@ -3,18 +3,19 @@
 # Copyright 2013 Andrew Bettison
 
 '''Usage:
-    pyabo chart [-fv] [AL|PL|EQ]
-    pyabo index [-f]
-    pyabo acc [-fwW] [--width=COLUMNS] [--wide] <account> [<period>...]
-    pyabo journal [-fwW] [--width=COLUMNS] [<period>...]
-    pyabo balance [-faW] [--width=COLUMNS] [<when>...]
-    pyabo profloss [-faW] [--width=COLUMNS] [--tag=TAG] [<period>...]
+    pyabo chart [-fvD] [AL|PL|EQ]
+    pyabo index [-fD]
+    pyabo acc [-fwWD] [--remove=ACC...] [--width=COLUMNS] [--wide] <account> [<period>...]
+    pyabo journal [-fwWD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
+    pyabo balance [-faWD] [--remove=ACC...] [--width=COLUMNS] [<when>...]
+    pyabo profloss [-faWD] [--remove=ACC...] [--width=COLUMNS] [--tag=TAG] [<period>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
 Options:
     -h --help               Show this message
     --version               Show version and exit
+    -D --debug              Log debug on stderr
     -f --force              Force re-population of transaction cache
     --tag=TAG               Only show tagged accounts
     -w --wrap               Wrap long lines
@@ -22,6 +23,7 @@ Options:
     -W --wide               Wide output, no maximum width
     -a --all                Show all accounts
     -v --verbose            Show more information
+    -r --remove=ACC         Remove account ACC
 '''
 
 import sys
@@ -31,6 +33,7 @@ import os.path
 import textwrap
 import datetime
 from itertools import chain
+import logging
 
 try:
     import docopt
@@ -45,11 +48,14 @@ except ImportError:
     import abo.journal
 import abo.config
 import abo.period
+import abo.transaction
+from abo.transaction import sign
 import abo.balance
 import abo.cache
 from abo.types import struct
 
 def main():
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     locale.setlocale(locale.LC_ALL, '')
     lang, enc = locale.getlocale()
     output_encoding = enc
@@ -70,6 +76,8 @@ def main():
         func = cmd_compa
     else:
         assert False, 'unknown command'
+    if not opts['--debug']:
+        logging.disable(logging.DEBUG)
     try:
         config = abo.config.Config().load(opts)
     except abo.config.ConfigException, e:
@@ -111,6 +119,10 @@ def get_transactions(chart, config, opts):
     for cache in transaction_caches(chart, config, opts):
         transactions += cache.transactions()
     transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
+    if opts['--remove']:
+        for account in opts['--remove']:
+            acc = chart[account]
+            transactions = remove_account(chart, lambda a: a in acc, transactions)
     return transactions
 
 def cmd_journal(config, opts):
@@ -318,24 +330,71 @@ def cmd_balance(config, opts):
     yield fmt % ('-' * bw, '-' * aw)
 
 def remove_account(chart, pred, transactions):
+    from collections import defaultdict
+    logging.debug("remove")
     queues = defaultdict(list)
-    for t in transactions:
+    todo = list(transactions)
+    done = []
+    while todo:
+        t = todo.pop(0)
+        accounts = defaultdict(list)
         for e in t.entries:
-            acc = chart[e.account]
-            if pred(acc):
-                q = queues[acc]
-                amount = e.amount
-                while amount:
-                    if q and ((q[0].amount < 0 and amount > 0) or (q[0].amount > 0 and amount < 0)):
-                        if abs(q[0].amount) > abs(amount):
-                            q[0] = q[0].replace(amount=q[0].amount + amount)
-                            amount = 0
-                        else:
-                            amount -= q[0].amount
-                            q.pop(0)
+            if pred(chart[e.account]):
+                accounts[e.account].append(e)
+        if not accounts:
+            done.append(t)
+            continue
+        for account, entries in accounts.iteritems():
+            amount = sum(e.amount for e in entries)
+            queue = queues[account]
+            logging.debug("t = %u %s %s %s" % (len(entries), amount, t.amount(), t.date))
+            if not queue or sign(queue[0].amount) == sign(amount):
+                logging.debug("   enqueue %s" % (account,))
+                queue.append(struct(amount=amount, transaction=t)) # TODO sort by due date
+            else:
+                while queue and abs(queue[0].amount) <= abs(amount):
+                    logging.debug("   amount=%s queue[0].amount=%s" % (amount, queue[0].amount))
+                    assert sign(queue[0].amount) != sign(amount)
+                    t1, t2 = t.split(account, -queue[0].amount)
+                    assert t1 is not None
+                    e1 = [e for e in t1.entries if e.account == account]
+                    assert e1
+                    assert len(e1) <= len(entries)
+                    assert sum(e.amount for e in e1) == -queue[0].amount
+                    done.append(t1.replace(entries=[e for e in chain(t1.entries, queue[0].transaction.entries) if e.account != account]))
+                    logging.debug("   done %r" % (done[-1],))
+                    amount += queue[0].amount
+                    queue.pop(0)
+                    if t2 is None:
+                        assert amount == 0
+                        entries = []
                     else:
-                        q.append(e.replace(amount=amount))
-
+                        e2 = [e for e in t2.entries if e.account == account]
+                        assert e2
+                        assert len(e2) <= len(entries)
+                        assert sum(e.amount for e in e2) == amount
+                        entries = e2
+                    t = t2
+                if amount and queue:
+                    assert t is not None
+                    assert entries
+                    logging.debug("   amount=%s queue[0].amount=%s" % (amount, queue[0].amount))
+                    assert abs(amount) < abs(queue[0].amount)
+                    assert sign(amount) != sign(queue[0].amount)
+                    t1, t2 = queue[0].transaction.split(account, -amount)
+                    assert t1 is not None
+                    e1 = [e for e in t1.entries if e.account == account]
+                    assert e1
+                    assert sum(e.amount for e in e1) == -amount
+                    done.append(t.replace(entries=[e for e in chain(t.entries, t1.entries) if e.account != account]))
+                    logging.debug("   done %r" % (done[-1],))
+                    assert t2 is not None
+                    queue[0].amount += amount
+                    queue[0].transaction = t2
+                    e2 = [e for e in queue[0].transaction.entries if e.account == account]
+                    assert e2
+                    assert sum(e.amount for e in e2) == queue[0].amount, "e2=%r queue[0].amount=%r" % (e2, queue[0].amount)
+    return done
 
 def parse_account_predicate(opts):
     tag = opts['--tag']
