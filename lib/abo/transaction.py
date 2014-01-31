@@ -323,17 +323,20 @@ class Transaction(abo.base.Base):
         """
         entries = list(self.entries)
         assert entries
-        total = sum(e.amount for e in entries if e.account == account)
+        aentries = [e for e in self.entries if e.account == account]
+        oentries = [e for e in self.entries if e.account != account]
+        total = sum(e.amount for e in aentries)
         assert amount != 0
         assert sign(amount) == sign(total)
         assert abs(amount) <= abs(total)
         if amount == total:
             return self, None
-        entries1, entries2 = _divide_entries((e for e in self.entries if e.account == account), amount)
-        other1, other2 = _divide_entries((e for e in self.entries if e.account != account), -amount)
+        entries1, entries2 = _divide_entries(aentries, amount)
+        other1, other2 = _divide_entries(oentries, -amount)
         assert sum(e.amount for e in chain(entries1, entries2, other1, other2)) == 0
         assert sum(e.amount for e in chain(entries1, entries2) if e.account == account) == total
         assert sum(e.amount for e in entries1 if e.account == account) == amount
+        assert sum(e.amount for e in other1 if e.account != account) == -amount, 'other1=%r amount=%r' % (other1, amount)
         return self.replace(entries= entries1 + other1), self.replace(entries= entries2 + other2)
 
     _regex_expand_field = re.compile(r'%{(\w+)([+-]\d+)?}')
@@ -363,7 +366,6 @@ def _divide_entries(entries, amount):
         if type(amt) is not type(e.amount):
             amt = type(e.amount)(amt)
         assert abs(amt) <= abs(e.amount)
-        assert abs(amt) <= abs(total1)
         if amt != 0:
             entries1.append(e.replace(amount= amt))
         if amt != e.amount:
