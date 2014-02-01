@@ -5,6 +5,8 @@
 """Account and Chart objects.
 """
 
+import logging
+import string
 import re
 import abo.text
 from abo.enum import enum
@@ -355,6 +357,8 @@ class Chart(object):
                     if qual:
                         tags.add(qual)
                 name = m.group('name1') or m.group('name2')
+                if stack:
+                    name = self._deduplicate(name, [a.name for a in stack])
             else:
                 label = None
                 atype = None
@@ -386,6 +390,20 @@ class Chart(object):
                 except KeyError, e:
                     raise abo.text.LineError(unicode(e), line=line)
                 stack.append(account)
+
+    @staticmethod
+    def _deduplicate(name, pnames):
+        words = name.split()
+        for pname in pnames:
+            pwords = pname.split()
+            while pwords:
+                if len(pwords) < len(words) and words[:len(pwords)] == pwords:
+                    words = words[len(pwords):]
+                    while words and not words[0].strip(string.punctuation):
+                        words.pop(0)
+                    break
+                pwords.pop(0)
+        return ' '.join(words)
 
 class ChartCache(abo.cache.FileCache):
 
