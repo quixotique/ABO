@@ -350,12 +350,16 @@ class Chart(object):
                 label = m.group('label')
                 actype = m.group('type')
                 qual = m.group('qual')
-                if actype and (actype.startswith('ass') or actype.startswith('lia') or actype.startswith('pay') or actype.startswith('rec')):
+                if not actype:
+                    atype = None
+                elif (actype.startswith('ass') or actype.startswith('lia') or actype.startswith('pay') or actype.startswith('rec')):
                     atype = AccountType.Equity if qual == 'equity' else AccountType.AssetLiability
-                else:
+                elif actype.startswith('pl'):
                     atype = AccountType.ProfitLoss
                     if qual:
                         tags.add(qual)
+                else:
+                    raise abo.text.LineError('unknown account type %r' % actype, line=line)
                 name = m.group('name1') or m.group('name2')
                 if stack:
                     name = self._deduplicate(name, [a.name for a in stack])
@@ -384,7 +388,10 @@ class Chart(object):
                         raise abo.text.LineError('missing name or label', line=line)
             assert line.indent == len(stack)
             if name:
-                account = Account(name=name, label=label, parent= (stack[-1] if stack else None), atype=atype, tags=tags)
+                parent = stack[-1] if stack else None
+                if parent is not None and parent.atype is not None and parent.atype != atype:
+                    raise abo.text.LineError('account type (%s) does not match parent (%s)' % (atype_to_tag[atype], atype_to_tag[parent.atype]), line=line)
+                account = Account(name=name, label=label, parent=parent, atype=atype, tags=tags)
                 try:
                     self._add_account(account)
                 except KeyError, e:
