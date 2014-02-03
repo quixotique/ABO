@@ -5,7 +5,7 @@
 '''Usage:
     pyabo chart [-fvD] [AL|PL|EQ]
     pyabo index [-fD]
-    pyabo acc [-fwWD] [--remove=ACC...] [--width=COLUMNS] [--wide] <account> [<period>...]
+    pyabo acc [-bfwWD] [--remove=ACC...] [--width=COLUMNS] [--wide] <account> [<period>...]
     pyabo journal [-fwWD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWD] [--remove=ACC...] [--width=COLUMNS] [<when>...]
     pyabo profloss [-faWD] [--remove=ACC...] [--width=COLUMNS] [--tag=TAG] [<period>...]
@@ -22,6 +22,7 @@ Options:
     --width=COLUMNS         Maximum line length (default from 'COLUMNS' env var)
     -W --wide               Wide output, no maximum width
     -a --all                Show all accounts
+    -b --bring-forward      Bring balance of previous transactions forward
     -v --verbose            Show more information
     -r --remove=ACC         Remove account ACC
 '''
@@ -236,7 +237,7 @@ def cmd_acc(config, opts):
     balance = 0
     totdb = 0
     totcr = 0
-    if bf:
+    if opts['--bring-forward'] and bf:
         for e in bf.entries():
             if chart[e.account] in account:
                 balance += e.amount
