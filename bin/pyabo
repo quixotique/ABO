@@ -416,7 +416,7 @@ def parse_range(words):
     periods = abo.period.parse_periods(words)
     if len(periods) > 1:
         raise ValueError('too many periods')
-    return abo.balance.Range(*periods[0])
+    return abo.balance.Range(periods[0][0], periods[0][1] + datetime.timedelta(1))
 
 def filter_period(chart, transactions, opts):
     brought_forward = None
@@ -443,7 +443,7 @@ def range_line(range):
         p.append(range.start.strftime(ur'%_d-%b-%Y'))
     if range.end is not None:
         p.append('TO')
-        p.append(range.end.strftime(ur'%_d-%b-%Y'))
+        p.append(range.last.strftime(ur'%_d-%b-%Y'))
     return ' '.join(p) if p else 'ALL DATES'
 
 class InvalidArg(ValueError):

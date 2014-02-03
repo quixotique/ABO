@@ -99,6 +99,7 @@ class Range(object):
     def __init__(self, start, end):
         self.start = start
         self.end = end
+        self.last = end - (end.resolution if hasattr(end, 'resolution') else 1) if end is not None else None
         assert self.start is None or self.end is None or self.start <= self.end
 
     def __contains__(self, item):
