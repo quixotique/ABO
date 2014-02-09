@@ -162,7 +162,7 @@ class Chart(object):
     r"""A Chart is a set of accounts.
 
     >>> c1 = Chart.from_file(r'''#ABO-Legacy-Accounts
-    ... exp "Expenses"
+    ... exp pl "Expenses"
     ...   "Household"
     ...     :nd "Utilities"
     ...       gas "Gas"
@@ -175,7 +175,7 @@ class Chart(object):
     ...         car "Car rego, insurance, maintenance"
     ...         petrol "Petrol for cars"
     ...       taxi "Taxi journeys"
-    ... inc "Income"
+    ... inc pl "Income"
     ...     :nd "Salary"
     ...     rent :nd "Rent"
     ...     prizes "Prizes"
@@ -193,8 +193,8 @@ class Chart(object):
     u':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss ('nd',)
     u':Expenses:Household:Transport' None AccountType.ProfitLoss ()
     u':Expenses:Household:Transport:Car' None AccountType.ProfitLoss ('nd',)
-    u':Expenses:Household:Transport:Car:Car rego, insurance, maintenance' 'car' AccountType.ProfitLoss ('nd',)
     u':Expenses:Household:Transport:Car:Petrol for cars' 'petrol' AccountType.ProfitLoss ('nd',)
+    u':Expenses:Household:Transport:Car:rego, insurance, maintenance' 'car' AccountType.ProfitLoss ('nd',)
     u':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss ()
     u':Expenses:Household:Utilities' None AccountType.ProfitLoss ('nd',)
     u':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss ('nd',)
@@ -221,7 +221,7 @@ class Chart(object):
     ...       Food [food]
     ...     Transport
     ...       Car
-    ...         Car rego, [car] insurance, maintenance
+    ...         rego, [car] insurance, maintenance
     ...         Petrol for cars [petrol]
     ...       Taxi journeys [taxi]
     ... Income [inc] =PL
@@ -356,12 +356,14 @@ class Chart(object):
                     atype = AccountType.Equity if qual == 'equity' else AccountType.AssetLiability
                 elif actype.startswith('pl'):
                     atype = AccountType.ProfitLoss
-                    if qual:
-                        tags.add(qual)
                 else:
                     raise abo.text.LineError('unknown account type %r' % actype, line=line)
                 name = m.group('name1') or m.group('name2')
                 if stack:
+                    if atype is None:
+                        atype = stack[-1].atype
+                    if atype is AccountType.ProfitLoss and qual:
+                        tags.add(qual)
                     name = self._deduplicate(name, [a.name for a in stack])
             else:
                 label = None
