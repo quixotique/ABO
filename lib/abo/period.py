@@ -13,6 +13,12 @@
 >>> parse_periods(['fy', '2010'])
 [(datetime.date(2009, 7, 1), datetime.date(2010, 6, 30))]
 
+>>> parse_periods(['fy'])
+[(datetime.date(2012, 7, 1), datetime.date(2013, 6, 30))]
+
+>>> parse_periods(['this', 'fy'])
+[(datetime.date(2012, 7, 1), datetime.date(2013, 6, 30))]
+
 >>> parse_periods(['last', 'fy'])
 [(datetime.date(2011, 7, 1), datetime.date(2012, 6, 30))]
 
@@ -25,8 +31,26 @@
 >>> parse_periods(['last', 'week'])
 [(datetime.date(2013, 3, 11), datetime.date(2013, 3, 17))]
 
+>>> parse_periods(['q2'])
+[(datetime.date(2012, 10, 1), datetime.date(2012, 12, 31))]
+
+>>> parse_periods(['q1', '2010'])
+[(datetime.date(2009, 7, 1), datetime.date(2009, 9, 30))]
+
+>>> parse_periods(['q4'])
+[(datetime.date(2013, 4, 1), datetime.date(2013, 6, 30))]
+
+>>> parse_periods(['last', 'q4'])
+[(datetime.date(2012, 4, 1), datetime.date(2012, 6, 30))]
+
+>>> parse_periods(['next', 'q2'])
+[(datetime.date(2013, 10, 1), datetime.date(2013, 12, 31))]
+
 >>> parse_periods(['last', 'quarter'])
 [(datetime.date(2012, 10, 1), datetime.date(2012, 12, 31))]
+
+>>> parse_periods(['this', 'quarter'])
+[(datetime.date(2013, 1, 1), datetime.date(2013, 3, 31))]
 
 >>> parse_periods(['next', 'quarter'])
 [(datetime.date(2013, 4, 1), datetime.date(2013, 6, 30))]
@@ -102,12 +126,22 @@ def parse_periods(args):
                 raise ValueError("missing argument after 'to'")
             end = parse_fromto(args)[1]
             periods.append((None, end))
-        elif args[0] == 'fy':
-            args.pop(0)
-            if not args:
-                raise ValueError("missing year after 'fy'")
-            end = date(int(args.pop(0)), 6, 30)
-            start = date(end.year - 1, 7, 1)
+        elif args[0] in ('fy', 'q1', 'q2', 'q3', 'q4'):
+            unit = args.pop(0)
+            year = None
+            if args:
+                try:
+                    year = parse_year(args[0])
+                    args.pop(0)
+                except ValueError:
+                    pass
+            if year is not None:
+                end = date(year, 6, 30)
+                start = date(end.year - 1, 7, 1)
+            else:
+                start, end = fy_containing(_today())
+            if unit[0] == 'q':
+                start, end = quarter_of_fy_starting(start, int(unit[1]))
             periods.append((start, end))
         elif args[0] == 'monthly':
             args.pop(0)
@@ -123,7 +157,7 @@ def parse_periods(args):
             newperiods = []
             for start, end in periods:
                 while start < end:
-                    next_start = advance_date(start, months=3)
+                    next_start = advance_date(start, quarters=1)
                     newperiods.append((start, min(next_start - timedelta(1), end)))
                     start = next_start
             periods = newperiods
@@ -210,6 +244,15 @@ def parse_this(args):
     unit = args.pop(0)
     return enclosing_range(_today(), unit)
 
+def parse_year(word):
+    try:
+        year = int(word)
+        if year >= 1900 and year <= 9999:
+            return year
+    except ValueError:
+        pass
+    raise ValueError('invalid year %r' % (word,))
+
 def parse_amount(word):
     if word.isdigit():
         amount = int(word)
@@ -224,6 +267,28 @@ def parse_amount(word):
         except KeyError:
             raise ValueError("unrecognised amount %r" % (word,))
 
+def fy_ending_in(year):
+    r'''This function determines the start and end of the financial year.  All
+    other FY date calculations derive from this one.  Eventually the EOFY date
+    will be configurable.
+    '''
+    end = date(year, 6, 30)
+    start = date(end.year - 1, 7, 1)
+    return start, end
+
+def fy_containing(origin):
+    start, end = fy_ending_in(origin.year)
+    if end < origin:
+        start = advance_date(start, years=1, months=0)
+        end = advance_date(end, years=1, months=0)
+    return start, end
+
+def quarter_of_fy_starting(origin, q):
+    assert 1 <= q <= 4
+    start = advance_date(origin, quarters= q - 1)
+    end = advance_date(start, quarters=1) - timedelta(1)
+    return start, end
+
 def enclosing_range(origin, unit):
     if unit in ('day', 'days'):
         start = origin
@@ -234,17 +299,17 @@ def enclosing_range(origin, unit):
     elif unit in ('month', 'months'):
         start = origin.replace(day=1)
         end = advance_date(start, months=1) - timedelta(1)
-    elif unit in ('quarter', 'quarters'):
+    elif unit in ('q', 'quarter', 'quarters'):
         start = origin.replace(day=1, month= origin.month - (origin.month - 1) % 3)
-        end = advance_date(start, months=3) - timedelta(1)
+        end = advance_date(start, quarters=1) - timedelta(1)
+    elif unit in ('q1', 'q2', 'q3', 'q4'):
+        start, end = fy_containing(origin)
+        start, end = quarter_of_fy_starting(start, int(unit[1]))
     elif unit in ('year', 'years'):
         start = origin.replace(month=1, day=1)
         end = advance_date(start, years=1) - timedelta(1)
     elif unit == 'fy':
-        end = origin.replace(month=6, day=30)
-        if origin > end:
-            end = advance_date(end, years=1, months=0)
-        start = date(end.year - 1, 7, 1)
+        start, end = fy_containing(origin)
     else:
         raise ValueError("unrecognised unit %r" % unit)
     return start, end
@@ -253,17 +318,18 @@ def parse_last(args):
     if not args:
         raise ValueError("missing argument after 'last'")
     today = _today()
-    if args[0] == 'fy':
-        args.pop(0)
-        end = today.replace(day=30, month=6)
-        if end >= today:
-            end = advance_date(end, years=-1)
-        start = advance_date(end, years=-1) + timedelta(1)
+    if args[0] in ('fy', 'q1', 'q2', 'q3', 'q4'):
+        unit = args.pop(0)
+        start, end = fy_containing(today)
+        start = advance_date(start, years=-1)
+        end = advance_date(end, years=-1)
+        if unit[0] == 'q':
+            start, end = quarter_of_fy_starting(start, int(unit[1]))
     elif args[0] == 'year':
         args.pop(0)
         start = advance_date(today.replace(day=1, month=1), years=-1)
         end = advance_date(start, years=1) - timedelta(1)
-    elif args[0] == 'quarter':
+    elif args[0] in ('quarter'):
         unit = args.pop(0)
         start, end = enclosing_range(advance_date_unit(today, unit, -1), unit)
     elif args[0] == 'month':
@@ -286,17 +352,18 @@ def parse_next(args):
     if not args:
         raise ValueError("missing month after 'next'")
     today = _today()
-    if args[0] == 'fy':
-        args.pop(0)
-        start = today.replace(day=1, month=7)
-        if start <= today:
-            start = advance_date(start, years=1)
-        end = advance_date(start, years=1) - timedelta(1)
+    if args[0] in ('fy', 'q1', 'q2', 'q3', 'q4'):
+        unit = args.pop(0)
+        start, end = fy_containing(today)
+        start = advance_date(start, years=1)
+        end = advance_date(end, years=1)
+        if unit[0] == 'q':
+            start, end = quarter_of_fy_starting(start, int(unit[1]))
     elif args[0] == 'year':
         args.pop(0)
         start = advance_date(today.replace(day=1, month=1), years=1)
         end = advance_date(start, years=1) - timedelta(1)
-    elif args[0] == 'quarter':
+    elif args[0] in ('quarter', 'q1', 'q2', 'q3', 'q4'):
         unit = args.pop(0)
         start, end = enclosing_range(advance_date_unit(today, unit, 1), unit)
     elif args[0] == 'month':
