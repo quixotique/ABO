@@ -8,7 +8,6 @@
 import os
 import os.path
 import sys
-import abo.money
 
 class ConfigException(Exception):
     pass
@@ -39,7 +38,11 @@ class Config(object):
             trydir = os.path.dirname(trydir)
         raise ConfigException('no configuration file')
 
-    currency = abo.money.Currency.AUD
+    @property
+    def currency(self):
+        global abo
+        import abo.money
+        return abo.money.Currency.AUD
 
     def parse_money(self, text):
         return self.currency.parse_amount_money(text)
@@ -48,6 +51,8 @@ class Config(object):
         return self.currency.money(amount)
 
     def format_money(self, amount):
+        global abo
+        import abo.money
         if not isinstance(amount, abo.money.Money):
             amount = self.money(amount)
         return amount.format(symbol=False, thousands=True)
