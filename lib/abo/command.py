@@ -205,6 +205,7 @@ def chart_cache(config, opts):
     global _chart_cache
     if _chart_cache is None:
         def compile_chart():
+            logging.info("compile %r", config.chart_file_path)
             chart = abo.account.Chart.from_file(file(config.chart_file_path))
             for tc in transaction_caches(chart, config, opts):
                 tc.get()

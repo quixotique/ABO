@@ -80,6 +80,7 @@
 
 """
 
+import logging
 import re
 import shlex
 import subprocess
@@ -106,6 +107,7 @@ class Journal(object):
     _regex_filter = re.compile(r'^%filter\s+(.*)$', re.MULTILINE)
 
     def _parse(self, source_file):
+        logging.info("parse %r", source_file.name)
         self._transactions = []
         if isinstance(source_file, basestring):
             # To facilitate testing.

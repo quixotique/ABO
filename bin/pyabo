@@ -3,19 +3,20 @@
 # Copyright 2013 Andrew Bettison
 
 '''Usage:
-    pyabo chart [-fvD] [AL|PL|EQ]
-    pyabo index [-fD]
-    pyabo acc [-bfwWD] [--remove=PRED...] [--width=COLUMNS] [--wide] <account> [<period>...]
-    pyabo journal [-fwWD] [--remove=PRED...] [--width=COLUMNS] [<period>...]
-    pyabo balance [-faWD] [--remove=PRED...] [--width=COLUMNS] [<when>...]
-    pyabo profloss [-faWD] [--remove=PRED...] [--width=COLUMNS] [--select=PRED] [<period>...]
-    pyabo compa [-D] <command> <word> <preword>
+    pyabo chart [-fvqD] [AL|PL|EQ]
+    pyabo index [-fqD]
+    pyabo acc [-bfwWqD] [--remove=PRED...] [--width=COLUMNS] [--wide] <account> [<period>...]
+    pyabo journal [-fwWqD] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    pyabo balance [-faWqD] [--remove=PRED...] [--width=COLUMNS] [<when>...]
+    pyabo profloss [-faWqD] [--remove=PRED...] [--width=COLUMNS] [--select=PRED] [<period>...]
+    pyabo compa [-qD] <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
 Options:
     -h --help               Show this message
     --version               Show version and exit
     -D --debug              Log debug on stderr
+    -q --quiet              Suppress information logging on stderr
     -f --force              Force re-population of transaction cache
     --tag=TAG               Only show tagged accounts
     -w --wrap               Wrap long lines
@@ -49,6 +50,7 @@ def main():
         func = cmd_compa
         opts = {
             '--debug': False,
+            '--quiet': True,
             '--wide': None,
             '--width': None,
             '<command>': sys.argv[2],
@@ -79,7 +81,11 @@ def main():
             func = cmd_compa
         else:
             assert False, 'unknown command'
-    if not opts['--debug']:
+    if opts['--debug']:
+        pass
+    elif opts['--quiet']:
+        logging.disable(logging.INFO)
+    else:
         logging.disable(logging.DEBUG)
     logging.debug("parsed options, func=%s", func.__name__)
     try:
