@@ -122,9 +122,15 @@ sub similar
 	while (length($a) && length($b))
 	{
 		last if $lim-- == 0;
-		return 0 if uc(substr($a, 0, 1)) ne uc(substr($b, 0, 1));
-		$a = substr($a, 1);
-		$b = substr($b, 1);
+		if (uc(substr($a, 0, 1)) eq uc(substr($b, 0, 1))) {
+                        $a = substr($a, 1);
+                        $b = substr($b, 1);
+                } elsif (uc(substr($a, -1, 1)) eq uc(substr($b, -1, 1))) {
+                        $a = substr($a, 0, -1);
+                        $b = substr($b, 0, -1);
+                } else {
+                    return 0;
+                }
 	}
 	return 1;
 }
