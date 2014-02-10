@@ -95,8 +95,17 @@ def main():
     try:
         for line in func(config, opts):
             print line.encode(output_encoding)
-    except abo.command.InvalidArg, e:
-        fatal(unicode(e).encode(output_encoding))
+    except:
+        if opts['--debug']:
+            raise
+        import abo.text
+        import abo.command
+        try:
+            raise
+        except abo.command.InvalidArg, e:
+            fatal(unicode(e).encode(output_encoding))
+        except abo.text.LineError, e:
+            fatal(unicode(e).encode(output_encoding))
     sys.exit(0)
 
 def fatal(message, status=1):

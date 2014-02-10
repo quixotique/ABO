@@ -89,7 +89,12 @@ import copy
 from abo.transaction import Transaction
 import abo.account
 import abo.text
+from abo.text import LineError
 from abo.types import struct
+
+class ParseException(LineError):
+    def __init__(self, source, message):
+        LineError.__init__(self, message, line=source)
 
 class Journal(object):
 
@@ -350,7 +355,7 @@ class Journal(object):
         acc = tagline('acc', optional=True)
         account = self._parse_account_label(acc)
         if not account.is_substantial():
-            raise ParseException(line, 'insubstantial account %r' % account.label)
+            raise ParseException(acc, 'insubstantial account %r' % account.label)
         total = 0
         gst = tagline('gst', optional=True)
         gst_amount = self._parse_money(gst) if gst else None
@@ -487,17 +492,6 @@ class Journal(object):
     @classmethod
     def appears_money(cls, text):
         return cls._regex_amount.search(text) is not None
-
-class ParseException(Exception):
-
-    def __init__(self, source, message):
-        s = []
-        if hasattr(source, 'name'):
-            s.append(str(source.name))
-        if hasattr(source, 'line_number'):
-            s.append(str(source.line_number))
-        s = ', '.join(s) + ': ' if s else ''
-        super(ParseException, self).__init__('%s%s' % (s, message))
 
 __test__ = {
 'transaction':r"""
