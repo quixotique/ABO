@@ -5,9 +5,12 @@
 """A Money object represents an exact amount of a single currency.
 """
 
+import logging
+# Suppress error caused by duplicate numeric code in iso_15294.xml
+logging.getLogger('pycountry.db').setLevel(logging.CRITICAL)
+import pycountry
 import re
 import decimal
-import pycountry
 
 class RegistryError(Exception):
     pass
