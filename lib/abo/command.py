@@ -108,7 +108,7 @@ def cmd_acc(config, opts):
     totcr = 0
     if bf and (account.atype is not abo.account.AccountType.ProfitLoss or opts['--bring-forward']):
         for e in bf.entries():
-            if chart[e.account] in account:
+            if chart[e.account] is account:
                 balance += e.amount
                 yield fmt % ('', 'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),
                         config.format_money(-e.amount) if e.amount < 0 else '',
