@@ -11,6 +11,7 @@ import datetime
 from itertools import chain
 
 import abo.cache
+import abo.account
 import abo.journal
 import abo.period
 import abo.transaction
@@ -105,7 +106,7 @@ def cmd_acc(config, opts):
     balance = 0
     totdb = 0
     totcr = 0
-    if opts['--bring-forward'] and bf:
+    if bf and (account.atype is not abo.account.AccountType.ProfitLoss or opts['--bring-forward']):
         for e in bf.entries():
             if chart[e.account] in account:
                 balance += e.amount
