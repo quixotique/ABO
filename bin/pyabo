@@ -8,10 +8,11 @@
     pyabo acc [-bfwWqD] [--remove=PRED...] [--width=COLUMNS] [--wide] <account> [<period>...]
     pyabo journal [-fwWqD] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWqD] [--remove=PRED...] [--width=COLUMNS] [<when>...]
-    pyabo profloss [-faWqD] [--remove=PRED...] [--width=COLUMNS] [--select=PRED] [<period>...]
+    pyabo profloss [-faWqD] [--tag=TAG] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo compa [-qD] <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
+
 Options:
     -h --help               Show this message
     --version               Show version and exit
@@ -45,42 +46,22 @@ def main():
     locale.setlocale(locale.LC_ALL, '')
     lang, enc = locale.getlocale()
     output_encoding = enc
-    if len(sys.argv) == 5 and sys.argv[1] == 'compa':
-        # optimisation
+    try:
+        import docopt
+    except ImportError:
+        sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
+        import docopt
+    opts = docopt.docopt(__doc__, version='0.1')
+    if opts['compa']:
         func = cmd_compa
-        opts = {
-            '--debug': False,
-            '--quiet': True,
-            '--wide': None,
-            '--width': None,
-            '<command>': sys.argv[2],
-            '<word>': sys.argv[3],
-            '<preword>': sys.argv[4]
-        }
     else:
-        try:
-            import docopt
-        except ImportError:
-            sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
-            import docopt
-        opts = docopt.docopt(__doc__, version='0.1')
         import abo.command
-        if opts['acc']:
-            func = abo.command.cmd_acc
-        elif opts['journal']:
-            func = abo.command.cmd_journal
-        elif opts['chart']:
-            func = abo.command.cmd_chart
-        elif opts['index']:
-            func = abo.command.cmd_index
-        elif opts['profloss']:
-            func = abo.command.cmd_profloss
-        elif opts['balance']:
-            func = abo.command.cmd_balance
-        elif opts['compa']:
-            func = cmd_compa
+        for word, value in opts.iteritems():
+            if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
+                func = getattr(abo.command, 'cmd_' + word)
+                break
         else:
-            assert False, 'unknown command'
+            fatal('unknown command : %s' % sys.argv[1])
     if opts['--debug'] or len(os.environ.get('PYABO_DEBUG', '')):
         pass
     elif opts['--quiet']:
@@ -116,11 +97,17 @@ def cmd_compa(config, opts):
     import abo.account
     word, preword = opts['<word>'], opts['<preword>']
     logging.debug('word=%r preword=%r', word, preword)
-    chart = abo.account.Chart.from_file(file(config.chart_file_path))
     keys = set()
-    if preword not in ('--width',):
+    if preword == 'pyabo':
+        import abo.command
+        for key, value in opts.iteritems():
+            if type(value) is bool and hasattr(abo.command, 'cmd_' + key):
+                if key.startswith(word) and len(key) > len(word):
+                    keys.add(key + ' ')
+    elif preword == 'acc':
+        chart = abo.account.Chart.from_file(file(config.chart_file_path))
         for key in chart.iterkeys():
-            if key.startswith(word) and len(key) > len(word):
+            if key.startswith(word):
                 comp = key[len(word):]
                 end = ''
                 if ':' in comp:
