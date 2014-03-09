@@ -94,7 +94,7 @@ from abo.types import struct
 
 class ParseException(LineError):
     def __init__(self, source, message):
-        LineError.__init__(self, message, line=source)
+        LineError.__init__(self, unicode(message), line=source)
 
 class Journal(object):
 
