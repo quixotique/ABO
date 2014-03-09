@@ -5,10 +5,10 @@
 '''Usage:
     pyabo chart [-fvqD] [AL|PL|EQ]
     pyabo index [-fqD]
-    pyabo acc [-bfwWqD] [--remove=PRED...] [--width=COLUMNS] [--wide] <account> [<period>...]
-    pyabo journal [-fwWqD] [--remove=PRED...] [--width=COLUMNS] [<period>...]
-    pyabo balance [-faWqD] [--remove=PRED...] [--width=COLUMNS] [<when>...]
-    pyabo profloss [-faWqD] [--tag=TAG] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    pyabo acc [-bfwWqD] [--remove=ACC...] [--width=COLUMNS] [--wide] <account> [<period>...]
+    pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
+    pyabo balance [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
+    pyabo profloss [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo compa [-qD] <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
@@ -19,7 +19,7 @@ Options:
     -D --debug              Log debug on stderr
     -q --quiet              Suppress information logging on stderr
     -f --force              Force re-population of transaction cache
-    --tag=TAG               Only show tagged accounts
+    --select=PRED           Only show accounts satisfying PRED
     -w --wrap               Wrap long lines
     --width=COLUMNS         Maximum line length (default from 'COLUMNS' env var)
     -W --wide               Wide output, no maximum width
@@ -27,6 +27,14 @@ Options:
     -b --bring-forward      Bring balance of previous transactions forward
     -v --verbose            Show more information
     -r --remove=ACC         Remove account ACC
+
+PRED = condition | disjunction
+disjunction = conjunction "|" disjunction
+conjunction = condition "&" conjunction
+condition = "~" condition
+condition = "=" TAG
+condition = "/" GLOB
+condition = ACC
 '''
 
 import sys

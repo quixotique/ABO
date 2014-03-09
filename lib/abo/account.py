@@ -90,7 +90,7 @@ class Account(object):
     """
 
     _rxpat_label = r'[A-Za-z0-9_]+'
-    _regex_label = re.compile('^' + _rxpat_label + '$')
+    rxpat_tag = r'\w+'
 
     def __init__(self, name=None, label=None, parent=None, atype=None, tags=()):
         assert parent is None or isinstance(parent, Account)
@@ -329,7 +329,7 @@ class Chart(object):
     def iterkeys(self):
         return self._index.iterkeys()
 
-    _regex_legacy_line = re.compile(r'^(?P<label>' + Account._rxpat_label + r')?\s*(?P<type>\w+)?(?::(?P<qual>\w+))?\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
+    _regex_legacy_line = re.compile(r'^(?P<label>' + Account._rxpat_label + r')?\s*(?P<type>' + Account.rxpat_tag + r')?(?::(?P<qual>' + Account.rxpat_tag + r'))?\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
     _regex_label = re.compile(r'\[(' + Account._rxpat_label + r')]')
     _regex_type = re.compile(r'=(\w+)')
 
@@ -365,17 +365,21 @@ class Chart(object):
                 if not actype:
                     atype = None
                 elif (actype.startswith('ass') or actype.startswith('lia') or actype.startswith('pay') or actype.startswith('rec')):
-                    atype = AccountType.Equity if qual == 'equity' else AccountType.AssetLiability
+                    if qual == 'equity':
+                        atype = AccountType.Equity
+                    else:
+                        atype = AccountType.AssetLiability
+                        tags.add(actype)
                 elif actype.startswith('pl'):
                     atype = AccountType.ProfitLoss
                 else:
                     raise abo.text.LineError('unknown account type %r' % actype, line=line)
+                if qual:
+                    tags.add(qual)
                 name = m.group('name1') or m.group('name2')
                 if stack:
                     if atype is None:
                         atype = stack[-1].atype
-                    if atype is AccountType.ProfitLoss and qual:
-                        tags.add(qual)
                     name = self._deduplicate(name, [a.name for a in stack])
             else:
                 label = None

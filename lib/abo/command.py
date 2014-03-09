@@ -9,6 +9,7 @@ import logging
 import textwrap
 import datetime
 from itertools import chain
+import re
 
 import abo.cache
 import abo.account
@@ -179,9 +180,10 @@ def cmd_profloss(config, opts):
         yield fmt % (('-' * bw,) * len(section.balances) + ('-' * aw,))
 
 def cmd_balance(config, opts):
+    acc_pred = parse_account_predicate(opts)
     chart = get_chart(config, opts)
     all_transactions = get_transactions(chart, config, opts)
-    when, balance, transactions = filter_at(chart, all_transactions, opts)
+    when, balance, transactions = filter_at(chart, all_transactions, opts, pred=lambda a, c, m: acc_pred(a))
     bw = config.balance_column_width()
     aw = max(len(unicode(a)) for a in chart.accounts())
     width = bw + 2 + aw
@@ -236,13 +238,59 @@ def get_transactions(chart, config, opts):
             transactions = abo.account.remove_account(chart, lambda a: a in acc, transactions)
     return transactions
 
+class InvalidPredicate(InvalidArg):
+    def __init__(self, text):
+        InvalidArg.__init__(self, 'invalid predicate: ' + text)
+
 def parse_account_predicate(opts):
-    tag = opts['--tag']
-    if not tag:
+    text = opts['--select'].lstrip()
+    if not text:
         return lambda a: True
-    if tag.startswith('!'):
-        return lambda a: tag[1:] not in a.tags
-    return lambda a: tag in a.tags
+    func, text = parse_disjunction(text)
+    if text:
+        raise InvalidPredicate(text)
+    return func
+
+def parse_disjunction(text):
+    func, text = parse_conjunction(text)
+    if text and text[0] == '|':
+        if text[1:]:
+            func2, text = parse_disjunction(text[1:])
+            if text:
+                raise InvalidPredicate(text)
+            return (lambda a: func(a) or func2(a)), text
+        raise InvalidPredicate(text)
+    return func, text
+
+def parse_conjunction(text):
+    func, text = parse_condition(text)
+    if text and text[0] == '&':
+        if text[1:]:
+            func2, text = parse_conjunction(text[1:])
+            if text:
+                raise InvalidPredicate(text)
+            return (lambda a: func(a) or func2(a)), text
+        raise InvalidPredicate(text)
+    return func, text
+
+_regex_tag = re.compile(abo.account.Account.rxpat_tag)
+_regex_pattern = re.compile(r'[^|&]+')
+
+def parse_condition(text):
+    if text.startswith('!'):
+        func, text = parse_condition(text[1:])
+        return (lambda a: not func(a)), text
+    if text.startswith('='):
+        m = _regex_tag.match(text, 1)
+        if m:
+            tag = m.group()
+            return (lambda a: tag in a.tags), text[m.end():]
+    if text.startswith('/'):
+        m = _regex_pattern.match(text, 1)
+        if m:
+            pattern = m.group().lower()
+            return (lambda a: pattern in a.name.lower()), text[m.end():]
+    raise InvalidPredicate(text)
 
 def parse_periods(opts):
     brought_forward = None
@@ -270,10 +318,10 @@ def filter_period(chart, transactions, opts):
         range = abo.balance.Range(None, None)
     return range, brought_forward, transactions
 
-def filter_at(chart, transactions, opts):
+def filter_at(chart, transactions, opts, pred=None):
     when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
     range = abo.balance.Range(None, when)
-    balance = abo.balance.Balance(transactions, range, chart=chart)
+    balance = abo.balance.Balance(transactions, range, chart=chart, pred=pred)
     transactions = [t for t in transactions if t.date in range]
     return when, balance, transactions
 
