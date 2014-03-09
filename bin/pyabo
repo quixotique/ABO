@@ -81,7 +81,7 @@ def main():
             func = cmd_compa
         else:
             assert False, 'unknown command'
-    if opts['--debug']:
+    if opts['--debug'] or len(os.environ.get('PYABO_DEBUG', '')):
         pass
     elif opts['--quiet']:
         logging.disable(logging.INFO)
