@@ -14,7 +14,7 @@ at the end of a range of time.
 ...         entries=({'account':'a1', 'amount':-2.50}, {'account':'a2', 'amount':2.50, 'cdate': 6}))
 >>> t4 = Transaction(date=4, what="Four",
 ...         entries=({'account':'a1', 'amount':100.00}, {'account':'a2', 'amount':-100.00, 'cdate': 5}))
->>> b = Balance([t1, t2, t3, t4], date_range=Range(1, 5))
+>>> b = Balance([t1, t2, t3, t4], date_range=Range(1, 4))
 >>> b.first_date
 1
 >>> b.last_date
@@ -96,24 +96,23 @@ def iter_lineage(account):
 
 class Range(object):
 
-    def __init__(self, start, end):
-        self.start = start
-        self.end = end
-        self.last = end - (end.resolution if hasattr(end, 'resolution') else 1) if end is not None else None
-        assert self.start is None or self.end is None or self.start <= self.end
+    def __init__(self, first, last):
+        self.first = first
+        self.last = last
+        assert self.first is None or self.last is None or self.first <= self.last
 
     def __contains__(self, item):
-        if self.start is not None and item < self.start:
+        if self.first is not None and item < self.first:
             return False
-        if self.end is not None and item >= self.end:
+        if self.last is not None and item > self.last:
             return False
         return True
 
     _undef = object()
 
-    def replace(self, start=_undef, end=_undef):
-        return type(self)(start= self.start if start is self._undef else start,
-                          end= self.end if end is end._undef else end)
+    def replace(self, first=_undef, last=_undef):
+        return type(self)(first= self.first if first is self._undef else first,
+                          last= self.last if last is self._undef else last)
 
 
 def _test():

@@ -146,7 +146,7 @@ def cmd_profloss(config, opts):
     all_accounts = set()
     for pred in ((lambda a, c, m: m > 0), (lambda a, c, m: m < 0)):
         bpred = lambda a, c, m: a.atype == abo.account.AccountType.ProfitLoss and (opts['--all'] or m) and acc_pred(a) and pred(a, c, m)
-        balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1] + datetime.timedelta(1)), chart=chart, pred=bpred) for p in periods]
+        balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, pred=bpred) for p in periods]
         accounts = reduce(lambda x, y: x | y, (b.accounts for b in balances))
         sections.append(struct(balances=balances, accounts=accounts))
         all_accounts.update(accounts)
@@ -159,12 +159,12 @@ def cmd_profloss(config, opts):
     yield 'PROFIT LOSS STATEMENT'.center(width)
     line = []
     for balance in balances:
-        line.append(balance.date_range.start.strftime(ur'%_d-%b-%Y') if balance.date_range.start else '')
+        line.append(balance.date_range.first.strftime(ur'%_d-%b-%Y') if balance.date_range.first else '')
     line.append('')
     yield fmt % tuple(line)
     line = []
     for balance in balances:
-        line.append((balance.date_range.end - datetime.timedelta(1)).strftime(ur'%_d-%b-%Y') if balance.date_range.end else '')
+        line.append(balance.date_range.last.strftime(ur'%_d-%b-%Y') if balance.date_range.last else '')
     line.append('Account')
     yield fmt % tuple(line)
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
@@ -255,14 +255,15 @@ def parse_range(words):
     periods = abo.period.parse_periods(words)
     if len(periods) > 1:
         raise ValueError('too many periods')
-    return abo.balance.Range(periods[0][0], periods[0][1] + datetime.timedelta(1))
+    period = periods[0]
+    return abo.balance.Range(period[0], period[1])
 
 def filter_period(chart, transactions, opts):
     brought_forward = None
     if opts['<period>']:
         range = parse_range(opts['<period>'])
-        if range.start is not None:
-            brought_forward = abo.balance.Balance(transactions, abo.balance.Range(None, range.start), chart=chart)
+        if range.first is not None:
+            brought_forward = abo.balance.Balance(transactions, abo.balance.Range(None, range.first - datetime.timedelta(1)), chart=chart)
         transactions = [t for t in transactions if t.date in range]
     else:
         range = abo.balance.Range(None, None)
@@ -270,17 +271,17 @@ def filter_period(chart, transactions, opts):
 
 def filter_at(chart, transactions, opts):
     when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
-    range = abo.balance.Range(None, when + datetime.timedelta(1))
+    range = abo.balance.Range(None, when)
     balance = abo.balance.Balance(transactions, range, chart=chart)
     transactions = [t for t in transactions if t.date in range]
     return when, balance, transactions
 
 def range_line(range):
     p = []
-    if range.start is not None:
+    if range.first is not None:
         p.append('FROM')
-        p.append(range.start.strftime(ur'%_d-%b-%Y'))
-    if range.end is not None:
+        p.append(range.first.strftime(ur'%_d-%b-%Y'))
+    if range.last is not None:
         p.append('TO')
         p.append(range.last.strftime(ur'%_d-%b-%Y'))
     return ' '.join(p) if p else 'ALL DATES'
