@@ -23,6 +23,18 @@ tag_to_atype = {
 
 atype_to_tag = dict(zip(tag_to_atype.values(), tag_to_atype.keys()))
 
+class AccountKeyError(KeyError):
+
+    def __init__(self, key):
+        self.key = key
+        KeyError.__init__(self, key)
+
+    def __unicode__(self):
+        return u'unknown account "%s"' % self.key
+
+    def __str__(self):
+        return 'unknown account %r' % self.key
+
 class Account(object):
 
     r"""Account objects are related hierarchically with any number of root
@@ -254,7 +266,7 @@ class Chart(object):
     Account(name=u'Somebody', parent=Account(name=u'People'))
     >>> c3[u':Things:Somebody']
     Traceback (most recent call last):
-    KeyError: "unknown account u':Things:Somebody'"
+    AccountKeyError: unknown account u':Things:Somebody'
 
     """
 
@@ -309,7 +321,7 @@ class Chart(object):
                     return child
         except KeyError, e:
             pass
-        raise KeyError('unknown account %r' % (key,))
+        raise AccountKeyError(key)
 
     def accounts(self):
         return sorted(self._accounts, key= lambda a: unicode(a))
