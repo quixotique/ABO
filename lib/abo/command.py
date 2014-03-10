@@ -243,7 +243,7 @@ class InvalidPredicate(InvalidArg):
         InvalidArg.__init__(self, 'invalid predicate: ' + text)
 
 def parse_account_predicate(opts):
-    text = opts['--select'].lstrip()
+    text = (opts['--select'] or '').lstrip()
     if not text:
         return lambda a: True
     func, text = parse_disjunction(text)
