@@ -2,7 +2,7 @@
 # vim: sw=4 sts=4 et fileencoding=utf8 nomod
 # Copyright 2013 Andrew Bettison
 
-'''Usage:
+r'''Usage:
     pyabo chart [-fvqD] [AL|PL|EQ]
     pyabo index [-fqD]
     pyabo acc [-bfwWqD] [--remove=ACC...] [--width=COLUMNS] [--wide] <account> [<period>...]
