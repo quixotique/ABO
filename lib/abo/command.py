@@ -170,14 +170,22 @@ def cmd_profloss(config, opts):
     line.append('Account')
     yield fmt % tuple(line)
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
+    totals = [0] * len(balances)
     for section in sections:
-        for account in sorted(section.accounts, key=unicode):
+        for account in chain([None], sorted(section.accounts, key=unicode)):
             line = []
-            for balance in section.balances:
+            for i, balance in enumerate(section.balances):
                 line.append(config.format_money(balance.balance(account)))
-            line.append(unicode(account))
+            line.append(unicode(account) if account is not None else '')
             yield fmt % tuple(line)
         yield fmt % (('-' * bw,) * len(section.balances) + ('-' * aw,))
+        for i, balance in enumerate(section.balances):
+            totals[i] += balance.balance()
+    line = []
+    for tot in totals:
+        line.append(config.format_money(tot))
+    line.append('NET PROFIT (LOSS)')
+    yield fmt % tuple(line)
 
 def cmd_balance(config, opts):
     acc_pred = parse_account_predicate(opts)

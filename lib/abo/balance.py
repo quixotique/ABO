@@ -38,6 +38,7 @@ at the end of a range of time.
 """
 
 from collections import defaultdict
+from itertools import chain
 import abo.transaction
 
 class Balance(object):
@@ -67,24 +68,25 @@ class Balance(object):
         self._balances = defaultdict(lambda: defaultdict(lambda: 0))
         for account, cdates in balances.iteritems():
             for cdate, amount in cdates.iteritems():
-                for acc in iter_lineage(account):
+                for acc in chain(iter_lineage(account), [None]):
                     self._balances[acc][cdate] += amount
-        self.accounts = tuple(sorted(self._balances, key=unicode))
+        self.accounts = tuple(sorted((b for b in self._balances if b is not None), key=unicode))
 
-    def balance(self, account):
+    def balance(self, account=None):
         return sum(self._balances[account].itervalues()) if account in self._balances else 0
 
-    def cbalance(self, account):
+    def cbalance(self, account=None):
         return self._balances[account][None]
 
     def entries(self):
         without_cdate = []
         with_cdate = []
         for account, amounts in self._balances.iteritems():
-            if amounts[None]:
-                without_cdate.append(abo.transaction.Entry(transaction=None, amount=amounts[None], account=account))
-            for cdate in sorted(d for d in amounts if d is not None):
-                with_cdate.append(abo.transaction.Entry(transaction=None, amount=amounts[cdate], account=account, cdate=cdate))
+            if account is not None:
+                if amounts[None]:
+                    without_cdate.append(abo.transaction.Entry(transaction=None, amount=amounts[None], account=account))
+                for cdate in sorted(d for d in amounts if d is not None):
+                    with_cdate.append(abo.transaction.Entry(transaction=None, amount=amounts[cdate], account=account, cdate=cdate))
         without_cdate.sort(key= lambda e: (e.amount, e.account))
         with_cdate.sort(key= lambda e: (e.cdate, e.amount, e.account))
         return tuple(without_cdate + with_cdate)
