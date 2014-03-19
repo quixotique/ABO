@@ -112,7 +112,6 @@ class Journal(object):
     _regex_filter = re.compile(r'^%filter\s+(.*)$', re.MULTILINE)
 
     def _parse(self, source_file):
-        logging.info("parse %r", source_file.name)
         self._transactions = []
         if isinstance(source_file, basestring):
             # To facilitate testing.
@@ -120,6 +119,7 @@ class Journal(object):
             source_file = StringIO.StringIO(source_file)
             source_file.name = 'StringIO'
         name = getattr(source_file, 'name', str(source_file))
+        logging.info("parse %r", name)
         lines = list(source_file)
         m = self._regex_filter.search(''.join(lines[:10]))
         if m:
