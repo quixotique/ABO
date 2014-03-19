@@ -35,6 +35,18 @@ class AccountKeyError(KeyError):
     def __str__(self):
         return 'unknown account %r' % self.key
 
+class InvalidAccountPredicate(ValueError):
+
+    def __init__(self, pred):
+        self.pred = pred
+        ValueError.__init__(self, pred)
+
+    def __unicode__(self):
+        return u'invalid account predicate "%s"' % self.pred
+
+    def __str__(self):
+        return 'invalid account predicate %r' % self.pred
+
 class Account(object):
 
     r"""Account objects are related hierarchically with any number of root
@@ -196,9 +208,9 @@ class Chart(object):
     ...   loose_change asset:cash "Loose change"
     ... ''')
     >>> for a in c1.accounts(): print repr(unicode(a)), repr(a.label), repr(a.atype), repr(tuple(a.tags))
-    u':Cash assets' 'cash_assets' AccountType.AssetLiability ()
-    u':Cash assets:Bank account' 'bank' AccountType.AssetLiability ()
-    u':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability ()
+    u':Cash assets' 'cash_assets' AccountType.AssetLiability ('asset',)
+    u':Cash assets:Bank account' 'bank' AccountType.AssetLiability ('asset', 'cash')
+    u':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability ('asset', 'cash')
     u':Expenses' 'exp' AccountType.ProfitLoss ()
     u':Expenses:Household' None AccountType.ProfitLoss ()
     u':Expenses:Household:Consumibles' None AccountType.ProfitLoss ('nd',)
@@ -247,6 +259,36 @@ class Chart(object):
 
     >>> c1.accounts() == c2.accounts()
     True
+
+    >>> p1 = c2.parse_predicate('/o')
+    >>> for a in c2.accounts():
+    ...     if p1(a):
+    ...         print unicode(a)
+    :Cash assets:Bank account
+    :Cash assets:Loose change
+    :Expenses:Household
+    :Expenses:Household:Consumibles
+    :Expenses:Household:Consumibles:Food
+    :Expenses:Household:Transport
+    :Expenses:Household:Transport:Car:Petrol for cars
+    :Expenses:Household:Transport:Car:rego, insurance, maintenance
+    :Expenses:Household:Transport:Taxi journeys
+    :Income
+
+    >>> p2 = c2.parse_predicate('inc|/oo')
+    >>> for a in c2.accounts():
+    ...     if p2(a):
+    ...         print unicode(a)
+    :Cash assets:Loose change
+    :Expenses:Household:Consumibles:Food
+    :Income
+    :Income:Prizes
+    :Income:Rent
+    :Income:Salary
+
+    >>> c2.parse_predicate('nonexistent')
+    Traceback (most recent call last):
+    InvalidAccountPredicate: invalid account predicate 'nonexistent'
 
     >>> c3 = Chart.from_file(r'''
     ... People
@@ -328,6 +370,60 @@ class Chart(object):
 
     def iterkeys(self):
         return self._index.iterkeys()
+
+    def parse_predicate(self, text):
+        func, text = self._parse_disjunction(text)
+        if text:
+            raise InvalidAccountPredicate(text)
+        return func
+
+    def _parse_disjunction(self, text):
+        func, text = self._parse_conjunction(text)
+        if text and text[0] == '|':
+            if text[1:]:
+                func2, text = self._parse_disjunction(text[1:])
+                if text:
+                    raise InvalidAccountPredicate(text)
+                return (lambda a: func(a) or func2(a)), text
+            raise InvalidAccountPredicate(text)
+        return func, text
+
+    def _parse_conjunction(self, text):
+        func, text = self._parse_condition(text)
+        if text and text[0] == '&':
+            if text[1:]:
+                func2, text = self._parse_conjunction(text[1:])
+                if text:
+                    raise InvalidAccountPredicate(text)
+                return (lambda a: func(a) or func2(a)), text
+            raise InvalidAccountPredicate(text)
+        return func, text
+
+    _regex_tag = re.compile(Account.rxpat_tag)
+    _regex_pattern = re.compile(r'[^|&]+')
+
+    def _parse_condition(self, text):
+        if text.startswith('!'):
+            func, text = self._parse_condition(text[1:])
+            return (lambda a: not func(a)), text
+        if text.startswith('='):
+            m = self._regex_tag.match(text, 1)
+            if m:
+                tag = m.group()
+                return (lambda a: tag in a.tags), text[m.end():]
+        if text.startswith('/'):
+            m = self._regex_pattern.match(text, 1)
+            if m:
+                pattern = m.group().lower()
+                return (lambda a: pattern in a.name.lower()), text[m.end():]
+        m = self._regex_pattern.match(text)
+        if m:
+            try:
+                account = self[m.group()]
+                return (lambda a: a in account, text[m.end():])
+            except KeyError:
+                raise InvalidAccountPredicate(m.group())
+        raise InvalidAccountPredicate(text)
 
     _regex_legacy_line = re.compile(r'^(?P<label>' + Account._rxpat_label + r')?\s*(?P<type>' + Account.rxpat_tag + r')?(?::(?P<qual>' + Account.rxpat_tag + r'))?\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
     _regex_label = re.compile(r'\[(' + Account._rxpat_label + r')]')

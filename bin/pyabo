@@ -31,7 +31,7 @@ Options:
 PRED = condition | disjunction
 disjunction = conjunction "|" disjunction
 conjunction = condition "&" conjunction
-condition = "~" condition
+condition = "!" condition
 condition = "=" TAG
 condition = "/" GLOB
 condition = ACC
