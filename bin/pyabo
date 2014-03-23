@@ -5,7 +5,7 @@
 r'''Usage:
     pyabo chart [-fvqD] [AL|PL|EQ]
     pyabo index [-fqD]
-    pyabo acc [-bfwWqD] [--remove=ACC...] [--width=COLUMNS] [--wide] <account> [<period>...]
+    pyabo acc [-bcfwWqD] [--remove=ACC...] [--width=COLUMNS] <account> [<period>...]
     pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo profloss [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
@@ -25,6 +25,7 @@ Options:
     -W --wide               Wide output, no maximum width
     -a --all                Show all accounts
     -b --bring-forward      Bring balance of previous transactions forward
+    -c --control            Show control account
     -v --verbose            Show more information
     -r --remove=ACC         Remove account ACC
 

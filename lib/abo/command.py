@@ -108,30 +108,37 @@ def cmd_acc(config, opts):
     totdb = 0
     totcr = 0
     if bf and (account.atype is not abo.account.AccountType.ProfitLoss or opts['--bring-forward']):
-        for e in bf.entries():
-            if chart[e.account] is account:
-                balance += e.amount
-                yield fmt % ('', 'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),
-                        config.format_money(-e.amount) if e.amount < 0 else '',
-                        config.format_money(e.amount) if e.amount > 0 else '',
-                        config.format_money(balance))
-    for t in transactions:
-        for e in t.entries:
-            if chart[e.account] in account:
-                balance += e.amount
-                if e.amount < 0:
-                    totdb += e.amount
-                elif e.amount > 0:
-                    totcr += e.amount
-                desc = textwrap.wrap(e.description(), width=pw)
-                yield fmt % (e.transaction.date.strftime(ur'%_d-%b-%Y'),
-                        desc.pop(0),
-                        config.format_money(-e.amount) if e.amount < 0 else '',
-                        config.format_money(e.amount) if e.amount > 0 else '',
-                        config.format_money(balance))
-                if opts['--wrap']:
-                    while desc:
-                        yield fmt % ('', desc.pop(0), '', '', '')
+        if opts['--control']:
+            balance += bf.cbalance[account]
+            yield fmt % ('', 'Brought forward', config.format_money(balance))
+        else:
+            for e in bf.entries():
+                if chart[e.account] is account:
+                    balance += e.amount
+                    yield fmt % ('', 'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),
+                            config.format_money(-e.amount) if e.amount < 0 else '',
+                            config.format_money(e.amount) if e.amount > 0 else '',
+                            config.format_money(balance))
+    entries = list(chain(*(t.entries for t in transactions)))
+    if opts['--control']:
+        entries.sort(key=lambda e: e.cdate or e.transaction.date)
+    for e in entries:
+        if chart[e.account] in account:
+            date = e.cdate if opts['--control'] and e.cdate else e.transaction.date
+            balance += e.amount
+            if e.amount < 0:
+                totdb += e.amount
+            elif e.amount > 0:
+                totcr += e.amount
+            desc = textwrap.wrap(e.description(), width=pw)
+            yield fmt % (date.strftime(ur'%_d-%b-%Y'),
+                    desc.pop(0),
+                    config.format_money(-e.amount) if e.amount < 0 else '',
+                    config.format_money(e.amount) if e.amount > 0 else '',
+                    config.format_money(balance))
+            if opts['--wrap']:
+                while desc:
+                    yield fmt % ('', desc.pop(0), '', '', '')
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
     yield fmt % ('', 'Totals for period',
             config.format_money(-totdb),
