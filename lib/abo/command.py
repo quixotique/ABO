@@ -9,6 +9,7 @@ import logging
 import textwrap
 import datetime
 from itertools import chain
+from collections import defaultdict
 
 import abo.cache
 import abo.account
@@ -222,6 +223,47 @@ def cmd_balance(config, opts):
         if bal or opts['--all']:
             yield fmt % (config.format_money(bal), unicode(account))
     yield fmt % ('-' * bw, '-' * aw)
+
+def cmd_due(config, opts):
+    chart = get_chart(config, opts)
+    acc_pred = parse_account_predicate(chart, opts)
+    when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
+    transactions = (t for t in get_transactions(chart, config, opts) if t.date <= when)
+    def is_accrual(account):
+        return account.atype is abo.account.AccountType.AssetLiability and ('rec' in account.tags or 'pay' in account.tags)
+    accounts = defaultdict(lambda: [])
+    for t in transactions:
+        for e in t.entries:
+            account = chart[e.account]
+            if is_accrual(account):
+                while account.parent and is_accrual(account.parent):
+                    account = account.parent
+            accounts[account].append(e)
+    due_all = []
+    for account, entries in accounts.iteritems():
+        due = defaultdict(lambda: 0)
+        entries.sort(key=lambda e: e.cdate or e.transaction.date)
+        balance = 0
+        for e in entries:
+            balance += e.amount
+            if due and sign(due.itervalues().next()) != sign(balance):
+                due.clear()
+            if balance and (e.cdate or is_accrual(account)):
+                due[e.cdate or e.transaction.date] = balance
+        paid = 0
+        for date in sorted(due.keys()):
+            balance = due[date]
+            assert sign(balance - paid) == sign(balance), "balance=%r paid=%r" % (balance, paid)
+            due_all.append((date, balance - paid, account))
+            paid += balance
+    due_all.sort()
+    bw = config.money_column_width()
+    fmt = u'%s %s %{bw}s  %s'.format(**locals())
+    for date, balance, account in due_all:
+        yield fmt % (date.strftime(ur'%a %_d-%b-%Y'),
+                     '*' if date <= when else ' ',
+                     config.format_money(balance),
+                     unicode(account))
 
 _chart_cache = None
 _transaction_caches = None

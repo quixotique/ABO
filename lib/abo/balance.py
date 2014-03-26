@@ -43,7 +43,9 @@ import abo.transaction
 
 class Balance(object):
 
-    def __init__(self, transactions, date_range=None, chart=None, pred=lambda a, c, m: True):
+    def __init__(self, transactions, date_range=None, chart=None, pred=None):
+        if pred is None:
+            pred = lambda a, c, m: True
         self.date_range = date_range
         self.first_date = None
         self.last_date = None
