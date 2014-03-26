@@ -303,17 +303,15 @@ sub dir_default
 {
 	my ($self, $arg) = @_;
 	my $def = \ $self->{__PACKAGE__.'.default'};
-	if ($arg =~ /^(\w+)\s*(.*)?$/)
+	if ($arg =~ /^(\w+)\s+(.*)$/)
 	{
 		my ($key, $val) = ($1, $2);
-		if (length $val)
-		{
-			$$def->{$key} = ABO::Document::Journal::Parser::Value->new($val, $key, $self->linenum, 1);
-		}
-		else
-		{
-			delete $$def->{$key};
-		}
+                $$def->{$key} = ABO::Document::Journal::Parser::Value->new($val, $key, $self->linenum, 1);
+        }
+	elsif ($arg =~ /^(\w+)$/)
+        {
+		my $key = $1;
+                delete $$def->{$key};
 	}
 	else
 	{
