@@ -9,7 +9,6 @@ import logging
 import textwrap
 import datetime
 from itertools import chain
-import re
 
 import abo.cache
 import abo.account
@@ -88,7 +87,8 @@ def cmd_index(config, opts):
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
     account = chart[opts['<account>']]
-    range, bf, transactions = filter_period(chart, get_transactions(chart, config, opts), opts)
+    all_transactions = get_transactions(chart, config, opts)
+    range, bf, transactions = filter_period(chart, all_transactions, opts)
     dw = 11
     mw = config.money_column_width()
     bw = config.balance_column_width()
@@ -109,8 +109,11 @@ def cmd_acc(config, opts):
     totcr = 0
     if bf and (account.atype is not abo.account.AccountType.ProfitLoss or opts['--bring-forward']):
         if opts['--control']:
-            balance += bf.cbalance[account]
-            yield fmt % ('', 'Brought forward', config.format_money(balance))
+            balance += bf.cbalance(account)
+            yield fmt % ('', 'Brought forward',
+                    config.format_money(-balance) if balance < 0 else '',
+                    config.format_money(balance) if balance > 0 else '',
+                    config.format_money(balance))
         else:
             for e in bf.entries():
                 if chart[e.account] is account:
@@ -119,26 +122,30 @@ def cmd_acc(config, opts):
                             config.format_money(-e.amount) if e.amount < 0 else '',
                             config.format_money(e.amount) if e.amount > 0 else '',
                             config.format_money(balance))
-    entries = list(chain(*(t.entries for t in transactions)))
     if opts['--control']:
+        entries = [e for e in chain(*(t.entries for t in all_transactions)) if chart[e.account] in account and (e.cdate or e.transaction.date) in range]
         entries.sort(key=lambda e: e.cdate or e.transaction.date)
+    else:
+        entries = [e for e in chain(*(t.entries for t in transactions)) if chart[e.account] in account]
     for e in entries:
-        if chart[e.account] in account:
-            date = e.cdate if opts['--control'] and e.cdate else e.transaction.date
-            balance += e.amount
-            if e.amount < 0:
-                totdb += e.amount
-            elif e.amount > 0:
-                totcr += e.amount
-            desc = textwrap.wrap(e.description(), width=pw)
-            yield fmt % (date.strftime(ur'%_d-%b-%Y'),
-                    desc.pop(0),
-                    config.format_money(-e.amount) if e.amount < 0 else '',
-                    config.format_money(e.amount) if e.amount > 0 else '',
-                    config.format_money(balance))
-            if opts['--wrap']:
-                while desc:
-                    yield fmt % ('', desc.pop(0), '', '', '')
+        date = e.cdate if opts['--control'] and e.cdate else e.transaction.date
+        balance += e.amount
+        if e.amount < 0:
+            totdb += e.amount
+        elif e.amount > 0:
+            totcr += e.amount
+        desc = e.description()
+        if opts['--control']:
+            desc = e.transaction.date.strftime(ur'%-d-%b ') + desc
+        desc = textwrap.wrap(desc, width=pw)
+        yield fmt % (date.strftime(ur'%_d-%b-%Y'),
+                desc.pop(0),
+                config.format_money(-e.amount) if e.amount < 0 else '',
+                config.format_money(e.amount) if e.amount > 0 else '',
+                config.format_money(balance))
+        if opts['--wrap']:
+            while desc:
+                yield fmt % ('', desc.pop(0), '', '', '')
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
     yield fmt % ('', 'Totals for period',
             config.format_money(-totdb),
@@ -283,7 +290,7 @@ def filter_period(chart, transactions, opts):
         range = parse_range(opts['<period>'])
         if range.first is not None:
             brought_forward = abo.balance.Balance(transactions, abo.balance.Range(None, range.first - datetime.timedelta(1)), chart=chart)
-        transactions = [t for t in transactions if t.date in range]
+        transactions = (t for t in transactions if t.date in range)
     else:
         range = abo.balance.Range(None, None)
     return range, brought_forward, transactions
