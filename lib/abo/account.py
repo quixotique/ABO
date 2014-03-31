@@ -10,6 +10,8 @@ import string
 import re
 import abo.text
 from abo.enum import enum
+from abo.types import struct
+from abo.transaction import sign
 import abo.cache
 
 class AccountType(enum('AssetLiability', 'ProfitLoss', 'Equity')):
