@@ -228,40 +228,49 @@ def cmd_due(config, opts):
     chart = get_chart(config, opts)
     acc_pred = parse_account_predicate(chart, opts)
     when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
-    transactions = (t for t in get_transactions(chart, config, opts) if t.date <= when)
+    transactions = (t for t in get_transactions(chart, config, opts))
     def is_accrual(account):
         return account.atype is abo.account.AccountType.AssetLiability and ('rec' in account.tags or 'pay' in account.tags)
     accounts = defaultdict(lambda: [])
+    due_accounts = set()
     for t in transactions:
         for e in t.entries:
             account = chart[e.account]
             if is_accrual(account):
                 while account.parent and is_accrual(account.parent):
                     account = account.parent
+                due_accounts.add(account)
+            elif e.cdate:
+                due_accounts.add(account)
             accounts[account].append(e)
     due_all = []
     for account, entries in accounts.iteritems():
-        due = defaultdict(lambda: 0)
-        entries.sort(key=lambda e: e.cdate or e.transaction.date)
-        balance = 0
-        for e in entries:
-            balance += e.amount
-            if due and sign(due.itervalues().next()) != sign(balance):
-                due.clear()
-            if balance and (e.cdate or is_accrual(account)):
-                due[e.cdate or e.transaction.date] = balance
-        paid = 0
-        for date in sorted(due.keys()):
-            balance = due[date]
-            assert sign(balance - paid) == sign(balance), "balance=%r paid=%r" % (balance, paid)
-            due_all.append((date, balance - paid, account))
-            paid += balance
+        if account in due_accounts:
+            entries.sort(key=lambda e: e.cdate or e.transaction.date)
+            due = defaultdict(lambda: 0)
+            for e in entries:
+                date = e.cdate or when #e.transaction.date
+                amount = e.amount
+                while amount and due:
+                    earliest = sorted(due)[0]
+                    if sign(due[earliest]) == sign(amount):
+                        break
+                    if abs(amount) >= abs(due[earliest]):
+                        amount += due[earliest]
+                        del due[earliest]
+                    else:
+                        due[earliest] += amount
+                        amount = 0
+                if amount:
+                    due[date] += amount
+            for date, amount in due.iteritems():
+                due_all.append((date, amount, account))
     due_all.sort()
     bw = config.money_column_width()
     fmt = u'%s %s %{bw}s  %s'.format(**locals())
     for date, balance, account in due_all:
         yield fmt % (date.strftime(ur'%a %_d-%b-%Y'),
-                     '*' if date <= when else ' ',
+                     '*' if date < when else '=' if date == when else ' ',
                      config.format_money(balance),
                      unicode(account))
 
