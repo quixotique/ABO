@@ -87,7 +87,7 @@ sub printsum
 				1
 			));
 		my $c = $e->{c_db} - $e->{c_bf} - $e->{c_cr};
-		next unless $opt_all || $a != $b || $c;
+		next unless $opt_all || $a != $b;
 		($a, $b, $c) = ($b, $a, -$c) if $type eq 'p' || $type eq 'b';
 		printf $fmt, $ac->title, $a, $b, $a - $b, $c ? $c : '-  ';
 		$ta += $a;
