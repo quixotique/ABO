@@ -106,28 +106,36 @@ class Account(object):
     _rxpat_label = r'[A-Za-z0-9_]+'
     rxpat_tag = r'\w+'
 
-    def __init__(self, name=None, label=None, parent=None, atype=None, tags=()):
+    def __init__(self, name=None, label=None, parent=None, atype=None, tags=(), wild=False):
         assert parent is None or isinstance(parent, Account)
-        assert name or label
+        if wild:
+            assert name is None
+            assert label is None
+        else:
+            assert name or label
         self.name = name and unicode(name)
         self.label = label and str(label)
         self.parent = parent
         self.atype = atype
         self.tags = set(map(str, tags))
-        self.wildchild = False
-        self._hash = hash(self.label) ^ hash(self.name) ^ hash(self.parent) ^ hash(self.atype)
+        self.wild = wild
+        self._hash = hash(self.label) ^ hash(self.name) ^ hash(self.parent) ^ hash(self.atype) ^ hash(self.wild)
         self._childcount = 0
-        assert self.name or self.label
+        if self.wild:
+            assert self.name is None
+            assert self.label is None
+        else:
+            assert self.name or self.label
         if self.parent:
             assert parent.atype is None or self.atype == parent.atype, 'self.atype=%r parent.atype=%r' % (self.atype, parent.atype)
             self.tags |= parent.tags
             self.parent._childcount += 1
 
     def __unicode__(self):
-        return (unicode(self.parent) if self.parent else u'') + u':' + unicode(self.name or self.label)
+        return (unicode(self.parent) if self.parent else u'') + u':' + (u'*' if self.wild else unicode(self.name or self.label))
 
     def __str__(self):
-        return (str(self.parent) if self.parent else '') + ':' + str(self.name or self.label)
+        return (str(self.parent) if self.parent else '') + ':' + ('*' if self.wild else str(self.name or self.label))
 
     def __repr__(self):
         r = []
@@ -152,7 +160,8 @@ class Account(object):
         return (self.name == other.name
             and self.label == other.label
             and self.parent == other.parent
-            and self.atype == other.atype)
+            and self.atype == other.atype
+            and self.wild == other.wild)
 
     def __ne__(self, other):
         if not isinstance(other, Account):
@@ -167,7 +176,7 @@ class Account(object):
     def is_substantial(self):
         return self._childcount == 0
 
-    def make_child(self, name=None, label=None, tags=()):
+    def make_child(self, name=None, label=None, atype=None, tags=()):
         return type(self)(name=name, label=label, atype=self.atype, tags=tags, parent=self)
 
     def shortname(self):
@@ -239,16 +248,16 @@ class Chart(object):
     >>> c2 = Chart.from_file(r'''
     ... Expenses =PL [exp]
     ...   Household
-    ...     Utilities
-    ...       Gas [gas]
-    ...       Electricity [elec]
+    ...     Utilities =UTIL
+    ...       Gas [gas] =energy
+    ...       Electricity [elec] =energy
     ...       [water] Water usage
     ...     Consumibles
     ...       Food [food]
     ...     Transport
     ...       Car
     ...         rego, [car] insurance, maintenance
-    ...         Petrol for cars [petrol]
+    ...         Petrol for cars [petrol] =energy
     ...       Taxi journeys [taxi]
     ... Income [inc] =PL
     ...     Salary
@@ -294,20 +303,20 @@ class Chart(object):
 
     >>> c3 = Chart.from_file(r'''
     ... People
-    ...   Eve
-    ...   *
-    ...   Adam
+    ...   Eve =a
+    ...   * =b
+    ...   Adam =c
     ... Things
     ... ''')
-    >>> for a in c3.accounts(): print repr(unicode(a)), repr(a.label), repr(a.atype), repr(a.wildchild)
-    u':People' None None True
-    u':People:Adam' None None False
-    u':People:Eve' None None False
-    u':Things' None None False
+    >>> for a in c3.accounts(): print repr(unicode(a)), repr(a.label), repr(a.atype)
+    u':People' None None
+    u':People:Adam' None None
+    u':People:Eve' None None
+    u':Things' None None
     >>> c3[u':People']
     Account(name=u'People')
     >>> c3[u':People:Somebody']
-    Account(name=u'Somebody', parent=Account(name=u'People'))
+    Account(name=u'Somebody', parent=Account(name=u'People'), tags=('b',))
     >>> c3[u':Things:Somebody']
     Traceback (most recent call last):
     AccountKeyError: unknown account u':Things:Somebody'
@@ -328,22 +337,30 @@ class Chart(object):
     def from_accounts(cls, accounts):
         self = cls()
         self._accounts = set()
+        self._wild = {}
         self._index = {}
         for account in accounts:
             self._add_account(account)
         return self
 
     def _add_account(self, account):
-        if account in self._accounts:
+        if account.wild:
+            if account.parent in self._wild:
+                if self._wild[account.parent] != account:
+                    raise ValueError('duplicate wild account %r' % (unicode(account),))
+                return False # already added
+            self._wild[account.parent] = account
+        else:
+            if account in self._accounts:
+                for name in account.all_full_names():
+                    assert self._index.get(name) is account
+                return False # already added
             for name in account.all_full_names():
-                assert self._index.get(name) is account
-            return False
-        for name in account.all_full_names():
-            if name in self._index:
-                raise ValueError('duplicate account %r' % (name,))
-        self._accounts.add(account)
-        for name in account.all_full_names():
-            self._index[name] = account
+                if name in self._index:
+                    raise ValueError('duplicate account %r' % (name,))
+            self._accounts.add(account)
+            for name in account.all_full_names():
+                self._index[name] = account
         return True
 
     def __len__(self):
@@ -359,8 +376,9 @@ class Chart(object):
             if ':' in key[1:]:
                 parentname, childname = key.rsplit(':', 1)
                 parent = self._index[parentname]
-                if parent.wildchild:
-                    child = parent.make_child(name=childname)
+                wild = self._wild.get(parent)
+                if wild is not None:
+                    child = parent.make_child(name=childname, atype=wild.atype, tags=wild.tags)
                     self._add_account(child)
                     return child
         except KeyError, e:
@@ -401,24 +419,24 @@ class Chart(object):
             raise InvalidAccountPredicate(text)
         return func, text
 
-    _regex_tag = re.compile(Account.rxpat_tag)
-    _regex_pattern = re.compile(r'[^|&]+')
+    _regex_cond_tag = re.compile(Account.rxpat_tag)
+    _regex_cond_pattern = re.compile(r'[^|&]+')
 
     def _parse_condition(self, text):
         if text.startswith('!'):
             func, text = self._parse_condition(text[1:])
             return (lambda a: not func(a)), text
         if text.startswith('='):
-            m = self._regex_tag.match(text, 1)
+            m = self._regex_cond_tag.match(text, 1)
             if m:
                 tag = m.group()
                 return (lambda a: tag in a.tags), text[m.end():]
         if text.startswith('/'):
-            m = self._regex_pattern.match(text, 1)
+            m = self._regex_cond_pattern.match(text, 1)
             if m:
                 pattern = m.group().lower()
                 return (lambda a: pattern in a.name.lower()), text[m.end():]
-        m = self._regex_pattern.match(text)
+        m = self._regex_cond_pattern.match(text)
         if m:
             try:
                 account = self[m.group()]
@@ -429,11 +447,12 @@ class Chart(object):
 
     _regex_legacy_line = re.compile(r'^(?P<label>' + Account._rxpat_label + r')?\s*(?P<type>' + Account.rxpat_tag + r')?(?::(?P<qual>' + Account.rxpat_tag + r'))?\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
     _regex_label = re.compile(r'\[(' + Account._rxpat_label + r')]')
-    _regex_type = re.compile(r'=(\w+)')
+    _regex_tag = re.compile(r'\s*=(' + Account.rxpat_tag + ')\s*')
 
     def _parse(self, source_file):
         self._accounts = set()
         self._index = {}
+        self._wild = {}
         if isinstance(source_file, basestring):
             # To facilitate testing.
             import StringIO
@@ -453,6 +472,7 @@ class Chart(object):
             if line.indent < len(stack):
                 stack = stack[:line.indent]
             tags = set()
+            wild = False
             if is_legacy:
                 m = self._regex_legacy_line.match(line)
                 if not m:
@@ -482,32 +502,30 @@ class Chart(object):
             else:
                 label = None
                 atype = None
+                for m in self._regex_tag.finditer(line):
+                    try:
+                        atype = tag_to_atype[m.group(1)]
+                    except KeyError:
+                        tags.add(m.group(1))
+                    line = (line[:m.start(0)] + ' ' + line[m.end(0):]).strip()
+                if atype is None and stack:
+                    atype = stack[-1].atype
                 if line == '*':
-                    if not stack:
-                        raise abo.text.LineError('wild child must have parent', line=line)
-                    stack[-1].wildchild = True
+                    wild = True
                 else:
                     m = self._regex_label.search(line)
                     if m:
                         label = str(m.group(1))
                         line = line[:m.start(0)] + line[m.end(0):]
-                    for m in self._regex_type.finditer(line):
-                        try:
-                            atype = tag_to_atype[m.group(1)]
-                        except KeyError:
-                            tags.add(m.group(1))
-                        line = line[:m.start(0)] + line[m.end(0):]
-                    if atype is None and stack:
-                        atype = stack[-1].atype
                     name = ' '.join(line.split())
                     if not name and not label:
                         raise abo.text.LineError('missing name or label', line=line)
             assert line.indent == len(stack)
-            if name:
+            if name or wild:
                 parent = stack[-1] if stack else None
                 if parent is not None and parent.atype is not None and parent.atype != atype:
                     raise abo.text.LineError('account type (%s) does not match parent (%s)' % (atype_to_tag[atype], atype_to_tag[parent.atype]), line=line)
-                account = Account(name=name, label=label, parent=parent, atype=atype, tags=tags)
+                account = Account(name=name, label=label, parent=parent, atype=atype, tags=tags, wild=wild)
                 try:
                     self._add_account(account)
                 except KeyError, e:

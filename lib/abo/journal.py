@@ -45,9 +45,9 @@
 ... amt 81.11
 ...
 ... 7/5/2013 Modern text
-...  account1  45.06
-...  account2  -60.00
-...  account3
+...  account1  45.06 ; comment
+...  account2  -60.00 ; another comment {31/5/2013}
+...  account3 ; {+15}
 ...
 ... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 3, 16),
@@ -74,9 +74,9 @@
              Entry(account=u':cash', amount=Money.AUD(81.11)))),
  Transaction(date=datetime.date(2013, 5, 7),
     what=u'Modern text',
-    entries=(Entry(account=u':account2', amount=Money.AUD(-60.00)),
-             Entry(account=u':account3', amount=Money.AUD(14.94)),
-             Entry(account=u':account1', amount=Money.AUD(45.06))))]
+    entries=(Entry(account=u':account2', amount=Money.AUD(-60.00), cdate=datetime.date(2013, 5, 31), detail=u'another comment'),
+             Entry(account=u':account3', amount=Money.AUD(14.94), cdate=datetime.date(2013, 5, 22)),
+             Entry(account=u':account1', amount=Money.AUD(45.06), detail=u'comment')))]
 
 """
 
@@ -225,6 +225,8 @@ class Journal(object):
                     del entry['line']
                 self._transactions.append(Transaction(**kwargs))
 
+    _regex_ledger_due = re.compile(r'\s*{([^}]*)}\s*')
+
     def _parse_ledger_block(self, ledger_date, ledger_what, ledger_lines):
         entries = []
         noamt = None
@@ -232,6 +234,10 @@ class Journal(object):
             entry = {'line': line}
             if ';' in line:
                 line, detail = line.split(';', 1)
+                m = self._regex_ledger_due.search(detail)
+                if m:
+                    entry['cdate'] = self._parse_date(m.group(1), relative_to=ledger_date)
+                    detail = (detail[:m.start(0)] + ' ' + detail[m.end(0):])
                 entry['detail'] = unicode(detail).strip()
                 line = line.rstrip()
             if '  ' in line:
