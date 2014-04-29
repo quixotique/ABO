@@ -271,6 +271,29 @@ class Chart(object):
     >>> c1.accounts() == c2.accounts()
     True
 
+    >>> p1 = c2.parse_predicate('=AL')
+    >>> for a in c2.accounts():
+    ...     if p1(a):
+    ...         print unicode(a)
+    :Cash assets
+    :Cash assets:Bank account
+    :Cash assets:Loose change
+
+    >>> p1 = c2.parse_predicate('=UTIL')
+    >>> for a in c2.accounts():
+    ...     if p1(a):
+    ...         print unicode(a)
+    :Expenses:Household:Utilities
+    :Expenses:Household:Utilities:Electricity
+    :Expenses:Household:Utilities:Gas
+    :Expenses:Household:Utilities:Water usage
+
+    >>> p1 = c2.parse_predicate('=energy&!=UTIL')
+    >>> for a in c2.accounts():
+    ...     if p1(a):
+    ...         print unicode(a)
+    :Expenses:Household:Transport:Car:Petrol for cars
+
     >>> p1 = c2.parse_predicate('/o')
     >>> for a in c2.accounts():
     ...     if p1(a):
@@ -415,7 +438,7 @@ class Chart(object):
                 func2, text = self._parse_conjunction(text[1:])
                 if text:
                     raise InvalidAccountPredicate(text)
-                return (lambda a: func(a) or func2(a)), text
+                return (lambda a: func(a) and func2(a)), text
             raise InvalidAccountPredicate(text)
         return func, text
 
@@ -499,6 +522,8 @@ class Chart(object):
                     if atype is None:
                         atype = stack[-1].atype
                     name = self._deduplicate(name, [a.name for a in stack])
+                if atype is not None:
+                    tags.add(atype_to_tag[atype])
             else:
                 label = None
                 atype = None
@@ -506,7 +531,8 @@ class Chart(object):
                     try:
                         atype = tag_to_atype[m.group(1)]
                     except KeyError:
-                        tags.add(m.group(1))
+                        pass
+                    tags.add(m.group(1))
                     line = (line[:m.start(0)] + ' ' + line[m.end(0):]).strip()
                 if atype is None and stack:
                     atype = stack[-1].atype

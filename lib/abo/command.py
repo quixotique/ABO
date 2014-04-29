@@ -61,24 +61,18 @@ def cmd_journal(config, opts):
     yield fmt % ('-' * dw, '-' * pw, '-' * bw, '--', '-' * aw)
 
 def cmd_chart(config, opts):
-    typesel = (opts['AL'] or '').upper()
-    if typesel == '':
-        pred = lambda a: True
-    else:
-        try:
-            atype = abo.account.tag_to_atype[typesel]
-            pred = lambda a: a.atype == atype
-        except KeyError:
-            raise InvalidArg('invalid argument: %r' % (typesel,))
-    for account in get_chart(config, opts).accounts():
-        if pred(account):
+    chart = get_chart(config, opts)
+    acc_pred = parse_account_predicate(chart, opts)
+    for account in chart.accounts():
+        if acc_pred(account):
             line = [unicode(account)]
             if opts['--verbose']:
                 if account.label:
                     line.append('[%s]' % (account.label,))
-                if account.atype and not (account.parent and account.parent.atype == account.atype):
-                    line.append('=%s' % (abo.account.atype_to_tag[account.atype]))
-
+                for tag in account.tags:
+                    line.append('=%s' % (tag,))
+                #if account.atype and not (account.parent and account.parent.atype == account.atype):
+                #    line.append('=%s' % (abo.account.atype_to_tag[account.atype]))
             yield ' '.join(line)
 
 def cmd_index(config, opts):

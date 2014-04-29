@@ -3,7 +3,7 @@
 # Copyright 2013 Andrew Bettison
 
 r'''Usage:
-    pyabo chart [-fvqD] [AL|PL|EQ]
+    pyabo chart [-fvqD] [--select=PRED]
     pyabo index [-fqD]
     pyabo acc [-bcfwWqD] [--remove=ACC...] [--width=COLUMNS] <account> [<period>...]
     pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
