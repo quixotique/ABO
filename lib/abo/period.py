@@ -61,6 +61,9 @@
 >>> parse_periods(['latest', 'six', 'months'])
 [(datetime.date(2012, 9, 1), datetime.date(2013, 2, 28))]
 
+>>> parse_periods(['last', '30', 'days'])
+[(datetime.date(2013, 2, 19), datetime.date(2013, 3, 20))]
+
 >>> parse_periods(['last', 'year', 'quarterly']) #doctest: +NORMALIZE_WHITESPACE
 [(datetime.date(2012, 1, 1), datetime.date(2012, 3, 31)),
  (datetime.date(2012, 4, 1), datetime.date(2012, 6, 30)),
@@ -71,6 +74,20 @@
 [(datetime.date(2013, 1, 1), datetime.date(2013, 1, 31)),
  (datetime.date(2013, 2, 1), datetime.date(2013, 2, 28)),
  (datetime.date(2013, 3, 1), datetime.date(2013, 3, 31))]
+
+>>> abo.period._today = lambda: date(2013, 3, 31)
+
+>>> parse_periods(['this', 'month'])
+[(datetime.date(2013, 3, 1), datetime.date(2013, 3, 31))]
+
+>>> parse_periods(['last', 'month'])
+[(datetime.date(2013, 2, 1), datetime.date(2013, 2, 28))]
+
+>>> parse_periods(['latest', 'two', 'months'])
+[(datetime.date(2013, 2, 1), datetime.date(2013, 3, 31))]
+
+>>> parse_periods(['last', '5', 'days'])
+[(datetime.date(2013, 3, 27), datetime.date(2013, 3, 31))]
 
 """
 
@@ -389,8 +406,10 @@ def parse_latest(word, args):
         raise ValueError("missing unit after %r %r" % (word, args[0],))
     amount = parse_amount(args.pop(0))
     unit = args.pop(0)
-    start = enclosing_range(advance_date_unit(_today(), unit, -amount), unit)[0]
-    end = enclosing_range(_today(), unit)[0] - timedelta(1)
+    # Range should include today but not tomorrow
+    tomorrow = _today() + timedelta(1)
+    start = enclosing_range(advance_date_unit(tomorrow, unit, -amount), unit)[0]
+    end = enclosing_range(tomorrow, unit)[0] - timedelta(1)
     return start, end
 
 def advance_date_unit(start, unit, amount):
