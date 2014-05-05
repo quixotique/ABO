@@ -155,13 +155,21 @@ def cmd_profloss(config, opts):
     transactions = get_transactions(chart, config, opts)
     sections = []
     all_accounts = set()
-    for pred in ((lambda a, c, m: m > 0), (lambda a, c, m: m < 0)):
+    for depth, title, pred in (
+            (10, 'Taxable Income', (lambda a, c, m: m > 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
+            (10, 'Deductible Expenses', (lambda a, c, m: m < 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
+            (0,  'Net Taxable Income', (lambda a, c, m: 'nd' not in a.tags and 'tax' not in a.tags)),
+            (10, 'Tax', (lambda a, c, m: 'tax' in a.tags)),
+            (10, 'Non-Taxable Income', (lambda a, c, m: m > 0 and 'nd' in a.tags and 'tax' not in a.tags)),
+            (0,  'Income After Tax', (lambda a, c, m: m > 0 or 'nd' not in a.tags or 'tax' in a.tags)),
+            (10, 'Expenses', (lambda a, c, m: m < 0 and 'nd' in a.tags and 'tax' not in a.tags)),
+        ):
         bpred = lambda a, c, m: a.atype == abo.account.AccountType.ProfitLoss and (opts['--all'] or m) and acc_pred(a) and pred(a, c, m)
         balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, pred=bpred) for p in periods]
         accounts = set()
         for b in balances:
             accounts.update(b.accounts)
-        sections.append(struct(balances=balances, accounts=accounts))
+        sections.append(struct(depth=depth, title=title, balances=balances, accounts=accounts))
         all_accounts.update(accounts)
     bw = config.balance_column_width()
     aw = max(chain([10], (len(unicode(a)) for a in all_accounts)))
@@ -183,11 +191,11 @@ def cmd_profloss(config, opts):
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
     totals = [0] * len(balances)
     for section in sections:
-        for account in chain([None], sorted(section.accounts, key=unicode)):
+        for account in chain([None], sorted((a for a in section.accounts if a.depth() <= section.depth), key=unicode)):
             line = []
-            for i, balance in enumerate(section.balances):
+            for balance in section.balances:
                 line.append(config.format_money(balance.balance(account)))
-            line.append(unicode(account) if account is not None else '')
+            line.append(unicode(account) if account is not None else section.title)
             yield fmt % tuple(line)
         yield fmt % (('-' * bw,) * len(section.balances) + ('-' * aw,))
         for i, balance in enumerate(section.balances):

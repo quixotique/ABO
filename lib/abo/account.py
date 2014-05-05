@@ -182,6 +182,9 @@ class Account(object):
     def shortname(self):
         return min(self.all_full_names(), key=len)
 
+    def depth(self):
+        return self.parent.depth() + 1 if self.parent else 1
+
     def all_full_names(self):
         if self.label:
             yield self.label
