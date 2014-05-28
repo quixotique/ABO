@@ -8,6 +8,7 @@
 import logging
 import string
 import re
+from itertools import chain
 import abo.text
 from abo.enum import enum
 from abo.types import struct
@@ -61,10 +62,18 @@ class Account(object):
     >>> e = Account(label='e', tags=['a', 'b'])
     >>> c
     Account(label='c', parent=Account(label='b', parent=Account(label='a'), tags=('x',)), tags=('x', 'y'))
+    >>> c.bare_name()
+    u'c'
+    >>> c.full_name()
+    u':a:b:c'
     >>> unicode(c)
     u':a:b:c'
     >>> d
     Account(label='d', parent=Account(label='a'), atype=AccountType.ProfitLoss)
+    >>> c.relative_name(a)
+    u'b:c'
+    >>> c.relative_name(b)
+    u'c'
     >>> a in c
     False
     >>> c in a
@@ -132,7 +141,7 @@ class Account(object):
             self.parent._childcount += 1
 
     def __unicode__(self):
-        return (unicode(self.parent) if self.parent else u'') + u':' + (u'*' if self.wild else unicode(self.name or self.label))
+        return self.full_name()
 
     def __str__(self):
         return (str(self.parent) if self.parent else '') + ':' + ('*' if self.wild else str(self.name or self.label))
@@ -176,14 +185,33 @@ class Account(object):
     def is_substantial(self):
         return self._childcount == 0
 
-    def make_child(self, name=None, label=None, atype=None, tags=()):
-        return type(self)(name=name, label=label, atype=self.atype, tags=tags, parent=self)
+    def full_name(self):
+        return (unicode(self.parent) if self.parent else u'') + u':' + self.bare_name()
+
+    def bare_name(self):
+        return (u'*' if self.wild else unicode(self.name or self.label))
+
+    def relative_name(self, context_account):
+        return u':'.join(a.bare_name() for a in chain(reversed(list(self.parents_not_in_common_with(context_account))), (self,)))
 
     def shortname(self):
         return min(self.all_full_names(), key=len)
 
     def depth(self):
         return self.parent.depth() + 1 if self.parent else 1
+
+    def all_parents(self):
+        acc = self.parent
+        while acc is not None:
+            yield acc
+            acc = acc.parent
+
+    def parents_not_in_common_with(self, other_account):
+        other_line = frozenset(chain((other_account,), other_account.all_parents()))
+        for parent in self.all_parents():
+            if parent in other_line:
+                break
+            yield parent
 
     def all_full_names(self):
         if self.label:
@@ -194,6 +222,9 @@ class Account(object):
                     yield pname + ':' + self.name
             else:
                 yield ':' + self.name
+
+    def make_child(self, name=None, label=None, atype=None, tags=()):
+        return type(self)(name=name, label=label, atype=self.atype, tags=tags, parent=self)
 
 class Chart(object):
 

@@ -130,6 +130,17 @@ def cmd_acc(config, opts):
         elif e.amount > 0:
             totcr += e.amount
         desc = e.description()
+        acc = chart[e.account]
+        if acc is not account:
+            rel = []
+            for par in chain(reversed(list(acc.parents_not_in_common_with(account))), (acc,)):
+                b = par.bare_name()
+                for w in b.split():
+                    if w not in desc:
+                        rel.append(b)
+                        break
+            if rel:
+                desc += '; ' + u':'.join(rel)
         if opts['--control']:
             desc = e.transaction.date.strftime(ur'%-d-%b ') + desc
         desc = textwrap.wrap(desc, width=pw)
