@@ -55,6 +55,7 @@ def main():
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     locale.setlocale(locale.LC_ALL, '')
     lang, enc = locale.getlocale()
+    input_encoding = enc
     output_encoding = enc
     try:
         import docopt
@@ -65,6 +66,8 @@ def main():
     if opts['compa']:
         func = cmd_compa
     else:
+        if opts['<account>']:
+            opts['<account>'] = opts['<account>'].decode(input_encoding)
         import abo.command
         for word, value in opts.iteritems():
             if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
