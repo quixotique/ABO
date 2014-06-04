@@ -251,43 +251,60 @@ def cmd_due(config, opts):
     for t in transactions:
         for e in t.entries:
             account = chart[e.account]
-            if is_accrual(account):
-                while account.parent and is_accrual(account.parent):
-                    account = account.parent
-                due_accounts.add(account)
-            elif e.cdate:
-                due_accounts.add(account)
-            accounts[account].append(e)
+            if acc_pred(account):
+                if is_accrual(account):
+                    while account.parent and is_accrual(account.parent):
+                        account = account.parent
+                    due_accounts.add(account)
+                elif e.cdate:
+                    due_accounts.add(account)
+                accounts[account].append(e)
     due_all = []
     for account, entries in accounts.iteritems():
         if account in due_accounts:
             entries.sort(key=lambda e: e.cdate or e.transaction.date)
-            due = defaultdict(lambda: 0)
+            due = defaultdict(lambda: struct(account=account, entries=[]))
             for e in entries:
                 date = e.cdate or when #e.transaction.date
                 amount = e.amount
                 while amount and due:
                     earliest = sorted(due)[0]
-                    if sign(due[earliest]) == sign(amount):
+                    if sign(due[earliest].entries[0].amount) == sign(amount):
                         break
-                    if abs(amount) >= abs(due[earliest]):
-                        amount += due[earliest]
-                        del due[earliest]
-                    else:
-                        due[earliest] += amount
+                    while abs(amount) >= abs(due[earliest].entries[0].amount):
+                        amount += due[earliest].entries.pop(0).amount
+                        if not due[earliest].entries:
+                            del due[earliest]
+                            break
+                    if amount and earliest in due:
+                        e1 = due[earliest].entries[0]
+                        assert abs(amount) < abs(e1.amount)
+                        due[earliest].entries[0] = e1.replace(amount= e1.amount + amount)._attach(e1.transaction)
                         amount = 0
                 if amount:
-                    due[date] += amount
-            for date, amount in due.iteritems():
-                due_all.append((date, amount, account))
-    due_all.sort()
+                    due[date].entries.append(e.replace(amount= amount)._attach(e.transaction))
+            due_all += due.items()
+    due_all.sort(key=lambda a: (a[0], sum(e.amount for e in a[1].entries)))
     bw = config.money_column_width()
     fmt = u'%s %s %{bw}s  %s'.format(**locals())
-    for date, balance, account in due_all:
+    for date, due in due_all:
+        for e in due.entries:
+            assert chart[e.account] in due.account, 'e.account=%r account=%r' % (chart[e.account], due.account)
+        balance = sum(e.amount for e in due.entries)
+        details = []
+        if opts['--detail']:
+            t = None
+            for e in due.entries:
+                if e.transaction is not t:
+                    t = e.transaction
+                    if t.what:
+                        details.append(t.what)
+                if e.detail:
+                    details.append(e.detail)
         yield fmt % (date.strftime(ur'%a %_d-%b-%Y'),
                      '*' if date < when else '=' if date == when else ' ',
                      config.format_money(balance),
-                     unicode(account))
+                     u'; '.join([unicode(due.account)] + details))
 
 _chart_cache = None
 _transaction_caches = None
