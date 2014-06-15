@@ -35,21 +35,31 @@ at the end of a range of time.
  Entry(account=u'a2', amount=-100.0, cdate=5),
  Entry(account=u'a2', amount=2.5, cdate=6))
 
+>>> b = Balance([t1, t2, t3, t4], date_range=Range(1, 4), acc_pred=lambda a: a == u'a1')
+>>> b.accounts
+(u'a1',)
+>>> b.balance('a1')
+122.07
+>>> b.entries() #doctest: +NORMALIZE_WHITESPACE
+(Entry(account=u'a1', amount=122.07),)
+
 """
 
 from collections import defaultdict
 from itertools import chain
 import abo.transaction
+from abo.types import struct
 
 class Balance(object):
 
-    def __init__(self, transactions, date_range=None, chart=None, pred=None):
-        if pred is None:
-            pred = lambda a, c, m: True
+    def __init__(self, transactions, date_range=None, chart=None, acc_pred=None):
         self.date_range = date_range
         self.first_date = None
         self.last_date = None
-        balances = defaultdict(lambda: defaultdict(lambda: 0))
+        self._raw_balances = defaultdict(lambda: struct(cdate=defaultdict(lambda: 0), total=0))
+        if chart:
+            for acc in chart.substantial_accounts():
+                self._raw_balances[acc].total = 0
         for t in transactions:
             if self.date_range is None or t.date in self.date_range:
                 if self.first_date is None or t.date < self.first_date:
@@ -57,30 +67,54 @@ class Balance(object):
                 if self.last_date is None or t.date > self.last_date:
                     self.last_date = t.date
                 for e in t.entries:
-                    cdate = None if e.cdate is None or self.date_range is None or e.cdate in self.date_range else e.cdate
                     acc = chart[e.account] if chart else e.account
                     assert acc is not None
-                    balances[acc][cdate] += e.amount
-        for acc, cdates in balances.items():
-            for cdate, amount in cdates.items():
-                if not pred(acc, cdate, amount):
-                    del cdates[cdate]
-            if not cdates:
-                del balances[acc]
-        self._balances = defaultdict(lambda: defaultdict(lambda: 0))
-        for account, cdates in balances.iteritems():
-            for cdate, amount in cdates.iteritems():
-                for acc in chain(iter_lineage(account), [None]):
-                    self._balances[acc][cdate] += amount
-        self.accounts = tuple(sorted((b for b in self._balances if b is not None), key=unicode))
+                    if acc_pred is None or acc_pred(acc):
+                        cdate = None if e.cdate is None or self.date_range is None or e.cdate in self.date_range else e.cdate
+                        rb = self._raw_balances[acc]
+                        rb.cdate[cdate] += e.amount
+                        rb.total += e.amount
+        self.pred = lambda a, m: True
+        self._balances = None
+
+    def clone(self):
+        copy = type(self)([])
+        copy.date_range = self.date_range
+        copy.first_date = self.first_date
+        copy.last_date = self.last_date
+        copy.pred = self.pred
+        copy._raw_balances = self._raw_balances
+        copy._balances = None
+        return copy
+
+    def set_predicate(self, pred):
+        self.pred = pred
+        self._balances = None
+
+    def _tally(self):
+        if self._balances is None:
+            self._balances = defaultdict(lambda: defaultdict(lambda: 0))
+            for account, balance in self._raw_balances.iteritems():
+                if self.pred(account, balance.total):
+                    for cdate, amount in balance.cdate.iteritems():
+                        for acc in chain(iter_lineage(account), [None]):
+                            self._balances[acc][cdate] += amount
+
+    @property
+    def accounts(self):
+        self._tally()
+        return tuple(sorted((b for b in self._balances if b is not None), key=unicode))
 
     def balance(self, account=None):
+        self._tally()
         return sum(self._balances[account].itervalues()) if account in self._balances else 0
 
     def cbalance(self, account=None):
+        self._tally()
         return self._balances[account][None]
 
     def entries(self):
+        self._tally()
         without_cdate = []
         with_cdate = []
         for account, amounts in self._balances.iteritems():

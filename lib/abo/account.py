@@ -445,6 +445,9 @@ class Chart(object):
     def accounts(self):
         return sorted(self._accounts, key= lambda a: unicode(a))
 
+    def substantial_accounts(self):
+        return sorted((a for a in self._accounts if a.is_substantial()), key= lambda a: unicode(a))
+
     def iterkeys(self):
         return self._index.iterkeys()
 

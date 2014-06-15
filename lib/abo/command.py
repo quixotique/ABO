@@ -164,23 +164,27 @@ def cmd_profloss(config, opts):
     chart = get_chart(config, opts)
     acc_pred = parse_account_predicate(chart, opts)
     transactions = get_transactions(chart, config, opts)
+    plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and acc_pred(a)
+    balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, acc_pred=plpred) for p in periods]
     sections = []
     all_accounts = set()
     for depth, title, pred in (
-            (10, 'Taxable Income', (lambda a, c, m: m > 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
-            (10, 'Deductible Expenses', (lambda a, c, m: m < 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
-            (0,  'Net Taxable Income', (lambda a, c, m: 'nd' not in a.tags and 'tax' not in a.tags)),
-            (10, 'Tax', (lambda a, c, m: 'tax' in a.tags)),
-            (10, 'Non-Taxable Income', (lambda a, c, m: m > 0 and 'nd' in a.tags and 'tax' not in a.tags)),
-            (0,  'Income After Tax', (lambda a, c, m: m > 0 or 'nd' not in a.tags or 'tax' in a.tags)),
-            (10, 'Expenses', (lambda a, c, m: m < 0 and 'nd' in a.tags and 'tax' not in a.tags)),
+            (10, 'Taxable Income', (lambda a, m: m > 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
+            (10, 'Deductible Expenses', (lambda a, m: m < 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
+            (0,  'Net Taxable Income', (lambda a, m: 'nd' not in a.tags and 'tax' not in a.tags)),
+            (10, 'Tax', (lambda a, m: 'tax' in a.tags)),
+            (10, 'Non-Taxable Income', (lambda a, m: m > 0 and 'nd' in a.tags and 'tax' not in a.tags)),
+            (0,  'Income After Tax', (lambda a, m: m > 0 or 'nd' not in a.tags or 'tax' in a.tags)),
+            (10, 'Expenses', (lambda a, m: m < 0 and 'nd' in a.tags and 'tax' not in a.tags)),
         ):
-        bpred = lambda a, c, m: a.atype == abo.account.AccountType.ProfitLoss and (opts['--all'] or m) and acc_pred(a) and pred(a, c, m)
-        balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, pred=bpred) for p in periods]
         accounts = set()
+        bbalances = []
         for b in balances:
-            accounts.update(b.accounts)
-        sections.append(struct(depth=depth, title=title, balances=balances, accounts=accounts))
+            bb = b.clone()
+            bb.set_predicate(pred)
+            accounts.update(bb.accounts)
+            bbalances.append(bb)
+        sections.append(struct(depth=depth, title=title, balances=bbalances, accounts=accounts))
         all_accounts.update(accounts)
     bw = config.balance_column_width()
     aw = max(chain([10], (len(unicode(a)) for a in all_accounts)))
@@ -190,30 +194,27 @@ def cmd_profloss(config, opts):
     fmt = (u'%{bw}s ' * len(balances) + u' %.{aw}s').format(**locals())
     yield 'PROFIT LOSS STATEMENT'.center(width)
     line = []
-    for balance in balances:
-        line.append(balance.date_range.first.strftime(ur'%_d-%b-%Y') if balance.date_range.first else '')
+    for b in balances:
+        line.append(b.date_range.first.strftime(ur'%_d-%b-%Y') if b.date_range.first else '')
     line.append('')
     yield fmt % tuple(line)
     line = []
-    for balance in balances:
-        line.append(balance.date_range.last.strftime(ur'%_d-%b-%Y') if balance.date_range.last else '')
+    for b in balances:
+        line.append(b.date_range.last.strftime(ur'%_d-%b-%Y') if b.date_range.last else '')
     line.append('Account')
     yield fmt % tuple(line)
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
-    totals = [0] * len(balances)
     for section in sections:
         for account in chain([None], sorted((a for a in section.accounts if a.depth() <= section.depth), key=unicode)):
             line = []
-            for balance in section.balances:
-                line.append(config.format_money(balance.balance(account)))
+            for b in section.balances:
+                line.append(config.format_money(b.balance(account)))
             line.append(unicode(account) if account is not None else section.title)
             yield fmt % tuple(line)
         yield fmt % (('-' * bw,) * len(section.balances) + ('-' * aw,))
-        for i, balance in enumerate(section.balances):
-            totals[i] += balance.balance()
     line = []
-    for tot in totals:
-        line.append(config.format_money(tot))
+    for b in balances:
+        line.append(config.format_money(b.balance(None)))
     line.append('NET PROFIT (LOSS)')
     yield fmt % tuple(line)
 
@@ -221,7 +222,7 @@ def cmd_balance(config, opts):
     chart = get_chart(config, opts)
     acc_pred = parse_account_predicate(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
-    when, balance, transactions = filter_at(chart, all_transactions, opts, pred=lambda a, c, m: acc_pred(a))
+    when, balance, transactions = filter_at(chart, all_transactions, opts, acc_pred=acc_pred)
     bw = config.balance_column_width()
     aw = max(len(unicode(a)) for a in chart.accounts())
     width = bw + 2 + aw
@@ -378,10 +379,10 @@ def filter_period(chart, transactions, opts):
         range = abo.balance.Range(None, None)
     return range, brought_forward, transactions
 
-def filter_at(chart, transactions, opts, pred=None):
+def filter_at(chart, transactions, opts, acc_pred=None):
     when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
     range = abo.balance.Range(None, when)
-    balance = abo.balance.Balance(transactions, range, chart=chart, pred=pred)
+    balance = abo.balance.Balance(transactions, range, chart=chart, acc_pred=acc_pred)
     transactions = [t for t in transactions if t.date in range]
     return when, balance, transactions
 

@@ -8,8 +8,8 @@ r'''Usage:
     pyabo acc [-bcfwWqD] [--remove=ACC...] [--width=COLUMNS] <account> [<period>...]
     pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
-    pyabo due [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
-    pyabo profloss [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    pyabo due [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
+    pyabo profloss [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo compa [-qD] <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
