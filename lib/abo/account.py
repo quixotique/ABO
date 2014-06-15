@@ -328,20 +328,23 @@ class Chart(object):
     ...         print unicode(a)
     :Expenses:Household:Transport:Car:Petrol for cars
 
-    >>> p1 = c2.parse_predicate('/o')
+    >>> p1 = c2.parse_predicate('/u')
     >>> for a in c2.accounts():
     ...     if p1(a):
     ...         print unicode(a)
     :Cash assets:Bank account
-    :Cash assets:Loose change
     :Expenses:Household
     :Expenses:Household:Consumibles
     :Expenses:Household:Consumibles:Food
     :Expenses:Household:Transport
+    :Expenses:Household:Transport:Car
     :Expenses:Household:Transport:Car:Petrol for cars
     :Expenses:Household:Transport:Car:rego, insurance, maintenance
     :Expenses:Household:Transport:Taxi journeys
-    :Income
+    :Expenses:Household:Utilities
+    :Expenses:Household:Utilities:Electricity
+    :Expenses:Household:Utilities:Gas
+    :Expenses:Household:Utilities:Water usage
 
     >>> p2 = c2.parse_predicate('inc|/oo')
     >>> for a in c2.accounts():
@@ -495,7 +498,7 @@ class Chart(object):
             m = self._regex_cond_pattern.match(text, 1)
             if m:
                 pattern = m.group().lower()
-                return (lambda a: pattern in a.name.lower()), text[m.end():]
+                return (lambda a: pattern in a.full_name().lower()), text[m.end():]
         m = self._regex_cond_pattern.match(text)
         if m:
             try:
