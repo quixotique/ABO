@@ -97,6 +97,12 @@ def _today():
     return date.today()
 
 def parse_periods(args):
+    periods = _parse_periods(args)
+    if args:
+        raise ValueError("unrecognised argument '%s'" % args[0])
+    return periods
+
+def _parse_periods(args):
     periods = []
     while args:
         if args[0] == 'this':
@@ -113,7 +119,7 @@ def parse_periods(args):
             try:
                 start, end = parse_last(args)
             except ValueError:
-                args = oargs
+                args[:] = oargs
                 start, end = parse_latest(word, args)
             periods.append((start, end))
         elif args[0] == 'next':
@@ -178,9 +184,34 @@ def parse_periods(args):
                     newperiods.append((start, min(next_start - timedelta(1), end)))
                     start = next_start
             periods = newperiods
+        elif args[0] in ('yearly', 'annually'):
+            args.pop(0)
+            newperiods = []
+            for start, end in periods:
+                while start < end:
+                    next_start = advance_date(start, years=1)
+                    newperiods.append((start, min(next_start - timedelta(1), end)))
+                    start = next_start
+            periods = newperiods
         else:
-            raise ValueError("unrecognised argument '%s'" % args[0])
+            break
     return periods
+
+def parse_whens(args):
+    r"""
+    >>> import abo.period
+    >>> abo.period._today = lambda: date(2013, 3, 20)
+
+    >>> parse_whens(['today'])
+    [datetime.date(2013, 3, 20)]
+    >>> parse_whens(['yesterday', 'today', 'five', 'days', 'ago', 'tomorrow'])
+    [datetime.date(2013, 3, 19), datetime.date(2013, 3, 20), datetime.date(2013, 3, 15), datetime.date(2013, 3, 21)]
+
+    """
+    whens = _parse_whens(args)
+    if args:
+        raise ValueError("unrecognised argument '%s'" % args[0])
+    return whens
 
 def parse_when(args):
     r"""
@@ -199,20 +230,28 @@ def parse_when(args):
     datetime.date(2013, 6, 30)
 
     """
-    startend = None
-    if args and args[0] in ('start', 'end'):
-        startend = args.pop(0)
-        if args and args[0] == 'of':
-            args.pop(0)
-        periods = parse_periods(args)
-        if len(periods) > 1:
-            raise ValueError('too many periods')
-        d = periods[0][1] if startend == 'end' else periods[0][0]
-    else:
-        d = parse_date(args)
-        if args:
-            raise ValueError("unrecognised argument '%s'" % args[0])
-    return d
+    whens = _parse_whens(args)
+    if args:
+        raise ValueError("unrecognised argument '%s'" % args[0])
+    if len(whens) == 0:
+        raise ValueError('missing date')
+    if len(whens) > 1:
+        raise ValueError('too many dates')
+    return whens[0]
+
+def _parse_whens(args):
+    whens = []
+    while args:
+        startend = None
+        if args and args[0] in ('start', 'end'):
+            startend = args.pop(0)
+            if args and args[0] == 'of':
+                args.pop(0)
+            periods = _parse_periods(args)
+            whens += (period[1] if startend == 'end' else period[0] for period in periods)
+        else:
+            whens.append(parse_date(args))
+    return whens
 
 def parse_fromto(args):
     if args[0] == 'this':
@@ -325,7 +364,7 @@ def enclosing_range(origin, unit):
     elif unit in ('year', 'years'):
         start = origin.replace(month=1, day=1)
         end = advance_date(start, years=1) - timedelta(1)
-    elif unit == 'fy':
+    elif unit in ('fy', 'fys'):
         start, end = fy_containing(origin)
     else:
         raise ValueError("unrecognised unit %r" % unit)
@@ -413,7 +452,7 @@ def parse_latest(word, args):
     return start, end
 
 def advance_date_unit(start, unit, amount):
-    if unit in ('year', 'years'):
+    if unit in ('year', 'years', 'fy', 'fys'):
         return advance_date(start, years=amount)
     elif unit in ('quarter', 'quarters'):
         return advance_date(start, quarters=amount)
