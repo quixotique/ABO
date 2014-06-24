@@ -460,6 +460,9 @@ class Chart(object):
     def iterkeys(self):
         return self._index.iterkeys()
 
+    def has_wild_account(self):
+        return len(self._wild) != 0
+
     def tags(self):
         return sorted(self._tags)
 

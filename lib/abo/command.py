@@ -312,35 +312,12 @@ def cmd_due(config, opts):
                      config.format_money(balance),
                      u'; '.join([unicode(due.account)] + details))
 
-_chart_cache = None
-_transaction_caches = None
-
-def chart_cache(config, opts):
-    global _chart_cache
-    if _chart_cache is None:
-        def compile_chart():
-            logging.info("compile %r", config.chart_file_path)
-            chart = abo.account.Chart.from_file(file(config.chart_file_path))
-            for tc in transaction_caches(chart, config, opts):
-                tc.get()
-            return chart
-        _chart_cache = abo.cache.FileCache(config, config.chart_file_path, compile_chart, config.input_file_paths, force=opts['--force'])
-    return _chart_cache
-
-def transaction_caches(chart, config, opts):
-    global _transaction_caches
-    if _transaction_caches is None:
-        _transaction_caches = []
-        for path in config.input_file_paths:
-            _transaction_caches.append(abo.cache.TransactionCache(config, path, abo.journal.Journal(config, file(path), chart=chart), [config.chart_file_path], force=opts['--force']))
-    return _transaction_caches
-
 def get_chart(config, opts):
-    return chart_cache(config, opts).get()
+    return abo.cache.chart_cache(config, opts).get()
 
 def get_transactions(chart, config, opts):
     transactions = []
-    for cache in transaction_caches(chart, config, opts):
+    for cache in abo.cache.transaction_caches(chart, config, opts):
         transactions += cache.transactions()
     transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
     if opts['--remove']:

@@ -142,8 +142,8 @@ def compa(config, args):
     return keys
 
 def compa_accounts(config, word):
-    import abo.account
-    chart = abo.account.Chart.from_file(file(config.chart_file_path))
+    import abo.cache
+    chart = abo.cache.chart_cache(config).get()
     for key in chart.iterkeys():
         if key.startswith(word):
             comp = key[len(word):]
@@ -155,8 +155,8 @@ def compa_accounts(config, word):
             yield shell_quote(word + comp) + end
 
 def compa_tags(config, word):
-    import abo.account
-    chart = abo.account.Chart.from_file(file(config.chart_file_path))
+    import abo.cache
+    chart = abo.cache.chart_cache(config).get()
     for tag in chart.tags():
         if tag.startswith(word):
             yield shell_quote(tag) + ' '

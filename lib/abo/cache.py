@@ -5,6 +5,7 @@
 """Transaction cache.
 """
 
+import logging
 import os
 import os.path
 import errno
@@ -69,3 +70,31 @@ class TransactionCache(FileCache):
 
     def transactions(self):
         return self.get()
+
+_chart_cache = None
+
+def chart_cache(config, opts=None):
+    global _chart_cache
+    if _chart_cache is None:
+        def compile_chart():
+            logging.info("compile %r", config.chart_file_path)
+            import abo.account
+            chart = abo.account.Chart.from_file(file(config.chart_file_path))
+            if chart.has_wild_account():
+                for tc in transaction_caches(chart, config, opts):
+                    tc.get()
+            return chart
+        _chart_cache = FileCache(config, config.chart_file_path, compile_chart, config.input_file_paths, force=opts and opts['--force'])
+    return _chart_cache
+
+_transaction_caches = None
+
+def transaction_caches(chart, config, opts=None):
+    global _transaction_caches
+    if _transaction_caches is None:
+        import abo.journal
+        _transaction_caches = []
+        for path in config.input_file_paths:
+            _transaction_caches.append(TransactionCache(config, path, abo.journal.Journal(config, file(path), chart=chart), [config.chart_file_path], force=opts and opts['--force']))
+    return _transaction_caches
+
