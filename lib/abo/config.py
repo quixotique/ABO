@@ -29,12 +29,12 @@ class Config(object):
         self.width = 0 if opts['--wide'] else int(opts['--width']) if opts['--width'] else None
         return self
 
-    def load(self, opts):
+    def load(self):
         trydir = os.path.abspath('.')
         while trydir != '/':
             trypath = os.path.join(trydir, '.pyabo')
             if os.path.isfile(trypath):
-                return self.read_from(trypath).apply_options(opts)
+                return self.read_from(trypath)
             trydir = os.path.dirname(trydir)
         raise ConfigException('no configuration file')
 

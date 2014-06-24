@@ -10,7 +10,7 @@ r'''Usage:
     pyabo balance [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
     pyabo profloss [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
-    pyabo compa [-qD] <command> <word> <preword>
+    pyabo compa <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
 
@@ -58,40 +58,43 @@ def main():
     lang, enc = locale.getlocale()
     input_encoding = enc
     output_encoding = enc
+    opts = None
     try:
-        import docopt
-    except ImportError:
-        sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
-        import docopt
-    opts = docopt.docopt(__doc__, version='0.1')
-    if opts['compa']:
-        func = cmd_compa
-    else:
-        if opts['<account>']:
-            opts['<account>'] = opts['<account>'].decode(input_encoding)
-        import abo.command
-        for word, value in opts.iteritems():
-            if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
-                func = getattr(abo.command, 'cmd_' + word)
-                break
+        try:
+            config = abo.config.Config().load()
+        except abo.config.ConfigException, e:
+            fatal(unicode(e).encode(output_encoding))
+        if len(sys.argv) >= 2 and sys.argv[1] == 'compa':
+            output = compa(config, [arg.decode(input_encoding) for arg in sys.argv[2:]])
         else:
-            fatal('unknown command : %s' % sys.argv[1])
-    if opts['--debug'] or len(os.environ.get('PYABO_DEBUG', '')):
-        pass
-    elif opts['--quiet']:
-        logging.disable(logging.INFO)
-    else:
-        logging.disable(logging.DEBUG)
-    logging.debug("parsed options, func=%s", func.__name__)
-    try:
-        config = abo.config.Config().load(opts)
-    except abo.config.ConfigException, e:
-        fatal(unicode(e).encode(output_encoding))
-    try:
-        for line in func(config, opts):
+            try:
+                import docopt
+            except ImportError:
+                sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
+                import docopt
+            opts = docopt.docopt(__doc__, version='0.1')
+            if opts['<account>']:
+                opts['<account>'] = opts['<account>'].decode(input_encoding)
+            import abo.command
+            for word, value in opts.iteritems():
+                if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
+                    func = getattr(abo.command, 'cmd_' + word)
+                    break
+            else:
+                fatal('unknown command : %s' % sys.argv[1])
+            if opts['--debug'] or len(os.environ.get('PYABO_DEBUG', '')):
+                pass
+            elif opts['--quiet']:
+                logging.disable(logging.INFO)
+            else:
+                logging.disable(logging.DEBUG)
+            logging.debug("parsed options, func=%s", func.__name__)
+            config.apply_options(opts)
+            output = func(config, opts)
+        for line in output:
             print line.encode(output_encoding)
     except:
-        if opts['--debug']:
+        if opts and opts['--debug']:
             raise
         import abo.text
         import abo.command
@@ -107,31 +110,56 @@ def fatal(message, status=1):
     print >>sys.stderr, "%s: %s" % (os.path.basename(sys.argv[0]), message)
     sys.exit(status)
 
-def cmd_compa(config, opts):
-    import abo.account
-    word, preword = opts['<word>'], opts['<preword>']
-    logging.debug('word=%r preword=%r', word, preword)
+def compa(config, args):
+    logging.disable(logging.INFO)
+    if len(args) != 3:
+        import abo.command
+        raise abo.command.InvalidArg("expecting exactly three arguments after 'compa'")
+    command, word, preword = args
+    logging.debug('command=%r word=%r preword=%r', command, word, preword)
     keys = set()
     if preword == 'pyabo':
         import abo.command
-        for key, value in opts.iteritems():
-            if type(value) is bool and hasattr(abo.command, 'cmd_' + key):
-                if key.startswith(word) and len(key) > len(word):
-                    keys.add(key + ' ')
+        for key, value in abo.command.__dict__.iteritems():
+            if key.startswith('cmd_'):
+                cmd = key[4:]
+                if cmd.startswith(word) and len(cmd) > len(word) and type(value) is type(compa):
+                    keys.add(cmd + ' ')
     elif preword == 'acc':
-        chart = abo.account.Chart.from_file(file(config.chart_file_path))
-        for key in chart.iterkeys():
-            if key.startswith(word):
-                comp = key[len(word):]
-                end = ''
-                if ':' in comp:
-                    comp = comp.split(':', 1)[0] + ':'
-                else:
-                    end = ' '
-                keys.add(shell_quote(word + comp) + end)
+        keys.update(compa_accounts(config, word))
+    elif preword == '--select':
+        if word.startswith('='):
+            keys.update('=' + comp for comp in compa_tags(config, word[1:]))
+        elif word.startswith('/'):
+            pass
+        else:
+            keys.update(compa_accounts(config, word))
+            if word == '':
+                keys.add('=')
+                keys.add('/')
     keys = sorted(keys)
     logging.debug('keys=%r', keys)
     return keys
+
+def compa_accounts(config, word):
+    import abo.account
+    chart = abo.account.Chart.from_file(file(config.chart_file_path))
+    for key in chart.iterkeys():
+        if key.startswith(word):
+            comp = key[len(word):]
+            end = ''
+            if ':' in comp:
+                comp = comp.split(':', 1)[0] + ':'
+            else:
+                end = ' '
+            yield shell_quote(word + comp) + end
+
+def compa_tags(config, word):
+    import abo.account
+    chart = abo.account.Chart.from_file(file(config.chart_file_path))
+    for tag in chart.tags():
+        if tag.startswith(word):
+            yield shell_quote(tag) + ' '
 
 def shell_quote(text):
     return (text.replace('\\', '\\\\')

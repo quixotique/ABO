@@ -274,6 +274,9 @@ class Chart(object):
     u':Income:Rent' 'rent' AccountType.ProfitLoss ('PL', 'nd')
     u':Income:Salary' None AccountType.ProfitLoss ('PL', 'nd')
 
+    >>> c1.tags()
+    ['AL', 'PL', 'asset', 'cash', 'nd']
+
     >>> c1['food'] in c1['exp']
     True
     >>> c1['food'] in c1['inc']
@@ -385,6 +388,7 @@ class Chart(object):
 
     def __init__(self):
         self._accounts = None
+        self._tags = None
         self._index = None
 
     @classmethod
@@ -397,6 +401,7 @@ class Chart(object):
     def from_accounts(cls, accounts):
         self = cls()
         self._accounts = set()
+        self._tags = set()
         self._wild = {}
         self._index = {}
         for account in accounts:
@@ -421,6 +426,7 @@ class Chart(object):
             self._accounts.add(account)
             for name in account.all_full_names():
                 self._index[name] = account
+        self._tags.update(account.tags)
         return True
 
     def __len__(self):
@@ -453,6 +459,9 @@ class Chart(object):
 
     def iterkeys(self):
         return self._index.iterkeys()
+
+    def tags(self):
+        return sorted(self._tags)
 
     def parse_predicate(self, text):
         func, text = self._parse_disjunction(text)
@@ -514,6 +523,7 @@ class Chart(object):
 
     def _parse(self, source_file):
         self._accounts = set()
+        self._tags = set()
         self._index = {}
         self._wild = {}
         if isinstance(source_file, basestring):
