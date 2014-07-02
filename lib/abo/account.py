@@ -206,8 +206,14 @@ class Account(object):
             yield acc
             acc = acc.parent
 
+    def self_and_all_parents(self):
+        acc = self
+        while acc is not None:
+            yield acc
+            acc = acc.parent
+
     def parents_not_in_common_with(self, other_account):
-        other_line = frozenset(chain((other_account,), other_account.all_parents()))
+        other_line = frozenset(other_account.self_and_all_parents())
         for parent in self.all_parents():
             if parent in other_line:
                 break
@@ -225,6 +231,40 @@ class Account(object):
 
     def make_child(self, name=None, label=None, atype=None, tags=()):
         return type(self)(name=name, label=label, atype=self.atype, tags=tags, parent=self)
+
+def common_root(accounts):
+    r'''
+    >>> a = Account(label='a')
+    >>> b = Account(label='b', parent=a, tags=['x'])
+    >>> c = Account(label='c', parent=b, tags=['y'])
+    >>> d = Account(label='d', parent=a, atype=AccountType.ProfitLoss)
+    >>> e = Account(label='e', tags=['a', 'b'])
+    >>> f = Account(label='f', parent=b)
+    >>> common_root([c]).label
+    'c'
+    >>> common_root([c, d]).label
+    'a'
+    >>> common_root([b, c]).label
+    'b'
+    >>> common_root([c, e]) is None
+    True
+    >>> common_root([c, f]).label
+    'b'
+    '''
+    roots = None
+    for account in accounts:
+        if roots is None:
+            roots = set(account.self_and_all_parents())
+        else:
+            roots.intersection_update(account.self_and_all_parents())
+    if not roots:
+        return None
+    while len(roots) > 1:
+        for account in list(roots):
+            roots.difference_update(account.all_parents())
+    assert len(roots) == 1
+    return roots.pop()
+        
 
 class Chart(object):
 

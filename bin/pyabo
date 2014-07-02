@@ -5,7 +5,7 @@
 r'''Usage:
     pyabo chart [-fvqD] [--select=PRED]
     pyabo index [-fqD]
-    pyabo acc [-bcfwWqD] [--remove=ACC...] [--width=COLUMNS] <account> [<period>...]
+    pyabo acc [-bcfwWqD] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
     pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
@@ -76,8 +76,8 @@ def main():
         if opts is None:
             output = compa(config, [arg.decode(input_encoding) for arg in sys.argv[2:]])
         else:
-            if opts['<account>']:
-                opts['<account>'] = opts['<account>'].decode(input_encoding)
+            if opts['<PRED>']:
+                opts['<PRED>'] = opts['<PRED>'].decode(input_encoding)
             import abo.command
             for word, value in opts.iteritems():
                 if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
@@ -129,17 +129,9 @@ def compa(config, args):
                 if cmd.startswith(word) and len(cmd) > len(word) and type(value) is type(compa):
                     keys.add(cmd + ' ')
     elif preword == 'acc':
-        keys.update(compa_accounts(config, word))
+        keys.update(compa_pred(config, word))
     elif preword == '--select':
-        if word.startswith('='):
-            keys.update('=' + comp for comp in compa_tags(config, word[1:]))
-        elif word.startswith('/'):
-            pass
-        else:
-            keys.update(compa_accounts(config, word))
-            if word == '':
-                keys.add('=')
-                keys.add('/')
+        keys.update(compa_pred(config, word))
     keys = sorted(keys)
     logging.debug('keys=%r', keys)
     return keys
@@ -163,6 +155,19 @@ def compa_tags(config, word):
     for tag in chart.tags():
         if tag.startswith(word):
             yield shell_quote(tag) + ' '
+
+def compa_pred(config, word):
+    if word.startswith('='):
+        for comp in compa_tags(config, word[1:]):
+            yield '=' + comp
+    elif word.startswith('/'):
+        pass
+    else:
+        if word == '':
+            yield '='
+            yield '/'
+        for comp in compa_accounts(config, word):
+            yield comp
 
 def shell_quote(text):
     return (text.replace('\\', '\\\\')

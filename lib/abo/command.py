@@ -62,7 +62,7 @@ def cmd_journal(config, opts):
 
 def cmd_chart(config, opts):
     chart = get_chart(config, opts)
-    acc_pred = parse_account_predicate(chart, opts)
+    acc_pred = parse_option_select_account_predicate(chart, opts)
     for account in chart.accounts():
         if acc_pred(account):
             line = [unicode(account)]
@@ -81,7 +81,11 @@ def cmd_index(config, opts):
 
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
-    account = chart[opts['<account>']]
+    acc_pred = parse_account_predicate(chart, opts['<PRED>'].lstrip())
+    accounts = set(a for a in chart.accounts() if acc_pred(a))
+    logging.debug('accounts = %r' % map(unicode, accounts))
+    common_root_account = abo.account.common_root(accounts)
+    logging.debug('common_root_account = %r' % unicode(common_root_account))
     all_transactions = get_transactions(chart, config, opts)
     range, bf, transactions = filter_period(chart, all_transactions, opts)
     dw = 11
@@ -102,26 +106,32 @@ def cmd_acc(config, opts):
     balance = 0
     totdb = 0
     totcr = 0
-    if bf and (account.atype is not abo.account.AccountType.ProfitLoss or opts['--bring-forward']):
-        if opts['--control']:
-            balance += bf.cbalance(account)
-            yield fmt % ('', 'Brought forward',
-                    config.format_money(-balance) if balance < 0 else '',
-                    config.format_money(balance) if balance > 0 else '',
-                    config.format_money(balance))
-        else:
-            for e in bf.entries():
-                if chart[e.account] is account:
-                    balance += e.amount
-                    yield fmt % ('', 'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),
-                            config.format_money(-e.amount) if e.amount < 0 else '',
-                            config.format_money(e.amount) if e.amount > 0 else '',
-                            config.format_money(balance))
+    if bf:
+        for account in accounts:
+            if account.is_substantial() and account.atype is not abo.account.AccountType.ProfitLoss or opts['--bring-forward']:
+                if opts['--control']:
+                    amount = bf.cbalance(account)
+                    if amount != 0:
+                        balance += amount
+                        yield fmt % ('', '; '.join(filter(bool, ['Brought forward', account.relative_name(common_root_account)])),
+                                config.format_money(-amount) if amount < 0 else '',
+                                config.format_money(amount) if amount > 0 else '',
+                                config.format_money(balance))
+                else:
+                    for e in bf.entries():
+                        if chart[e.account] is account and e.amount != 0:
+                            balance += e.amount
+                            yield fmt % ('', '; '.join(filter(bool, ['Brought forward',
+                                                                     'due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else '',
+                                                                     account.relative_name(common_root_account)])),
+                                    config.format_money(-e.amount) if e.amount < 0 else '',
+                                    config.format_money(e.amount) if e.amount > 0 else '',
+                                    config.format_money(balance))
     if opts['--control']:
-        entries = [e for e in chain(*(t.entries for t in all_transactions)) if chart[e.account] in account and (e.cdate or e.transaction.date) in range]
+        entries = [e for e in chain(*(t.entries for t in all_transactions)) if chart[e.account] in accounts and (e.cdate or e.transaction.date) in range]
         entries.sort(key=lambda e: e.cdate or e.transaction.date)
     else:
-        entries = [e for e in chain(*(t.entries for t in transactions)) if chart[e.account] in account]
+        entries = [e for e in chain(*(t.entries for t in transactions)) if chart[e.account] in accounts]
     for e in entries:
         date = e.cdate if opts['--control'] and e.cdate else e.transaction.date
         balance += e.amount
@@ -131,9 +141,9 @@ def cmd_acc(config, opts):
             totcr += e.amount
         desc = e.description()
         acc = chart[e.account]
-        if acc is not account:
+        if acc is not common_root_account:
             rel = []
-            for par in chain(reversed(list(acc.parents_not_in_common_with(account))), (acc,)):
+            for par in chain(reversed(list(acc.parents_not_in_common_with(common_root_account))), (acc,)):
                 b = par.bare_name()
                 for w in b.split():
                     if w not in desc:
@@ -162,7 +172,7 @@ def cmd_acc(config, opts):
 def cmd_profloss(config, opts):
     periods = parse_periods(opts)
     chart = get_chart(config, opts)
-    acc_pred = parse_account_predicate(chart, opts)
+    acc_pred = parse_option_select_account_predicate(chart, opts)
     transactions = get_transactions(chart, config, opts)
     plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and acc_pred(a)
     balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, acc_pred=plpred) for p in periods]
@@ -220,7 +230,7 @@ def cmd_profloss(config, opts):
 
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
-    acc_pred = parse_account_predicate(chart, opts)
+    acc_pred = parse_option_select_account_predicate(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
     whens, balances = filter_at(chart, all_transactions, opts, acc_pred=acc_pred)
     all_accounts = sorted(frozenset(chain(*(b.accounts for b in balances))), key=unicode)
@@ -247,7 +257,7 @@ def cmd_balance(config, opts):
 
 def cmd_due(config, opts):
     chart = get_chart(config, opts)
-    acc_pred = parse_account_predicate(chart, opts)
+    acc_pred = parse_option_select_account_predicate(chart, opts)
     when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
     transactions = (t for t in get_transactions(chart, config, opts))
     def is_accrual(account):
@@ -326,8 +336,10 @@ def get_transactions(chart, config, opts):
             transactions = abo.account.remove_account(chart, lambda a: a in acc, transactions)
     return transactions
 
-def parse_account_predicate(chart, opts):
-    text = (opts['--select'] or '').lstrip()
+def parse_option_select_account_predicate(chart, opts):
+    return parse_account_predicate(chart, (opts['--select'] or '').lstrip())
+
+def parse_account_predicate(chart, text):
     if not text:
         return lambda a: True
     try:
