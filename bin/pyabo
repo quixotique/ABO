@@ -60,12 +60,8 @@ def main():
     output_encoding = enc
     opts = None
     try:
-        try:
-            config = abo.config.Config().load()
-        except abo.config.ConfigException, e:
-            fatal(unicode(e).encode(output_encoding))
         if len(sys.argv) >= 2 and sys.argv[1] == 'compa':
-            output = compa(config, [arg.decode(input_encoding) for arg in sys.argv[2:]])
+            pass
         else:
             try:
                 import docopt
@@ -73,6 +69,13 @@ def main():
                 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
                 import docopt
             opts = docopt.docopt(__doc__, version='0.1')
+        try:
+            config = abo.config.Config().load()
+        except abo.config.ConfigException, e:
+            fatal(unicode(e).encode(output_encoding))
+        if opts is None:
+            output = compa(config, [arg.decode(input_encoding) for arg in sys.argv[2:]])
+        else:
             if opts['<account>']:
                 opts['<account>'] = opts['<account>'].decode(input_encoding)
             import abo.command
