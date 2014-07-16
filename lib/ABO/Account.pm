@@ -20,13 +20,11 @@ sub init
 {
 	my $self = shift;
 	local $_ = shift;
-	if (/^\s*(\w+)(\s+(\S.*))?$/o)
-	{
+	if (/^\s*(\w+)(\s+(\S.*))?$/o) {
 		$self->{'name'} = $1;
 		$self->{'details'} = $3;
 	}
-	else
-	{
+	else {
 		$self->error("invalid account text `$_'");
 		return undef;
 	}
@@ -126,7 +124,7 @@ sub is_accrue
 sub is_loan
 {
 	my $self = shift;
-	return $self->is_asset && $self->category eq 'loans';
+	return $self->is_asset && $self->category =~ /\bloans\b/;
 }
 
 sub due_date
