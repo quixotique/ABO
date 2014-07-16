@@ -176,9 +176,9 @@ def cmd_profloss(config, opts):
     transactions = get_transactions(chart, config, opts)
     plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and acc_pred(a)
     balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, acc_pred=plpred) for p in periods]
-    sections = []
     all_accounts = set()
-    for depth, title, pred in (
+    if opts['--tax']:
+        section_preds = (
             (10, 'Taxable Income', (lambda a, m: m > 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
             (10, 'Deductible Expenses', (lambda a, m: m < 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
             (0,  'Net Taxable Income', (lambda a, m: 'nd' not in a.tags and 'tax' not in a.tags)),
@@ -186,7 +186,14 @@ def cmd_profloss(config, opts):
             (10, 'Non-Taxable Income', (lambda a, m: m > 0 and 'nd' in a.tags and 'tax' not in a.tags)),
             (0,  'Income After Tax', (lambda a, m: m > 0 or 'nd' not in a.tags or 'tax' in a.tags)),
             (10, 'Expenses', (lambda a, m: m < 0 and 'nd' in a.tags and 'tax' not in a.tags)),
-        ):
+        )
+    else:
+        section_preds = (
+            (10, 'Income', (lambda a, m: m > 0)),
+            (10, 'Expenses', (lambda a, m: m < 0)),
+        )
+    sections = []
+    for depth, title, pred in section_preds:
         accounts = set()
         bbalances = []
         for b in balances:

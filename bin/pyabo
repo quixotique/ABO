@@ -9,7 +9,7 @@ r'''Usage:
     pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
-    pyabo profloss [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    pyabo profloss [-fWqD] [--tax] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
@@ -30,6 +30,7 @@ Options:
     -d --detail             Show transaction details
     -v --verbose            Show more information
     -r --remove=ACC         Remove account ACC
+    --tax                   Separate tax-free and tax-deductible sections
 
 PRED = condition | disjunction
 disjunction = conjunction "|" disjunction
