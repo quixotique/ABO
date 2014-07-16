@@ -221,14 +221,14 @@ else
 	my @non_taxable_income = printac('NON-TAXABLE INCOME', @cr, @db, \&non_deductable);
 	space(1);
 	my @tax_paid = printac('INCOME TAX PAID OR WITHHELD', @db, @cr, \&tax_paid);
-	my @income_after_tax = difference(@net_taxable_income, @tax_paid);
+        my @taxed_income = difference(@net_taxable_income, @tax_paid);
+	my @income_after_tax = total(@taxed_income, @non_taxable_income);
 	space(1);
 	oneline('NET INCOME AFTER TAX', @income_after_tax);
 	rule('', '=');
 	space(1);
-	my @income = total(@income_after_tax, @non_taxable_income);
-	my @expenses = printac('NON-DEDUCTABLE EXPENSES', @db, @cr, \&non_deductable);
-	my @profit = difference(@income, @expenses);
+	my @non_deductible_expenses = printac('NON-DEDUCTABLE EXPENSES', @db, @cr, \&non_deductable);
+	my @profit = difference(@income_after_tax, @non_deductible_expenses);
 	rule('', '-');
 	oneline('NET PROFIT(LOSS)', @profit);
 	rule('', '=');
