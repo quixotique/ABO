@@ -273,11 +273,11 @@ class Chart(object):
     >>> c1 = Chart.from_file(r'''#ABO-Legacy-Accounts
     ... exp pl "Expenses"
     ...   "Household"
-    ...     :nd "Utilities"
-    ...       gas "Gas"
-    ...       elec "Electricity"
-    ...       water "Water usage"
-    ...     :nd "Consumibles"
+    ...     "Utilities"
+    ...       gas :nd "Gas"
+    ...       elec :nd "Electricity"
+    ...       water :nd,cons "Water usage"
+    ...     :nd,cons "Consumibles"
     ...       food "Food"
     ...     "Transport"
     ...       :nd "Car"
@@ -298,24 +298,24 @@ class Chart(object):
     u':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability ('AL', 'asset', 'cash')
     u':Expenses' 'exp' AccountType.ProfitLoss ('PL',)
     u':Expenses:Household' None AccountType.ProfitLoss ('PL',)
-    u':Expenses:Household:Consumibles' None AccountType.ProfitLoss ('PL', 'nd')
-    u':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss ('PL', 'nd')
+    u':Expenses:Household:Consumibles' None AccountType.ProfitLoss ('PL', 'cons', 'nd')
+    u':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss ('PL', 'cons', 'nd')
     u':Expenses:Household:Transport' None AccountType.ProfitLoss ('PL',)
     u':Expenses:Household:Transport:Car' None AccountType.ProfitLoss ('PL', 'nd')
     u':Expenses:Household:Transport:Car:Petrol for cars' 'petrol' AccountType.ProfitLoss ('PL', 'nd')
     u':Expenses:Household:Transport:Car:rego, insurance, maintenance' 'car' AccountType.ProfitLoss ('PL', 'nd')
     u':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss ('PL',)
-    u':Expenses:Household:Utilities' None AccountType.ProfitLoss ('PL', 'nd')
+    u':Expenses:Household:Utilities' None AccountType.ProfitLoss ('PL',)
     u':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss ('PL', 'nd')
     u':Expenses:Household:Utilities:Gas' 'gas' AccountType.ProfitLoss ('PL', 'nd')
-    u':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss ('PL', 'nd')
+    u':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss ('PL', 'cons', 'nd')
     u':Income' 'inc' AccountType.ProfitLoss ('PL',)
     u':Income:Prizes' 'prizes' AccountType.ProfitLoss ('PL',)
     u':Income:Rent' 'rent' AccountType.ProfitLoss ('PL', 'nd')
     u':Income:Salary' None AccountType.ProfitLoss ('PL', 'nd')
 
     >>> c1.tags()
-    ['AL', 'PL', 'asset', 'cash', 'nd']
+    ['AL', 'PL', 'asset', 'cash', 'cons', 'nd']
 
     >>> c1['food'] in c1['exp']
     True
@@ -328,8 +328,8 @@ class Chart(object):
     ...     Utilities =UTIL
     ...       Gas [gas] =energy
     ...       Electricity [elec] =energy
-    ...       [water] Water usage
-    ...     Consumibles
+    ...       [water] Water usage =cons
+    ...     Consumibles =cons
     ...       Food [food]
     ...     Transport
     ...       Car
@@ -363,6 +363,14 @@ class Chart(object):
     :Expenses:Household:Utilities
     :Expenses:Household:Utilities:Electricity
     :Expenses:Household:Utilities:Gas
+    :Expenses:Household:Utilities:Water usage
+
+    >>> p1 = c1.parse_predicate('=cons')
+    >>> for a in c2.accounts():
+    ...     if p1(a):
+    ...         print unicode(a)
+    :Expenses:Household:Consumibles
+    :Expenses:Household:Consumibles:Food
     :Expenses:Household:Utilities:Water usage
 
     >>> p1 = c2.parse_predicate('=energy&!=UTIL')
@@ -560,7 +568,11 @@ class Chart(object):
                 raise InvalidAccountPredicate(m.group())
         raise InvalidAccountPredicate(text)
 
-    _regex_legacy_line = re.compile(r'^(?P<label>' + Account._rxpat_label + r')?\s*(?P<type>' + Account.rxpat_tag + r')?(?::(?P<qual>' + Account.rxpat_tag + r'))?\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
+    _regex_legacy_line = re.compile(
+            r'^(?P<label>' + Account._rxpat_label + r')?'
+        +   r'\s*(?P<type>' + Account.rxpat_tag + r')?'
+        +   r'(?::(?P<qual>' + Account.rxpat_tag + r'(?:,' + Account.rxpat_tag + r')*))?'
+        +   r'\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
     _regex_label = re.compile(r'\[(' + Account._rxpat_label + r')]')
     _regex_tag = re.compile(r'\s*=(' + Account.rxpat_tag + ')\s*')
 
@@ -595,11 +607,11 @@ class Chart(object):
                     raise abo.text.LineError('malformed line', line=line)
                 label = m.group('label')
                 actype = m.group('type')
-                qual = m.group('qual')
+                qual = m.group('qual').split(',') if m.group('qual') else []
                 if not actype:
                     atype = None
                 elif (actype.startswith('ass') or actype.startswith('lia') or actype.startswith('pay') or actype.startswith('rec')):
-                    if qual == 'equity':
+                    if 'equity' in qual:
                         atype = AccountType.Equity
                     else:
                         atype = AccountType.AssetLiability
@@ -609,7 +621,7 @@ class Chart(object):
                 else:
                     raise abo.text.LineError('unknown account type %r' % actype, line=line)
                 if qual:
-                    tags.add(qual)
+                    tags.update(qual)
                 name = m.group('name1') or m.group('name2')
                 if stack:
                     if atype is None:
