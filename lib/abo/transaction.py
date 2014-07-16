@@ -292,7 +292,7 @@ class Transaction(abo.base.Base):
         semicolon allows a description string to be split into who and what
         strings if needed.
         """
-        return '; '.join([s for s in (self.who, self.what) if s])
+        return '; '.join(s for s in (self.who, self.what) if s and s.strip())
 
     def replace(self, date=None, entries=None):
         """Return a copy of this Transaction with new attributes.

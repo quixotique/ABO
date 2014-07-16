@@ -273,17 +273,14 @@ def cmd_due(config, opts):
     selected_accounts = select_accounts(chart, opts)
     when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
     transactions = (t for t in get_transactions(chart, config, opts))
-    def is_accrual(account):
-        return account.atype is abo.account.AccountType.AssetLiability and ('rec' in account.tags or 'pay' in account.tags)
     accounts = defaultdict(lambda: [])
     due_accounts = set()
     for t in transactions:
         for e in t.entries:
             account = chart[e.account]
             if account in selected_accounts:
-                if is_accrual(account):
-                    while account.parent and is_accrual(account.parent):
-                        account = account.parent
+                if account.is_accrual():
+                    account = account.accrual_parent()
                     due_accounts.add(account)
                 elif e.cdate:
                     due_accounts.add(account)
@@ -334,6 +331,15 @@ def cmd_due(config, opts):
                      '*' if date < when else '=' if date == when else ' ',
                      config.format_money(balance),
                      '; '.join([str(due.account)] + details))
+
+def cmd_mako(config, opts):
+    import sys
+    import os.path
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'mako'))
+    import mako
+    from mako.template import Template
+    import abo.api
+    yield Template(filename=opts['<template>']).render_unicode(*opts['<args>'], abo=abo.api.API(config, opts))
 
 def get_chart(config, opts):
     return abo.cache.chart_cache(config, opts).get()

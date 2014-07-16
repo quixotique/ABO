@@ -192,6 +192,15 @@ class Account(object):
     def is_substantial(self):
         return self._childcount == 0
 
+    def is_receivable(self):
+        return self.atype is AccountType.AssetLiability and 'rec' in self.tags
+
+    def is_payable(self):
+        return self.atype is AccountType.AssetLiability and 'pay' in self.tags
+
+    def is_accrual(self):
+        return self.is_receivable() or self.is_payable()
+
     def full_name(self):
         return (str(self.parent) if self.parent else '') + ':' + self.bare_name()
 
@@ -225,6 +234,9 @@ class Account(object):
             if parent in other_line:
                 break
             yield parent
+
+    def accrual_parent(self):
+        return None if not self.is_accrual() else self if self.parent is None or not self.parent.is_accrual() else self.parent.accrual_parent()
 
     def all_full_names(self):
         if self.label:

@@ -10,6 +10,7 @@ r'''Usage:
     pyabo balance [-faWqDs] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
     pyabo profloss [-fWqDs] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    pyabo mako [-fqD] [--remove=PRED...] <template> [<args>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
