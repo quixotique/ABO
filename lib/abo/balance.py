@@ -67,8 +67,12 @@ class Balance(object):
                 if self.last_date is None or t.date > self.last_date:
                     self.last_date = t.date
                 for e in t.entries:
-                    acc = chart[e.account] if chart else e.account
-                    assert acc is not None
+                    if chart:
+                        acc = chart[e.account]
+                        assert acc is not None
+                        assert acc.is_substantial()
+                    else:
+                        acc = e.account
                     if acc_pred is None or acc_pred(acc):
                         cdate = None if e.cdate is None or self.date_range is None or e.cdate in self.date_range else e.cdate
                         rb = self._raw_balances[acc]

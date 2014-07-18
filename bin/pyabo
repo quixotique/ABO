@@ -7,9 +7,9 @@ r'''Usage:
     pyabo index [-fqD]
     pyabo acc [-bcfwWqD] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
     pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
-    pyabo balance [-faWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
+    pyabo balance [-faWqDs] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
-    pyabo profloss [-fWqD] [--tax] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    pyabo profloss [-fWqDs] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
@@ -30,6 +30,8 @@ Options:
     -d --detail             Show transaction details
     -v --verbose            Show more information
     -r --remove=ACC         Remove account ACC
+    -s --subtotals          Show subtotal lines
+    -n --depth=N            Show accounts to this depth only
     --tax                   Separate tax-free and tax-deductible sections
 
 PRED = condition | disjunction

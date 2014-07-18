@@ -62,18 +62,16 @@ def cmd_journal(config, opts):
 
 def cmd_chart(config, opts):
     chart = get_chart(config, opts)
-    acc_pred = parse_option_select_account_predicate(chart, opts)
-    for account in chart.accounts():
-        if acc_pred(account):
-            line = [unicode(account)]
-            if opts['--verbose']:
-                if account.label:
-                    line.append('[%s]' % (account.label,))
-                for tag in account.tags:
-                    line.append('=%s' % (tag,))
-                #if account.atype and not (account.parent and account.parent.atype == account.atype):
-                #    line.append('=%s' % (abo.account.atype_to_tag[account.atype]))
-            yield ' '.join(line)
+    for account in select_accounts(chart, opts):
+        line = [unicode(account)]
+        if opts['--verbose']:
+            if account.label:
+                line.append('[%s]' % (account.label,))
+            for tag in account.tags:
+                line.append('=%s' % (tag,))
+            #if account.atype and not (account.parent and account.parent.atype == account.atype):
+            #    line.append('=%s' % (abo.account.atype_to_tag[account.atype]))
+        yield ' '.join(line)
 
 def cmd_index(config, opts):
     chart = get_chart(config, opts)
@@ -81,8 +79,7 @@ def cmd_index(config, opts):
 
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
-    acc_pred = parse_account_predicate(chart, opts['<PRED>'].lstrip())
-    accounts = set(a for a in chart.accounts() if acc_pred(a))
+    accounts = filter_accounts(chart, opts['<PRED>'].lstrip())
     logging.debug('accounts = %r' % map(unicode, accounts))
     common_root_account = abo.account.common_root(accounts)
     logging.debug('common_root_account = %r' % unicode(common_root_account))
@@ -172,25 +169,25 @@ def cmd_acc(config, opts):
 def cmd_profloss(config, opts):
     periods = parse_periods(opts)
     chart = get_chart(config, opts)
-    acc_pred = parse_option_select_account_predicate(chart, opts)
+    selected_accounts = select_accounts(chart, opts)
     transactions = get_transactions(chart, config, opts)
-    plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and acc_pred(a)
+    plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and a in selected_accounts
     balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, acc_pred=plpred) for p in periods]
     all_accounts = set()
     if opts['--tax']:
         section_preds = (
-            (10, 'Taxable Income', (lambda a, m: m > 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
-            (10, 'Deductible Expenses', (lambda a, m: m < 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
-            (0,  'Net Taxable Income', (lambda a, m: 'nd' not in a.tags and 'tax' not in a.tags)),
-            (10, 'Tax', (lambda a, m: 'tax' in a.tags)),
-            (10, 'Non-Taxable Income', (lambda a, m: m > 0 and 'nd' in a.tags and 'tax' not in a.tags)),
-            (0,  'Income After Tax', (lambda a, m: m > 0 or 'nd' not in a.tags or 'tax' in a.tags)),
-            (10, 'Expenses', (lambda a, m: m < 0 and 'nd' in a.tags and 'tax' not in a.tags)),
+            (None, 'Taxable Income', (lambda a, m: m > 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
+            (None, 'Deductible Expenses', (lambda a, m: m < 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
+            (0,    'Net Taxable Income', (lambda a, m: 'nd' not in a.tags and 'tax' not in a.tags)),
+            (None, 'Tax', (lambda a, m: 'tax' in a.tags)),
+            (None, 'Non-Taxable Income', (lambda a, m: m > 0 and 'nd' in a.tags and 'tax' not in a.tags)),
+            (0,    'Income After Tax', (lambda a, m: m > 0 or 'nd' not in a.tags or 'tax' in a.tags)),
+            (None, 'Expenses', (lambda a, m: m < 0 and 'nd' in a.tags and 'tax' not in a.tags)),
         )
     else:
         section_preds = (
-            (10, 'Income', (lambda a, m: m > 0)),
-            (10, 'Expenses', (lambda a, m: m < 0)),
+            (None, 'Income', (lambda a, m: m > 0)),
+            (None, 'Expenses', (lambda a, m: m < 0)),
         )
     sections = []
     for depth, title, pred in section_preds:
@@ -222,7 +219,11 @@ def cmd_profloss(config, opts):
     yield fmt % tuple(line)
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
     for section in sections:
-        for account in chain([None], sorted((a for a in section.accounts if a.depth() <= section.depth), key=unicode)):
+        section_accounts = section.accounts
+        if section.depth is not None:
+            section_accounts = set(a for a in section_accounts if a.depth() <= section.depth)
+        section_accounts = filter_display_accounts(section_accounts, opts)
+        for account in chain([None], sorted(section_accounts, key=unicode)):
             line = []
             for b in section.balances:
                 line.append(config.format_money(b.balance(account)))
@@ -237,12 +238,12 @@ def cmd_profloss(config, opts):
 
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
-    acc_pred = parse_option_select_account_predicate(chart, opts)
+    selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
-    whens, balances = filter_at(chart, all_transactions, opts, acc_pred=acc_pred)
-    all_accounts = sorted(frozenset(chain(*(b.accounts for b in balances))), key=unicode)
-    logging.debug('all_accounts = %r' % all_accounts)
-    aw = max(chain([10], (len(unicode(a)) for a in all_accounts)))
+    whens, balances = filter_at(chart, all_transactions, opts, acc_pred=lambda a: a in selected_accounts)
+    display_accounts = sorted(filter_display_accounts(chain(*(b.accounts for b in balances)), opts), key=unicode)
+    logging.debug('display_accounts = %r' % display_accounts)
+    aw = max(chain([10], (len(unicode(a)) for a in display_accounts)))
     bw = config.balance_column_width()
     width = (bw + 1) * len(balances) + 1 + aw
     if config.output_width() and width > config.output_width():
@@ -256,7 +257,7 @@ def cmd_balance(config, opts):
     line.append('Account')
     yield fmt % tuple(line)
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
-    for account in all_accounts:
+    for account in display_accounts:
         bals = tuple(b.balance(account) for b in balances)
         if filter(bool, bals) or opts['--all']:
             yield fmt % (tuple(config.format_money(bal) for bal in bals) + (unicode(account),))
@@ -264,7 +265,7 @@ def cmd_balance(config, opts):
 
 def cmd_due(config, opts):
     chart = get_chart(config, opts)
-    acc_pred = parse_option_select_account_predicate(chart, opts)
+    selected_accounts = select_accounts(chart, opts)
     when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
     transactions = (t for t in get_transactions(chart, config, opts))
     def is_accrual(account):
@@ -274,7 +275,7 @@ def cmd_due(config, opts):
     for t in transactions:
         for e in t.entries:
             account = chart[e.account]
-            if acc_pred(account):
+            if account in selected_accounts:
                 if is_accrual(account):
                     while account.parent and is_accrual(account.parent):
                         account = account.parent
@@ -343,16 +344,27 @@ def get_transactions(chart, config, opts):
             transactions = abo.account.remove_account(chart, lambda a: a in acc, transactions)
     return transactions
 
-def parse_option_select_account_predicate(chart, opts):
-    return parse_account_predicate(chart, (opts['--select'] or '').lstrip())
+def select_accounts(chart, opts):
+    return filter_accounts(chart, (opts['--select'] or '').lstrip())
 
-def parse_account_predicate(chart, text):
-    if not text:
-        return lambda a: True
-    try:
-        return chart.parse_predicate(text)
-    except abo.account.InvalidAccountPredicate, e:
-        raise InvalidArg(e)
+def filter_accounts(chart, text):
+    accounts = set(chart.accounts())
+    if text:
+        try:
+            pred = chart.parse_predicate(text)
+        except abo.account.InvalidAccountPredicate, e:
+            raise InvalidArg(e)
+        accounts = set(filter(pred, accounts))
+    return accounts
+
+def filter_display_accounts(accounts, opts):
+    accounts = set(accounts) # unroll iterator once only
+    if opts['--depth'] is not None:
+        accounts = set(a for a in accounts if a.depth() <= int(opts['--depth']))
+    if not opts['--subtotals']:
+        for a in list(accounts):
+            accounts.difference_update(a.all_parents())
+    return accounts
 
 def parse_periods(opts):
     brought_forward = None

@@ -213,7 +213,7 @@ class Account(object):
             acc = acc.parent
 
     def parents_not_in_common_with(self, other_account):
-        other_line = frozenset(other_account.self_and_all_parents())
+        other_line = frozenset(other_account.self_and_all_parents()) if other_account is not None else frozenset()
         for parent in self.all_parents():
             if parent in other_line:
                 break
