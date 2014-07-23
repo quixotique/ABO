@@ -1,0 +1,483 @@
+#!/usr/bin/env python
+# vim:sw=4 sts=4 et
+# Copyright 2014 Andrew Bettison, All rights reserved
+
+import sys
+import os.path
+import getopt
+import re
+import math
+import datetime
+
+def usage(locals):
+    global myname
+    print 'Usage: %s [options]' % myname
+    print '''\
+   --year YYYY               financial year ending YYYY [default %(year)s]
+   --super PER               superannuation contribution is PER %% [default %(super_contrib_default)s%%]
+   --gross AMT               gross income (package + extra)
+   --package AMT             package income (before super taken out)
+   --salary AMT              salary income (package - super)
+   --income AMT              income (salary + extra)
+   --taxable AMT             taxable income (salary - deductions)
+   --after-tax AMT           income after tax (before non-deductable expenses)
+   --net AMT                 income after tax and non-deductable expenses
+   --public-holidays N       N public holidays per year [default %(public_holidays)s]
+   --holidays N              N weeks of paid annual leave per year [default %(holidays)s]
+   --extra AMT               extra untaxed income [default %(extra)s]
+   --deductions AMT          deductable expenses [default %(deductions)s]
+   --expenses AMT            non-deductable expenses [default %(expenses)s]
+   --hpd, --hours-per-day N  N hours per day [default %(hours_per_day)s]
+   --dpw, --days-per-week N  N days per week [default %(workdays_per_week)s]
+   --slack PER               PER %% of work days are spent on non-income activity
+                             [default %(slack)s]
+
+   AMT is float[pa|pq|pm|pw|pd|ph]
+''' % locals
+
+def main():
+    global myname
+    myname = os.path.basename(sys.argv[0])
+    try:
+        try:
+            opts, args = getopt.getopt(sys.argv[1:], "", [
+                    'help',
+                    'year=',
+                    'package=',
+                    'salary=',
+                    'gross=',
+                    'income=',
+                    'taxable=',
+                    'after-tax=',
+                    'net=',
+                    'super=',
+                    'public-holidays=',
+                    'holidays=',
+                    'deductions=',
+                    'extra=',
+                    'expenses=',
+                    'hpd=',
+                    'hours-per-day=',
+                    'dpw=',
+                    'days-per-week=',
+                    'slack=',
+                ])
+        except getopt.GetoptError, e:
+            raise UsageError(e)
+        today = datetime.date.today()
+        year = today.year
+        if today.month >= 7:
+            year += 1
+        super_contrib_default = superannuation_contribution(year)
+        super_contrib = None
+        what_opts = ('--gross', '--package', '--salary', '--income', '--taxable', '--after-tax', '--net',)
+        what = None
+        amount = None
+        what_opt = None
+        public_holidays = 11
+        holidays = 4
+        extra = '0'
+        deductions = '0'
+        expenses = '0'
+        slack = 0
+        hours_per_day = 8
+        workdays_per_week = 5
+        for opt, arg in opts:
+            if opt in ('--help'):
+                usage(locals())
+                sys.exit(0)
+            try:
+                w = None
+                if opt in ('--year',):
+                    year = int(arg)
+                elif opt in what_opts:
+                    w = opt[2:]
+                elif opt in ('--super',):
+                    super_contrib = float(arg)
+                elif opt in ('--public-holidays',):
+                    public_holidays = int(arg)
+                elif opt in ('--holidays',):
+                    holidays = int(arg)
+                elif opt in ('--deductions',):
+                    deductions = arg
+                elif opt in ('--extra',):
+                    extra = arg
+                elif opt in ('--expenses',):
+                    expenses = arg
+                elif opt in ('--hpd', '--hours-per-day',):
+                    hours_per_day = float(arg)
+                elif opt in ('--dpw', '--days_per_week',):
+                    workdays_per_week = float(arg)
+                elif opt in ('--slack',):
+                    slack = float(arg)
+                else:
+                    raise AssertionError('unsupported option "%s"' % opt)
+                if w is not None:
+                    if what_opt is not None:
+                        raise UsageError('%s conflicts with %s' % (opt, what_opt))
+                    what_opt = opt
+                    what = w
+                    amount = arg
+            except ValueError, e:
+                raise UsageError(e)
+        if year is None:
+            raise UsageError('missing --year')
+        weeks_per_year = 52
+        workweeks_per_year = weeks_per_year - holidays
+        public_holidays_per_year = public_holidays * workdays_per_week / 5. if workdays_per_week < 5 else public_holidays
+        workdays_per_year = (workweeks_per_year * workdays_per_week - public_holidays_per_year) * (100 - slack) / 100.
+        if what is None:
+            raise UsageError('missing one of ' + ' '.join(what_opts))
+        if super_contrib is None:
+            super_contrib = superannuation_contribution(year)
+        re_scale = re.compile(r'^(\d+|\d*\.\d\d)(?:\s*p([aqmwdh]))?$', re.IGNORECASE)
+        def scale(arg):
+            m = re_scale.match(arg)
+            if m is None:
+                raise ValueError('bad value "%s"' % arg)
+            amt, conv = float(m.group(1)), (m.group(2) or '').lower()
+            if len(conv) == 0:
+                pass
+            elif conv in ['d', 'h']:
+                amt *= workdays_per_year
+                if conv == 'h':
+                    amt *= hours_per_day
+            elif conv == 'w':
+                amt *= weeks_per_year
+            elif conv == 'm':
+                amt *= 12
+            elif conv == 'q':
+                amt *= 4
+            elif conv == 'a':
+                pass
+            else:
+                raise AssertionError('conv="%s"' % conv)
+            return amt
+        amount = scale(amount)
+        extra = scale(extra)
+        deductions = scale(deductions)
+        expenses = scale(expenses)
+    except UsageError, e:
+        error(e)
+        print >>sys.stderr, "Try `%s --help' for more information" % myname
+        sys.exit(2)
+    compute_opts = { 'deductions': deductions,
+                     'extra': extra,
+                     'expenses': expenses,
+                     'super_contrib': super_contrib,
+                     'medicare_levy': medicare_levy_func(year),
+                     'income_tax': income_tax_func(year),
+                   }
+    if what in ('after-tax', 'net'):
+        x = amount + expenses - extra
+        jump = x / 4.
+        while True:
+            r = compute(taxable= x + jump, **compute_opts)
+            if what == 'after-tax':
+                amt = r.after_tax
+            else:
+                amt = r.net
+            if amt == amount:
+                break
+            elif amt > amount:
+                if jump < .02:
+                    break
+                jump /= 2
+            else:
+                x += jump
+    elif what == 'taxable':
+        r = compute(taxable=amount, **compute_opts)
+    elif what == 'package':
+        r = compute(package=amount, **compute_opts)
+    elif what == 'salary':
+        r = compute(salary=amount, **compute_opts)
+    elif what == 'gross':
+        r = compute(gross=amount, **compute_opts)
+    elif what == 'income':
+        r = compute(income=amount, **compute_opts)
+    else:
+        raise AssertionError('what="%s"' % what)
+
+    def row(label, *amounts):
+        return '%-20s' % label + ('%12s' * len(amounts)) % amounts
+
+    def amounts(amt):
+        def fmt(a): return '%10.2f' % a
+        return [fmt(amt),
+                fmt(amt / 4.),
+                fmt(amt / 12.),
+                fmt((amt * 10) / workdays_per_year),
+                fmt((amt * 5) / workdays_per_year),
+                fmt(amt / workdays_per_year),
+                fmt(amt / (workdays_per_year * hours_per_day)),
+               ]
+
+    print row(year, 'Annual', 'Quarterly', 'Monthly', 'F/nightly', 'Weekly', 'Daily', 'Hourly')
+    if r.extra:
+        print row("Gross income", *amounts(r.gross))
+        print row("Extra untaxed income", *amounts(r.extra))
+    if r.super:
+        print row("Salary package", *amounts(r.package))
+        print row("Superannuation %.1f%%" % super_contrib, *amounts(r.super))
+    print row("Salary income", *amounts(r.salary))
+    if r.extra:
+        print row("Total income", *amounts(r.income))
+    if r.deductions:
+        print row("Deductions", *amounts(r.deductions))
+    print row("Taxable income", *amounts(r.taxable))
+    print row("Income tax", *amounts(r.income_tax))
+    print row("Medicare levy", *amounts(r.medicare_levy))
+    print row("Tax payable", *amounts(r.tax_payable))
+    print row("Income after tax", *amounts(r.after_tax))
+    print row("Effective tax rate %", '%.1f' % r.effective_rate)
+    print row("PAYG instalments", *amounts(r.payg))
+    print row("Income after PAYG", *amounts(r.after_payg))
+    if expenses:
+        print row("Expenses", *amounts(r.expenses))
+        print row("Net income", *amounts(r.net))
+
+def error(msg):
+    global myname
+    print >>sys.stderr, '%s: %s' % (myname, msg)
+
+class UsageError(Exception):
+    pass
+
+class struct(object):
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+    def __repr__(self):
+        return str(self.__dict__)
+
+def compute(gross=None, package=None, salary=None, income=None, taxable=None,
+            income_tax=None, medicare_levy=None,
+            extra=0., deductions=0., expenses=0., super_contrib=0.):
+    #d = dict(locals())
+    #d.pop('income_tax')
+    #d.pop('medicare_levy')
+    #print >>sys.stderr, ', '.join('%s=%r' % i for i in d.iteritems())
+    assert extra >= 0.
+    assert deductions >= 0.
+    assert expenses >= 0.
+    assert super_contrib >= 0. and super_contrib <= 100.
+    if gross is not None:
+        if package is None:
+            package = gross - extra
+    if package is not None:
+        super = package - package / (1 + super_contrib / 100.)
+        if salary is None:
+            salary = package - super
+    if salary is not None:
+        if income is None:
+            income = salary + extra
+    if taxable is not None:
+        if income is None:
+            income = taxable + deductions + extra
+    assert income is not None
+    if salary is None:
+        assert income >= extra
+        salary = income - extra
+    if package is None:
+        super = salary * super_contrib / 100.
+        package = salary + super
+    if gross is None:
+        gross = package + extra
+    assert super >= 0.
+    assert package == salary + super
+    assert income == salary + extra
+    assert gross == package + extra
+    if taxable is None:
+        taxable = salary - deductions
+    assert income == taxable + deductions + extra
+    medicare_levy = math.floor(medicare_levy(math.floor(taxable)))
+    income_tax = math.floor(income_tax(math.floor(taxable)))
+    tax_payable = medicare_levy + income_tax
+    after_tax = taxable - tax_payable + extra
+    net = after_tax - expenses
+    payg = 12 * math.ceil(tax_payable / 12.)
+    after_payg = taxable - payg + extra
+    effective_rate = tax_payable / income * 100
+    return struct(**locals())
+
+def income_tax_2003(taxable):
+    if taxable <= 6000:
+        return 0.
+    if taxable <= 20000:
+        return .17 * (taxable - 6000)
+    if taxable <= 50000:
+        return 2380 + .30 * (taxable - 20000)
+    if taxable <= 60000:
+        return 11380 + .42 * (taxable - 50000)
+    return 15580 + .47 * (taxable - 60000)
+
+def income_tax_2004(taxable):
+    if taxable <= 6000:
+        return 0.
+    if taxable <= 21600:
+        return .17 * (taxable - 6000)
+    if taxable <= 52000:
+        return 2652 + .30 * (taxable - 21600)
+    if taxable <= 62500:
+        return 11772 + .42 * (taxable - 52000)
+    return 16182 + .47 * (taxable - 62500)
+
+def income_tax_2005(taxable):
+    if taxable <= 6000:
+        return 0.
+    if taxable <= 21600:
+        return .17 * (taxable - 6000)
+    if taxable <= 58000:
+        return 2652 + .30 * (taxable - 21600)
+    if taxable <= 70000:
+        return 13572 + .42 * (taxable - 58000)
+    return 18612 + .47 * (taxable - 70000)
+
+def income_tax_2006(taxable):
+    if taxable <= 6000:
+        return 0.
+    if taxable <= 21600:
+        return .15 * (taxable - 6000)
+    if taxable <= 63000:
+        return 2340 + .30 * (taxable - 21600)
+    if taxable <= 95000:
+        return 13260 + .42 * (taxable - 63000)
+    return 26700 + .47 * (taxable - 95000)
+
+def income_tax_2007(taxable):
+    if taxable <= 6000:
+        return 0.
+    if taxable <= 25000:
+        return .15 * (taxable - 6000)
+    if taxable <= 75000:
+        return 2850 + .30 * (taxable - 25000)
+    if taxable <= 150000:
+        return 17850 + .40 * (taxable - 75000)
+    return 47850 + .45 * (taxable - 150000)
+
+def income_tax_2008(taxable):
+    if taxable <= 6000:
+        return 0.
+    if taxable <= 30000:
+        return .15 * (taxable - 6000)
+    if taxable <= 75000:
+        return 3600 + .30 * (taxable - 30000)
+    if taxable <= 150000:
+        return 17100 + .40 * (taxable - 75000)
+    return 47100 + .45 * (taxable - 150000)
+
+def income_tax_2009(taxable):
+    if taxable <= 6000:
+        return 0.
+    if taxable <= 34000:
+        return .15 * (taxable - 6000)
+    if taxable <= 80000:
+        return 4200 + .30 * (taxable - 34000)
+    if taxable <= 180000:
+        return 18000 + .40 * (taxable - 80000)
+    return 58000 + .45 * (taxable - 180000)
+
+def income_tax_2010(taxable):
+    if taxable <= 6000:
+        return 0.
+    if taxable <= 35000:
+        return .15 * (taxable - 6000)
+    if taxable <= 80000:
+        return 4350 + .30 * (taxable - 35000)
+    if taxable <= 180000:
+        return 17850 + .38 * (taxable - 80000)
+    return 55850 + .45 * (taxable - 180000)
+
+def income_tax_2011(taxable):
+    if taxable <= 6000:
+        return 0.
+    if taxable <= 37000:
+        return .15 * (taxable - 6000)
+    if taxable <= 80000:
+        return 4650 + .30 * (taxable - 37000)
+    if taxable <= 180000:
+        return 17550 + .37 * (taxable - 80000)
+    return 54550 + .45 * (taxable - 180000)
+
+def income_tax_2013(taxable):
+    if taxable <= 18200:
+        return 0.
+    if taxable <= 37000:
+        return .19 * (taxable - 18200)
+    if taxable <= 80000:
+        return 3572 + .325 * (taxable - 37000)
+    if taxable <= 180000:
+        return 17547 + .37 * (taxable - 80000)
+    return 54547 + .45 * (taxable - 180000)
+
+def income_tax_2016(taxable):
+    if taxable <= 19400:
+        return 0.
+    if taxable <= 37000:
+        return .19 * (taxable - 19400)
+    if taxable <= 80000:
+        return 3344 + .33 * (taxable - 37000)
+    if taxable <= 180000:
+        return 17534 + .37 * (taxable - 80000)
+    return 54534 + .45 * (taxable - 180000)
+
+def income_tax_func(year):
+    funcyears = {}
+    for name, func in globals().iteritems():
+        if len(name) == 15 and name.startswith('income_tax_') and name[-4:].isdigit():
+            funcyears[int(name[-4:])] = func
+    return funcyears[[y for y in sorted(funcyears.iterkeys()) if y <= year][-1]]
+
+def medicare_levy_2003(taxable):
+    if taxable <= 15529:
+        return 0.
+    if taxable <= 16788:
+        return .2 * taxable - 15529
+    return .015 * taxable
+
+def medicare_levy_2011(taxable):
+    return _medicare_levy(taxable, 0.015, 18839, 22163)
+
+def medicare_levy_2013(taxable):
+    return _medicare_levy(taxable, 0.015, 20542, 24167)
+
+def medicare_levy_2015(taxable):
+    return _medicare_levy(taxable, 0.02, 20542, 24167)
+
+def _medicare_levy(taxable, full_rate, lower_threshold, upper_threshold):
+    if taxable <= lower_threshold:
+        return 0.
+    if taxable >= upper_threshold:
+        return full_rate * taxable
+    rate = full_rate * float(taxable - lower_threshold) / float(upper_threshold - lower_threshold)
+    return rate * (taxable - lower_threshold)
+
+def medicare_levy_func(year):
+    funcyears = {}
+    for name, func in globals().iteritems():
+        if len(name) == 18 and name.startswith('medicare_levy_') and name[-4:].isdigit():
+            funcyears[int(name[-4:])] = func
+    return funcyears[[y for y in sorted(funcyears.iterkeys()) if y <= year][-1]]
+
+def superannuation_contribution(year):
+    if year <= 2000:
+        return 7.
+    if year <= 2002:
+        return 8.
+    if year <= 2013:
+        return 9.
+    if year <= 2014:
+        return 9.25
+    if year <= 2015:
+        return 9.5
+    if year <= 2016:
+        return 10.
+    if year <= 2017:
+        return 10.5
+    if year <= 2018:
+        return 11.
+    if year <= 2019:
+        return 11.5
+    return 12.
+
+if __name__ == '__main__':
+    main()
