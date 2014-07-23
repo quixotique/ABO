@@ -152,7 +152,7 @@ def cmd_acc(config, opts):
             desc = e.transaction.date.strftime(ur'%-d-%b ') + desc
         desc = textwrap.wrap(desc, width=pw)
         yield fmt % (date.strftime(ur'%_d-%b-%Y'),
-                desc.pop(0),
+                desc.pop(0) if desc else '',
                 config.format_money(-e.amount) if e.amount < 0 else '',
                 config.format_money(e.amount) if e.amount > 0 else '',
                 config.format_money(balance))
