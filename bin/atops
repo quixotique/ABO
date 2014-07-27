@@ -1,0 +1,102 @@
+#!/bin/bash
+# Copyright 2014 Andrew Bettison.  All rights reserved.
+
+shopt -s extglob
+
+usage() {
+   echo "\
+Usage: ${0##*/} [-l|--landscape] [-fN] [groff-args] -- [file ...]
+Options:
+   -l, --landscape      Orient in landscape not portrait
+   -fN                  Font size N [default 9]
+   -h, --help           Print this message"
+}
+
+text_to_groff() {
+   perl -e '$_ = join("", <>);
+            chomp;
+            s/\n+\014\n?/\014/og;
+            s/\014+$//o;
+            s/\\/\\\\/og;
+            s/^/\\\&/mog;
+            s/\014/\n.BP\n/mog;
+            s/((.)\010\2)+/\\f3$&\\f1/og;
+            s/.\010//og;
+            print;' "$@"
+}
+
+fatal() {
+   echo "$0: $*" >&2
+   exit 1
+}
+
+font_size=9
+paper_length=28.8c
+top_margin=1.0c
+page_offset=1.5c
+line_length=19.3c
+
+options=()
+while [ $# -ne 0 ]; do
+   case "$1" in
+   -h|--help)
+      usage
+      exit 0
+      ;;
+   -l|--landscape)
+      paper_length=19.9c
+      line_length=28.2c
+      options+=(-P-pa4)
+      options+=(-P-l)
+      ;;
+   -f+([0-9]))
+      font_size="${1#-f}"
+      ;;
+   -f*)
+      fatal "malformed option: $1"
+      ;;
+   --) shift; break;;
+   *) options+=("$1");;
+   esac
+   shift
+done
+vertical_space=$((font_size + 1))
+
+{
+
+   cat <<EOF
+.fp 1 CR
+.fp 2 CI
+.fp 3 CB
+.fp 4 CBI
+.ft 1
+.ps $font_size
+.vs $vertical_space
+.de _t
+'  sp |$top_margin
+..
+.wh 0 _t
+.de BP
+.br
+.if \\n[.h] .bp
+..
+.pl $paper_length
+.po $page_offset
+.ll $line_length
+.nf
+EOF
+   case $# in
+   0)
+      text_to_groff
+      ;;
+   *)
+      text_to_groff "$1"
+      shift
+      for file; do
+         echo
+         echo .bp
+         text_to_groff "$file"
+      done
+      ;;
+   esac
+} | groff -k "${options[@]}"
