@@ -223,12 +223,17 @@ def cmd_profloss(config, opts):
         if section.depth is not None:
             section_accounts = set(a for a in section_accounts if a.depth() <= section.depth)
         section_accounts = filter_display_accounts(section_accounts, opts)
+        if opts['--subtotals']:
+            subaccounts = parentset(section_accounts)
         for account in chain([None], sorted(section_accounts, key=unicode)):
             line = []
             for b in section.balances:
                 line.append(config.format_money(b.balance(account)))
             line.append(unicode(account) if account is not None else section.title)
-            yield fmt % tuple(line)
+            line = fmt % tuple(line)
+            if opts['--subtotals'] and account is not None and account not in subaccounts:
+                line = strong(line)
+            yield line
         yield fmt % (('-' * bw,) * len(section.balances) + ('-' * aw,))
     line = []
     for b in balances:
@@ -362,9 +367,18 @@ def filter_display_accounts(accounts, opts):
     if opts['--depth'] is not None:
         accounts = set(a for a in accounts if a.depth() <= int(opts['--depth']))
     if not opts['--subtotals']:
-        for a in list(accounts):
-            accounts.difference_update(a.all_parents())
+        accounts = leafset(accounts)
     return accounts
+
+def parentset(accounts):
+    parents = set()
+    for a in accounts:
+        parents.update(a.all_parents())
+    return parents
+
+def leafset(accounts):
+    leaves = set(accounts)
+    return leaves.difference(parentset(leaves))
 
 def parse_periods(opts):
     brought_forward = None
@@ -408,3 +422,23 @@ def range_line(range):
         p.append(range.last.strftime(ur'%_d-%b-%Y'))
     return ' '.join(p) if p else 'ALL DATES'
 
+def strong(text):
+    pre = []
+    picture = []
+    pos = 0
+    for c in text:
+        if c == '\x08':
+            pos -= 1
+        else:
+            if pos < 0:
+                pre[-pos] = c
+            elif pos < len(picture):
+                picture[pos].append(c)
+            else:
+                assert pos == len(picture)
+                picture.append([c])
+            pos += 1
+    for p in picture:
+        if p[-1] not in p[:-1]:
+            p.append(p[-1])
+    return ''.join(chain(reversed(pre), ('\x08'.join(p) for p in picture)))
