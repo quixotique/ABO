@@ -1,6 +1,6 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 # vim: sw=4 sts=4 et fileencoding=utf8 nomod
-# Copyright 2013 Andrew Bettison
+# Copyright 2013-2014 Andrew Bettison
 
 r'''Usage:
     pyabo chart [-fvqD] [--select=PRED]
@@ -57,32 +57,23 @@ except ImportError:
 def main():
     global abo
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-    locale.setlocale(locale.LC_ALL, '')
-    lang, enc = locale.getlocale()
-    input_encoding = enc
-    output_encoding = enc
     opts = None
     try:
         if len(sys.argv) >= 2 and sys.argv[1] == 'compa':
             pass
         else:
-            try:
-                import docopt
-            except ImportError:
-                sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
-                import docopt
-            opts = docopt.docopt(__doc__, version='0.1')
+            sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
+            import docopt
+            opts = docopt.docopt(__doc__, version='0.2')
         try:
             config = abo.config.Config().load()
-        except abo.config.ConfigException, e:
-            fatal(unicode(e).encode(output_encoding))
+        except abo.config.ConfigException as e:
+            fatal(str(e))
         if opts is None:
-            output = compa(config, [arg.decode(input_encoding) for arg in sys.argv[2:]])
+            output = compa(config, [arg for arg in sys.argv[2:]])
         else:
-            if opts['<PRED>']:
-                opts['<PRED>'] = opts['<PRED>'].decode(input_encoding)
             import abo.command
-            for word, value in opts.iteritems():
+            for word, value in opts.items():
                 if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
                     func = getattr(abo.command, 'cmd_' + word)
                     break
@@ -98,7 +89,7 @@ def main():
             config.apply_options(opts)
             output = func(config, opts)
         for line in output:
-            print line.encode(output_encoding)
+            print(line, file=sys.stdout)
     except:
         if opts and opts['--debug']:
             raise
@@ -106,14 +97,14 @@ def main():
         import abo.command
         try:
             raise
-        except abo.command.InvalidArg, e:
-            fatal(unicode(e).encode(output_encoding))
-        except abo.text.LineError, e:
-            fatal(unicode(e).encode(output_encoding))
+        except abo.command.InvalidArg as e:
+            fatal(str(e))
+        except abo.text.LineError as e:
+            fatal(str(e))
     sys.exit(0)
 
 def fatal(message, status=1):
-    print >>sys.stderr, "%s: %s" % (os.path.basename(sys.argv[0]), message)
+    print("%s: %s" % (os.path.basename(sys.argv[0]), message), file=sys.stderr)
     sys.exit(status)
 
 def compa(config, args):
@@ -126,7 +117,7 @@ def compa(config, args):
     keys = set()
     if preword == 'pyabo':
         import abo.command
-        for key, value in abo.command.__dict__.iteritems():
+        for key, value in abo.command.__dict__.items():
             if key.startswith('cmd_'):
                 cmd = key[4:]
                 if cmd.startswith(word) and len(cmd) > len(word) and type(value) is type(compa):
@@ -142,7 +133,7 @@ def compa(config, args):
 def compa_accounts(config, word):
     import abo.cache
     chart = abo.cache.chart_cache(config).get()
-    for key in chart.iterkeys():
+    for key in chart.keys():
         if key.startswith(word):
             comp = key[len(word):]
             end = ''

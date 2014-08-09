@@ -22,7 +22,7 @@ class struct(object):
 
     def __repr__(self):
         return '%s(%s)' % (type(self).__name__,
-                ', '.join(('%s=%r' % i for i in sorted(self.__dict__.iteritems()))))
+                ', '.join(('%s=%r' % i for i in sorted(self.__dict__.items()))))
 
     def __eq__(self, other):
         if not isinstance(other, struct):

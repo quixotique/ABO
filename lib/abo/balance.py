@@ -20,7 +20,7 @@ at the end of a range of time.
 >>> b.last_date
 4
 >>> b.accounts
-(u'a1', u'a2')
+('a1', 'a2')
 >>> b.balance('a1')
 122.07
 >>> b.cbalance('a1')
@@ -30,25 +30,33 @@ at the end of a range of time.
 >>> b.cbalance('a2')
 -24.57
 >>> b.entries() #doctest: +NORMALIZE_WHITESPACE
-(Entry(account=u'a2', amount=-24.57),
- Entry(account=u'a1', amount=122.07),
- Entry(account=u'a2', amount=-100.0, cdate=5),
- Entry(account=u'a2', amount=2.5, cdate=6))
+(Entry(account='a2', amount=-24.57),
+ Entry(account='a1', amount=122.07),
+ Entry(account='a2', amount=-100.0, cdate=5),
+ Entry(account='a2', amount=2.5, cdate=6))
 
->>> b = Balance([t1, t2, t3, t4], date_range=Range(1, 4), acc_pred=lambda a: a == u'a1')
+>>> b = Balance([t1, t2, t3, t4], date_range=Range(1, 4), acc_pred=lambda a: a == 'a1')
 >>> b.accounts
-(u'a1',)
+('a1',)
 >>> b.balance('a1')
 122.07
 >>> b.entries() #doctest: +NORMALIZE_WHITESPACE
-(Entry(account=u'a1', amount=122.07),)
+(Entry(account='a1', amount=122.07),)
 
 """
 
+if __name__ == "__main__":
+    import sys
+    if sys.path[0] == sys.path[1] + '/abo':
+        del sys.path[0]
+    import doctest
+    import abo.balance
+    doctest.testmod(abo.balance)
+
 from collections import defaultdict
 from itertools import chain
-import abo.transaction
 from abo.types import struct
+import abo.transaction
 
 class Balance(object):
 
@@ -98,20 +106,20 @@ class Balance(object):
     def _tally(self):
         if self._balances is None:
             self._balances = defaultdict(lambda: defaultdict(lambda: 0))
-            for account, balance in self._raw_balances.iteritems():
+            for account, balance in self._raw_balances.items():
                 if self.pred(account, balance.total):
-                    for cdate, amount in balance.cdate.iteritems():
+                    for cdate, amount in balance.cdate.items():
                         for acc in chain(iter_lineage(account), [None]):
                             self._balances[acc][cdate] += amount
 
     @property
     def accounts(self):
         self._tally()
-        return tuple(sorted((b for b in self._balances if b is not None), key=unicode))
+        return tuple(sorted((b for b in self._balances if b is not None), key=str))
 
     def balance(self, account=None):
         self._tally()
-        return sum(self._balances[account].itervalues()) if account in self._balances else 0
+        return sum(self._balances[account].values()) if account in self._balances else 0
 
     def cbalance(self, account=None):
         self._tally()
@@ -121,7 +129,7 @@ class Balance(object):
         self._tally()
         without_cdate = []
         with_cdate = []
-        for account, amounts in self._balances.iteritems():
+        for account, amounts in self._balances.items():
             if account is not None:
                 if amounts[None]:
                     without_cdate.append(abo.transaction.Entry(transaction=None, amount=amounts[None], account=account))
@@ -155,11 +163,3 @@ class Range(object):
     def replace(self, first=_undef, last=_undef):
         return type(self)(first= self.first if first is self._undef else first,
                           last= self.last if last is self._undef else last)
-
-
-def _test():
-    import doctest
-    return doctest.testmod()
-
-if __name__ == "__main__":
-    _test()

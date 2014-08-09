@@ -201,7 +201,7 @@ enum elements can be pickled and unpickled using protocol 2:
 
     >>> pickle.loads(pickle.dumps(X.b, 0)) is X.b
     Traceback (most recent call last):
-    UnpicklingError: abo.enum.enum does not support this protocol
+    _pickle.UnpicklingError: abo.enum.enum does not support this protocol
 
 Every element has an immutable 'e_name' attribute that is its bare name:
 
@@ -220,6 +220,14 @@ The type() of an element is its enumeration class:
     True
 
 """
+
+if __name__ == "__main__":
+    import sys
+    if sys.path[0] == sys.path[1] + '/abo':
+        del sys.path[0]
+    import doctest
+    import abo.enum
+    doctest.testmod(abo.enum)
 
 import copy
 import pickle
@@ -256,12 +264,10 @@ class _enum_meta(type):
         for name in cls._names:
             yield getattr(cls, name)
 
-class enum(object):
+class enum(object, metaclass=_enum_meta):
 
     r'''Superclass of all enumeration types.
     '''
-
-    __metaclass__ = _enum_meta
     _names = ()
 
     def __new__(cls, *args):
@@ -318,7 +324,7 @@ class enum(object):
         if names in globals():
             return globals()[names]
         name = '%s(%s)' % (cls.__name__, ', '.join(map(repr, names)))
-        cls = cls.__metaclass__(name, (enum,), {'_names': names})
+        cls = type(cls)(name, (enum,), {'_names': names})
         globals()[names] = cls
         return cls
 
@@ -355,11 +361,3 @@ class enum(object):
             raise pickle.UnpicklingError(
                     '%s.enum does not support this protocol' % enum.__module__)
         assert self is type(self).__dict__.get(self.e_name)
-
-def _test():
-    import doctest
-    import abo.enum
-    return doctest.testmod(abo.enum)
-
-if __name__ == "__main__":
-    _test()

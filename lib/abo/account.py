@@ -5,6 +5,13 @@
 """Account and Chart objects.
 """
 
+if __name__ == "__main__":
+    import sys
+    if sys.path[0] == sys.path[1] + '/abo':
+        del sys.path[0]
+    import doctest
+    doctest.testmod()
+
 import logging
 import string
 import re
@@ -24,7 +31,7 @@ tag_to_atype = {
     'EQ': AccountType.Equity,
 }
 
-atype_to_tag = dict(zip(tag_to_atype.values(), tag_to_atype.keys()))
+atype_to_tag = dict(list(zip(list(tag_to_atype.values()), list(tag_to_atype.keys()))))
 
 class AccountKeyError(KeyError):
 
@@ -33,7 +40,7 @@ class AccountKeyError(KeyError):
         KeyError.__init__(self, key)
 
     def __unicode__(self):
-        return u'unknown account "%s"' % self.key
+        return 'unknown account "%s"' % self.key
 
     def __str__(self):
         return 'unknown account %r' % self.key
@@ -45,7 +52,7 @@ class InvalidAccountPredicate(ValueError):
         ValueError.__init__(self, pred)
 
     def __unicode__(self):
-        return u'invalid account predicate "%s"' % self.pred
+        return 'invalid account predicate "%s"' % self.pred
 
     def __str__(self):
         return 'invalid account predicate %r' % self.pred
@@ -122,7 +129,7 @@ class Account(object):
             assert label is None
         else:
             assert name or label
-        self.name = name and unicode(name)
+        self.name = name and str(name)
         self.label = label and str(label)
         self.parent = parent
         self.atype = atype
@@ -186,13 +193,13 @@ class Account(object):
         return self._childcount == 0
 
     def full_name(self):
-        return (unicode(self.parent) if self.parent else u'') + u':' + self.bare_name()
+        return (str(self.parent) if self.parent else '') + ':' + self.bare_name()
 
     def bare_name(self):
-        return (u'*' if self.wild else unicode(self.name or self.label))
+        return ('*' if self.wild else str(self.name or self.label))
 
     def relative_name(self, context_account):
-        return u':'.join(a.bare_name() for a in chain(reversed(list(self.parents_not_in_common_with(context_account))), (self,)))
+        return ':'.join(a.bare_name() for a in chain(reversed(list(self.parents_not_in_common_with(context_account))), (self,)))
 
     def shortname(self):
         return min(self.all_full_names(), key=len)
@@ -460,7 +467,7 @@ class Chart(object):
         if account.wild:
             if account.parent in self._wild:
                 if self._wild[account.parent] != account:
-                    raise ValueError('duplicate wild account %r' % (unicode(account),))
+                    raise ValueError('duplicate wild account %r' % (str(account),))
                 return False # already added
             self._wild[account.parent] = account
         else:
@@ -484,7 +491,7 @@ class Chart(object):
         assert key
         try:
             return self._index[key]
-        except KeyError, e:
+        except KeyError as e:
             pass
         try:
             if ':' in key[1:]:
@@ -495,18 +502,18 @@ class Chart(object):
                     child = parent.make_child(name=childname, atype=wild.atype, tags=wild.tags)
                     self._add_account(child)
                     return child
-        except KeyError, e:
+        except KeyError as e:
             pass
         raise AccountKeyError(key)
 
     def accounts(self):
-        return sorted(self._accounts, key= lambda a: unicode(a))
+        return sorted(self._accounts, key= lambda a: str(a))
 
     def substantial_accounts(self):
-        return sorted((a for a in self._accounts if a.is_substantial()), key= lambda a: unicode(a))
+        return sorted((a for a in self._accounts if a.is_substantial()), key= lambda a: str(a))
 
-    def iterkeys(self):
-        return self._index.iterkeys()
+    def keys(self):
+        return self._index.keys()
 
     def has_wild_account(self):
         return len(self._wild) != 0
@@ -581,14 +588,14 @@ class Chart(object):
         self._tags = set()
         self._index = {}
         self._wild = {}
-        if isinstance(source_file, basestring):
+        if isinstance(source_file, str):
             # To facilitate testing.
-            import StringIO
-            source_file = StringIO.StringIO(source_file)
+            import io
+            source_file = io.StringIO(source_file)
             source_file.name = 'StringIO'
         name = getattr(source_file, 'name', str(source_file))
         lines = [line.rstrip('\n') for line in source_file]
-        lines = list(abo.text.decode_lines(lines))
+        lines = list(lines)
         is_legacy = '#ABO-Legacy-Accounts' in lines[:5]
         lines = abo.text.number_lines(lines, name=source_file.name)
         lines = abo.text.undent_lines(lines)
@@ -659,8 +666,8 @@ class Chart(object):
                 account = Account(name=name, label=label, parent=parent, atype=atype, tags=tags, wild=wild)
                 try:
                     self._add_account(account)
-                except KeyError, e:
-                    raise abo.text.LineError(unicode(e), line=line)
+                except KeyError as e:
+                    raise abo.text.LineError(str(e), line=line)
                 stack.append(account)
 
     @staticmethod
@@ -818,10 +825,3 @@ def remove_account(chart, pred, transactions):
                     queue[0].amount += amount
                     queue[0].transaction = tr.replace(entries= list(chain(qa2, qo2)))
     return done
-
-def _test():
-    import doctest
-    return doctest.testmod()
-
-if __name__ == "__main__":
-    _test()

@@ -9,7 +9,9 @@ import logging
 import os
 import os.path
 import errno
-import cPickle as pickle
+import pickle
+import locale
+import re
 
 class Cache(object):
 
@@ -33,26 +35,28 @@ class Cache(object):
 
     def get(self):
         stime = self.source_mtime()
-        #import sys
-        if self.ctime < stime:
-            #print >>sys.stderr, "compile %r" % self.ident
+        if self.ctime >= stime:
             try:
-                os.makedirs(os.path.dirname(self.cpath))
-            except OSError, e:
-                if e.errno != errno.EEXIST:
-                    raise
-            content = self.contentfunc()
-            pickle.dump(content, file(self.cpath, 'w'), 2)
-            self.ctime = stime
-            return content
-        #print >>sys.stderr, "load %r" % self.ident
-        return pickle.load(file(self.cpath))
+                logging.debug("load %r" % self.cpath)
+                return pickle.load(open(self.cpath, 'rb'))
+            except (pickle.UnpicklingError, UnicodeDecodeError):
+                pass
+        logging.debug("compile %r" % self.ident)
+        try:
+            os.makedirs(os.path.dirname(self.cpath))
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+        content = self.contentfunc()
+        pickle.dump(content, open(self.cpath, 'wb'), 2)
+        self.ctime = stime
+        return content
 
     @staticmethod
     def mtime(path):
         try:
             return os.stat(path).st_mtime
-        except OSError, e:
+        except OSError as e:
             if e.errno != errno.ENOENT:
                 raise
             return -1
@@ -79,7 +83,7 @@ def chart_cache(config, opts=None):
         def compile_chart():
             logging.info("compile %r", config.chart_file_path)
             import abo.account
-            chart = abo.account.Chart.from_file(file(config.chart_file_path))
+            chart = abo.account.Chart.from_file(open_detect_encoding(config.chart_file_path))
             if chart.has_wild_account():
                 for tc in transaction_caches(chart, config, opts):
                     tc.get()
@@ -95,6 +99,23 @@ def transaction_caches(chart, config, opts=None):
         import abo.journal
         _transaction_caches = []
         for path in config.input_file_paths:
-            _transaction_caches.append(TransactionCache(config, path, abo.journal.Journal(config, file(path), chart=chart), [config.chart_file_path], force=opts and opts['--force']))
+            _transaction_caches.append(TransactionCache(config, path, abo.journal.Journal(config, open_detect_encoding(path), chart=chart), [config.chart_file_path], force=opts and opts['--force']))
     return _transaction_caches
 
+_regex_encoding = re.compile(r'coding[=:]\s*([-\w.]+)', re.MULTILINE)
+
+def detect_encoding(path, line_count=10):
+    r"""Inspect the first few lines of a file, looking for a declared file
+    encoding.
+    """
+    firstlines = []
+    with open(path, 'r', encoding='ascii', errors='ignore') as f:
+        for line in f:
+            firstlines.append(line)
+            if len(firstlines) >= line_count:
+                break
+    m = _regex_encoding.search('\n'.join(firstlines))
+    return m.group(1) if m else locale.getlocale()[1] or 'ascii'
+
+def open_detect_encoding(path):
+    return open(path, 'r', encoding=detect_encoding(path), errors='strict')

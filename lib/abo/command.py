@@ -36,7 +36,7 @@ def cmd_journal(config, opts):
     else:
         pw = 35
         width = dw + 2 + pw + 1 + bw + 1 + 2 + 1 + aw
-    fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-.{aw}s'.format(**locals())
+    fmt = '%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-.{aw}s'.format(**locals())
     yield 'JOURNAL OF TRANSACTIONS'.center(width)
     yield range_line(range).center(width)
     yield ''
@@ -47,14 +47,14 @@ def cmd_journal(config, opts):
     if bf:
         for e in bf.entries():
             yield fmt % (('',
-                'Brought forward' + (' due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else ''),)
+                'Brought forward' + (' due ' + e.cdate.strftime(r'%-d-%b-%Y') if e.cdate else ''),)
                 + entry_fields(e))
     for t in transactions:
         desc = textwrap.wrap(t.description(), width=pw)
         entries = list(t.entries)
-        yield fmt % ((t.date.strftime(ur'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
+        yield fmt % ((t.date.strftime(r'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
         while entries:
-            yield fmt % (('', desc.pop(0) if desc else u'') + (entry_fields(entries.pop(0)) if entries else ('', '', '')))
+            yield fmt % (('', desc.pop(0) if desc else '') + (entry_fields(entries.pop(0)) if entries else ('', '', '')))
         if opts['--wrap']:
             while desc:
                 yield fmt % ('', desc.pop(0), '', '', '')
@@ -62,8 +62,8 @@ def cmd_journal(config, opts):
 
 def cmd_chart(config, opts):
     chart = get_chart(config, opts)
-    for account in select_accounts(chart, opts):
-        line = [unicode(account)]
+    for account in sorted(select_accounts(chart, opts), key=str):
+        line = [str(account)]
         if opts['--verbose']:
             if account.label:
                 line.append('[%s]' % (account.label,))
@@ -75,14 +75,14 @@ def cmd_chart(config, opts):
 
 def cmd_index(config, opts):
     chart = get_chart(config, opts)
-    return sorted(chart.iterkeys())
+    return sorted(chart.keys())
 
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
     accounts = filter_accounts(chart, opts['<PRED>'].lstrip())
-    logging.debug('accounts = %r' % map(unicode, accounts))
+    logging.debug('accounts = %r' % list(map(str, accounts)))
     common_root_account = abo.account.common_root(accounts)
-    logging.debug('common_root_account = %r' % unicode(common_root_account))
+    logging.debug('common_root_account = %r' % str(common_root_account))
     all_transactions = get_transactions(chart, config, opts)
     range, bf, transactions = filter_period(chart, all_transactions, opts)
     dw = 11
@@ -94,7 +94,7 @@ def cmd_acc(config, opts):
     else:
         pw = 35
         width = dw + 2 + pw + 2 * (mw + 1) + 1 + bw
-    fmt = u'%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
+    fmt = '%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
     yield 'STATEMENT OF ACCOUNT'.center(width)
     yield range_line(range).center(width)
     yield ''
@@ -119,7 +119,7 @@ def cmd_acc(config, opts):
                         if chart[e.account] is account and e.amount != 0:
                             balance += e.amount
                             yield fmt % ('', '; '.join(filter(bool, ['Brought forward',
-                                                                     'due ' + e.cdate.strftime(ur'%-d-%b-%Y') if e.cdate else '',
+                                                                     'due ' + e.cdate.strftime(r'%-d-%b-%Y') if e.cdate else '',
                                                                      account.relative_name(common_root_account)])),
                                     config.format_money(-e.amount) if e.amount < 0 else '',
                                     config.format_money(e.amount) if e.amount > 0 else '',
@@ -147,11 +147,11 @@ def cmd_acc(config, opts):
                         rel.append(b)
                         break
             if rel:
-                desc += '; ' + u':'.join(rel)
+                desc += '; ' + ':'.join(rel)
         if opts['--control']:
-            desc = e.transaction.date.strftime(ur'%-d-%b ') + desc
+            desc = e.transaction.date.strftime(r'%-d-%b ') + desc
         desc = textwrap.wrap(desc, width=pw)
-        yield fmt % (date.strftime(ur'%_d-%b-%Y'),
+        yield fmt % (date.strftime(r'%_d-%b-%Y'),
                 desc.pop(0) if desc else '',
                 config.format_money(-e.amount) if e.amount < 0 else '',
                 config.format_money(e.amount) if e.amount > 0 else '',
@@ -201,20 +201,20 @@ def cmd_profloss(config, opts):
         sections.append(struct(depth=depth, title=title, balances=bbalances, accounts=accounts))
         all_accounts.update(accounts)
     bw = config.balance_column_width()
-    aw = max(chain([10], (len(unicode(a)) for a in all_accounts)))
+    aw = max(chain([10], (len(str(a)) for a in all_accounts)))
     width = (bw + 1) * len(balances) + 1 + aw
     if config.output_width() and width > config.output_width():
         aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
-    fmt = (u'%{bw}s ' * len(balances) + u' %.{aw}s').format(**locals())
+    fmt = ('%{bw}s ' * len(balances) + ' %.{aw}s').format(**locals())
     yield 'PROFIT LOSS STATEMENT'.center(width)
     line = []
     for b in balances:
-        line.append(b.date_range.first.strftime(ur'%_d-%b-%Y') if b.date_range.first else '')
+        line.append(b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '')
     line.append('')
     yield fmt % tuple(line)
     line = []
     for b in balances:
-        line.append(b.date_range.last.strftime(ur'%_d-%b-%Y') if b.date_range.last else '')
+        line.append(b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '')
     line.append('Account')
     yield fmt % tuple(line)
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
@@ -225,11 +225,11 @@ def cmd_profloss(config, opts):
         section_accounts = filter_display_accounts(section_accounts, opts)
         if opts['--subtotals']:
             subaccounts = parentset(section_accounts)
-        for account in chain([None], sorted(section_accounts, key=unicode)):
+        for account in chain([None], sorted(section_accounts, key=str)):
             line = []
             for b in section.balances:
                 line.append(config.format_money(b.balance(account)))
-            line.append(unicode(account) if account is not None else section.title)
+            line.append(str(account) if account is not None else section.title)
             line = fmt % tuple(line)
             if opts['--subtotals'] and account is not None and account not in subaccounts:
                 line = strong(line)
@@ -246,26 +246,26 @@ def cmd_balance(config, opts):
     selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
     whens, balances = filter_at(chart, all_transactions, opts, acc_pred=lambda a: a in selected_accounts)
-    display_accounts = sorted(filter_display_accounts(chain(*(b.accounts for b in balances)), opts), key=unicode)
+    display_accounts = sorted(filter_display_accounts(chain(*(b.accounts for b in balances)), opts), key=str)
     logging.debug('display_accounts = %r' % display_accounts)
-    aw = max(chain([10], (len(unicode(a)) for a in display_accounts)))
+    aw = max(chain([10], (len(str(a)) for a in display_accounts)))
     bw = config.balance_column_width()
     width = (bw + 1) * len(balances) + 1 + aw
     if config.output_width() and width > config.output_width():
         aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
-    fmt = (u'%{bw}s ' * len(balances) + u' %.{aw}s').format(**locals())
+    fmt = ('%{bw}s ' * len(balances) + ' %.{aw}s').format(**locals())
     yield 'ACCOUNT BALANCES'.center(width)
     yield ''
     line = []
     for when in whens:
-        line.append(when.strftime(ur'%_d-%b-%Y'))
+        line.append(when.strftime(r'%_d-%b-%Y'))
     line.append('Account')
     yield fmt % tuple(line)
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
     for account in display_accounts:
         bals = tuple(b.balance(account) for b in balances)
-        if filter(bool, bals) or opts['--all']:
-            yield fmt % (tuple(config.format_money(bal) for bal in bals) + (unicode(account),))
+        if list(filter(bool, bals)) or opts['--all']:
+            yield fmt % (tuple(config.format_money(bal) for bal in bals) + (str(account),))
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
 
 def cmd_due(config, opts):
@@ -289,7 +289,7 @@ def cmd_due(config, opts):
                     due_accounts.add(account)
                 accounts[account].append(e)
     due_all = []
-    for account, entries in accounts.iteritems():
+    for account, entries in accounts.items():
         if account in due_accounts:
             entries.sort(key=lambda e: e.cdate or e.transaction.date)
             due = defaultdict(lambda: struct(account=account, entries=[]))
@@ -312,10 +312,10 @@ def cmd_due(config, opts):
                         amount = 0
                 if amount:
                     due[date].entries.append(e.replace(amount= amount)._attach(e.transaction))
-            due_all += due.items()
+            due_all += list(due.items())
     due_all.sort(key=lambda a: (a[0], sum(e.amount for e in a[1].entries)))
     bw = config.money_column_width()
-    fmt = u'%s %s %{bw}s  %s'.format(**locals())
+    fmt = '%s %s %{bw}s  %s'.format(**locals())
     for date, due in due_all:
         for e in due.entries:
             assert chart[e.account] in due.account, 'e.account=%r account=%r' % (chart[e.account], due.account)
@@ -330,10 +330,10 @@ def cmd_due(config, opts):
                         details.append(t.what)
                 if e.detail:
                     details.append(e.detail)
-        yield fmt % (date.strftime(ur'%a %_d-%b-%Y'),
+        yield fmt % (date.strftime(r'%a %_d-%b-%Y'),
                      '*' if date < when else '=' if date == when else ' ',
                      config.format_money(balance),
-                     u'; '.join([unicode(due.account)] + details))
+                     '; '.join([str(due.account)] + details))
 
 def get_chart(config, opts):
     return abo.cache.chart_cache(config, opts).get()
@@ -357,7 +357,7 @@ def filter_accounts(chart, text):
     if text:
         try:
             pred = chart.parse_predicate(text)
-        except abo.account.InvalidAccountPredicate, e:
+        except abo.account.InvalidAccountPredicate as e:
             raise InvalidArg(e)
         accounts = set(filter(pred, accounts))
     return accounts
@@ -416,10 +416,10 @@ def range_line(range):
     p = []
     if range.first is not None:
         p.append('FROM')
-        p.append(range.first.strftime(ur'%_d-%b-%Y'))
+        p.append(range.first.strftime(r'%_d-%b-%Y'))
     if range.last is not None:
         p.append('TO')
-        p.append(range.last.strftime(ur'%_d-%b-%Y'))
+        p.append(range.last.strftime(r'%_d-%b-%Y'))
     return ' '.join(p) if p else 'ALL DATES'
 
 def strong(text):

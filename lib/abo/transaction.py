@@ -15,20 +15,28 @@ Transaction must balance to zero, and no Entry can be for a zero amount.
 >>> t1.entries[0].transaction is t1
 True
 >>> t1.entries[0].account
-u'a1'
+'a1'
 >>> t1.entries[0].amount
 -14.56
 >>> t1.entries[1].description()
-u'Someone; something, else'
+'Someone; something, else'
 >>> t1
-Transaction(date=1, who='Someone', what='something', entries=(Entry(account=u'a1', amount=-14.56), Entry(account=u'a2', amount=14.56, detail=u'else')))
+Transaction(date=1, who='Someone', what='something', entries=(Entry(account='a1', amount=-14.56), Entry(account='a2', amount=14.56, detail='else')))
 >>> t2 = Transaction(date=2, who="Them", what="whatever", entries=t1.entries)
 >>> t2.entries[0].transaction is t2
 True
 >>> t2.entries[1].description()
-u'Them; whatever, else'
+'Them; whatever, else'
 >>>
 """
+
+if __name__ == "__main__":
+    import sys
+    if sys.path[0] == sys.path[1] + '/abo':
+        del sys.path[0]
+    import doctest
+    import abo.transaction
+    doctest.testmod(abo.transaction)
 
 import re
 import datetime
@@ -52,10 +60,10 @@ class Entry(abo.base.Base):
         assert amount != 0, 'zero amount'
         self.id = self._make_unique_id()
         self.transaction = transaction
-        self.account = unicode(account)
+        self.account = str(account)
         self.amount = amount
         self.cdate = cdate
-        self.detail = unicode(detail) if detail is not None else None
+        self.detail = str(detail) if detail is not None else None
 
     def __repr__(self):
         r = []
@@ -66,6 +74,9 @@ class Entry(abo.base.Base):
         if self.detail:
             r.append(('detail', self.detail))
         return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % i for i in r))
+
+    def __hash__(self):
+        return self.id
 
     def __eq__(self, other):
         if not isinstance(other, Entry):
@@ -142,40 +153,40 @@ class Entry(abo.base.Base):
         ...                  {'account':'a4', 'amount':-956}))
         >>> e = t1.entries[0].replace_with(Entry(None, account='a5', amount=-1000, detail='new'))
         >>> e #doctest: +NORMALIZE_WHITESPACE
-        (Entry(account=u'a5', amount=-1000, detail=u'new'), Entry(account=u'a3', amount=-20, detail=u'old'))
+        (Entry(account='a5', amount=-1000, detail='new'), Entry(account='a3', amount=-20, detail='old'))
         >>> e[0].transaction #doctest: +NORMALIZE_WHITESPACE
         Transaction(date=1, who='Someone', what='something',
-                    entries=(Entry(account=u'a5', amount=-1000, detail=u'new'),
-                             Entry(account=u'a2', amount=253, detail=u'blue'),
-                             Entry(account=u'a1', amount=747, detail=u'else')))
+                    entries=(Entry(account='a5', amount=-1000, detail='new'),
+                             Entry(account='a2', amount=253, detail='blue'),
+                             Entry(account='a1', amount=747, detail='else')))
         >>> e[1].transaction #doctest: +NORMALIZE_WHITESPACE
         Transaction(date=1, who='Someone', what='something',
-                    entries=(Entry(account=u'a4', amount=-956),
-                             Entry(account=u'a3', amount=-20, detail=u'old'),
-                             Entry(account=u'a2', amount=247, detail=u'blue'),
-                             Entry(account=u'a1', amount=729, detail=u'else')))
+                    entries=(Entry(account='a4', amount=-956),
+                             Entry(account='a3', amount=-20, detail='old'),
+                             Entry(account='a2', amount=247, detail='blue'),
+                             Entry(account='a1', amount=729, detail='else')))
         >>> e = t1.entries[2].replace_with(Entry(None, account='a5', amount=500, detail='new'))
         >>> e #doctest: +NORMALIZE_WHITESPACE
-        (Entry(account=u'a5', amount=500, detail=u'new'), None)
+        (Entry(account='a5', amount=500, detail='new'), None)
         >>> e[0].transaction #doctest: +NORMALIZE_WHITESPACE
         Transaction(date=1, who='Someone', what='something',
-                    entries=(Entry(account=u'a3', amount=-1020, detail=u'old'),
-                             Entry(account=u'a4', amount=-956),
-                             Entry(account=u'a5', amount=500, detail=u'new'),
-                             Entry(account=u'a1', amount=1476, detail=u'else')))
+                    entries=(Entry(account='a3', amount=-1020, detail='old'),
+                             Entry(account='a4', amount=-956),
+                             Entry(account='a5', amount=500, detail='new'),
+                             Entry(account='a1', amount=1476, detail='else')))
         >>> e = t1.entries[2].replace_with(Entry(None, account='a5', amount=500, detail='new'), split=True)
         >>> e #doctest: +NORMALIZE_WHITESPACE
-        (Entry(account=u'a5', amount=500, detail=u'new'), Entry(account=u'a1', amount=1476, detail=u'else'))
+        (Entry(account='a5', amount=500, detail='new'), Entry(account='a1', amount=1476, detail='else'))
         >>> e[0].transaction #doctest: +NORMALIZE_WHITESPACE
         Transaction(date=1, who='Someone', what='something',
-                    entries=(Entry(account=u'a3', amount=-259, detail=u'old'),
-                             Entry(account=u'a4', amount=-241),
-                             Entry(account=u'a5', amount=500, detail=u'new')))
+                    entries=(Entry(account='a3', amount=-259, detail='old'),
+                             Entry(account='a4', amount=-241),
+                             Entry(account='a5', amount=500, detail='new')))
         >>> e[1].transaction #doctest: +NORMALIZE_WHITESPACE
         Transaction(date=1, who='Someone', what='something',
-                    entries=(Entry(account=u'a3', amount=-761, detail=u'old'),
-                             Entry(account=u'a4', amount=-715),
-                             Entry(account=u'a1', amount=1476, detail=u'else')))
+                    entries=(Entry(account='a3', amount=-761, detail='old'),
+                             Entry(account='a4', amount=-715),
+                             Entry(account='a1', amount=1476, detail='else')))
         """
         assert abs(entry.amount) > 0
         assert sign(entry.amount) == self.sign()
@@ -310,16 +321,16 @@ class Transaction(abo.base.Base):
         >>> t1, t2 = t.split('a1', 1000)
         >>> t1 #doctest: +NORMALIZE_WHITESPACE
         Transaction(date=1, who='Someone', what='something',
-                    entries=(Entry(account=u'a2', amount=-517, detail=u'old'),
-                             Entry(account=u'a2', amount=-483),
-                             Entry(account=u'a1', amount=253, detail=u'blue'),
-                             Entry(account=u'a1', amount=747, detail=u'else')))
+                    entries=(Entry(account='a2', amount=-517, detail='old'),
+                             Entry(account='a2', amount=-483),
+                             Entry(account='a1', amount=253, detail='blue'),
+                             Entry(account='a1', amount=747, detail='else')))
         >>> t2 #doctest: +NORMALIZE_WHITESPACE
         Transaction(date=1, who='Someone', what='something',
-                    entries=(Entry(account=u'a2', amount=-503, detail=u'old'),
-                             Entry(account=u'a2', amount=-473),
-                             Entry(account=u'a1', amount=247, detail=u'blue'),
-                             Entry(account=u'a1', amount=729, detail=u'else')))
+                    entries=(Entry(account='a2', amount=-503, detail='old'),
+                             Entry(account='a2', amount=-473),
+                             Entry(account='a1', amount=247, detail='blue'),
+                             Entry(account='a1', amount=729, detail='else')))
         """
         entries = list(self.entries)
         assert entries
@@ -398,24 +409,24 @@ __test__ = {
     >>> t.amount()
     14.56
     >>> t.entries[0].account
-    u'a1'
+    'a1'
     >>> t.entries[0].amount
     -14.56
     >>> t.entries[0].cdate
     >>> t.entries[0].detail
-    u'else'
+    'else'
     >>> t.entries[0].description()
-    u'Someone; something, else'
+    'Someone; something, else'
     >>> t.entries[0].transaction is t
     True
     >>> t.entries[1].account
-    u'a2'
+    'a2'
     >>> t.entries[1].amount
     14.56
     >>> t.entries[1].cdate
     7
     >>> t.entries[1].detail
-    u''
+    ''
     >>> t.entries[1].description()
     'Someone; something'
     >>> t.id == t.entries[0].id
@@ -430,9 +441,9 @@ __test__ = {
     ...         entries=({'account':'a1', 'amount':-14.56, 'detail':'else'}, \\
     ...                  {'account':'a2', 'amount':14.56, 'cdate': 7}))
     >>> t.entries[0].replace(amount=-22.01)
-    Entry(account=u'a1', amount=-22.01, detail=u'else')
+    Entry(account='a1', amount=-22.01, detail='else')
     >>> t.entries[0]
-    Entry(account=u'a1', amount=-14.56, detail=u'else')
+    Entry(account='a1', amount=-14.56, detail='else')
 """,
 'errors':"""
     >>> t = Transaction(who="Someone", what="something", \\
@@ -462,10 +473,3 @@ __test__ = {
     AssertionError: zero amount
 """,
 }
-
-def _test():
-    import doctest
-    return doctest.testmod()
-
-if __name__ == "__main__":
-    _test()

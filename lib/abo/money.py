@@ -5,6 +5,13 @@
 """A Money object represents an exact amount of a single currency.
 """
 
+if __name__ == "__main__":
+    import sys
+    if sys.path[0] == sys.path[1] + '/abo':
+        del sys.path[0]
+    import doctest
+    doctest.testmod()
+
 import logging
 # Suppress error caused by duplicate numeric code in iso_15294.xml
 logging.getLogger('pycountry.db').setLevel(logging.CRITICAL)
@@ -56,7 +63,7 @@ class Currency(object):
         self.decimal_context = decimal.Context(
                 prec= 15,
                 rounding= decimal.ROUND_HALF_UP,
-                traps= (decimal.DivisionByZero, decimal.InvalidOperation, decimal.Inexact))
+                traps= [decimal.DivisionByZero, decimal.InvalidOperation, decimal.Inexact])
         self.float_context = self.decimal_context.copy()
         self.float_context.rounding = decimal.ROUND_DOWN
         self.float_context.traps[decimal.Inexact] = False
@@ -305,7 +312,7 @@ class Currency(object):
             raise ValueError('invalid literal for %r: %r' % (self, amount))
 
     def format(self, amount, symbol=True, thousands=False, positive_sign='', positive_prefix='', positive_suffix='', negative_sign='-', negative_prefix='', negative_suffix=''):
-        ur'''Return a string representation of the Decimal amount with the
+        r'''Return a string representation of the Decimal amount with the
         currency symbol as prefix or suffix.
         >>> Currency.AUD.format(1)
         u'$1.00'
@@ -321,7 +328,7 @@ class Currency(object):
         True
         '''
         amt = self.quantize(amount)
-        fmt = u'{0:,}' if thousands else u'{0}'
+        fmt = '{0:,}' if thousands else '{0}'
         if symbol and self.local_symbol:
             fmt = '{4}{1}{2}{3}'+fmt+'{5}' if self.local_symbol_precedes else '{4}{3}'+fmt+'{2}{1}{5}'
         else:
@@ -442,7 +449,7 @@ class Money(object):
             classname = type(self).__name__
         return '%s(%s)' % (classname, self.amount)
 
-    def __nonzero__(self):
+    def __bool__(self):
         return bool(self.amount)
 
     def __float__(self):
@@ -506,11 +513,4 @@ class Money(object):
         return self.__mul__(other)
 
 Money.register(Currency('AUD', 2, '$', True).register())
-Money.register(Currency('EUR', 2, u'€', False, True).register())
-
-def _test():
-    import doctest
-    return doctest.testmod()
-
-if __name__ == "__main__":
-    _test()
+Money.register(Currency('EUR', 2, '€', False, True).register())

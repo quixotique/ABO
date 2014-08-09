@@ -5,32 +5,13 @@
 """Text processing utilities.
 """
 
-import locale
-import re
-
-_regex_encoding = re.compile(r'coding[=:]\s*([-\w.]+)', re.MULTILINE)
-
-def decode_lines(lines, head=10):
-    ur"""Iterate over the given lines, decoding them according to a header in
-    the first few lines of the file.
-    >>> list(decode_lines(['a', 'b', 'c']))
-    [u'a', u'b', u'c']
-    >>> list(decode_lines(['100\xb15', 'fileencoding=latin1', 'a', '\xa9 2013'])) \
-    ... == [u'100±5', u'fileencoding=latin1', u'a', u'© 2013']
-    True
-    """
-    lineiter = iter(lines)
-    firstlines = []
-    for line in lineiter:
-        firstlines.append(line)
-        if len(firstlines) >= head:
-            break
-    m = _regex_encoding.search('\n'.join(firstlines))
-    encoding = m.group(1) if m else locale.getlocale()[1] or 'ascii'
-    while firstlines:
-        yield firstlines.pop(0).decode(encoding)
-    for line in lineiter:
-        yield line.decode(encoding)
+if __name__ == "__main__":
+    import sys
+    if sys.path[0] == sys.path[1] + '/abo':
+        del sys.path[0]
+    import doctest
+    import abo.text
+    doctest.testmod(abo.text)
 
 def number_lines(lines, name=None, start=1):
     '''Iterate over the given lines, transforming them into numbered_line
@@ -40,13 +21,13 @@ def number_lines(lines, name=None, start=1):
     >>> len(nl)
     3
     >>> nl[0]
-    u'a'
+    'a'
     >>> nl[0].line_number
     1
     >>> nl[0].name
     'foo'
     >>> nl[2]
-    u'c'
+    'c'
     >>> nl[2].line_number
     8
     >>> nl[2].name
@@ -69,60 +50,60 @@ def number_lines(lines, name=None, start=1):
             nline.name = name
             yield nline
 
-class numbered_line(unicode):
+class numbered_line(str):
 
     r'''Sub-class of unicode which carries extra attributes such as
     'line_number' and 'name', which it preserves where needed.
 
-    >>> i = numbered_line(u'abc ')
+    >>> i = numbered_line('abc ')
     >>> i.line_number = 42
     >>> i.name = 'wah'
     >>> i.rstrip()
-    u'abc'
+    'abc'
     >>> type(i.rstrip())
-    <class '__main__.numbered_line'>
+    <class 'abo.text.numbered_line'>
     >>> i.rstrip().line_number
     42
     >>> i.rstrip().name
     'wah'
     >>> i[1]
-    u'b'
+    'b'
     >>> i[1].name
     'wah'
     >>> i[2:]
-    u'c '
+    'c '
     >>> i[2:].name
     'wah'
-    >>> i + u'def'
-    u'abc def'
-    >>> (i + u'def').name
+    >>> i + 'def'
+    'abc def'
+    >>> (i + 'def').name
     'wah'
-    >>> u'xxx' + i
-    u'xxxabc '
-    >>> (u'xxx' + i).name
+    >>> 'xxx' + i
+    'xxxabc '
+    >>> ('xxx' + i).name
     'wah'
 
-    >>> j = numbered_line(u'a b cde fgh ')
+    >>> j = numbered_line('a b cde fgh ')
     >>> j.name = 'wah'
     >>> j.split(None, 2)
-    [u'a', u'b', u'cde fgh ']
+    ['a', 'b', 'cde fgh ']
     >>> j.split(None, 2)[2].name
     'wah'
 
     Cannot pickle instances of numbered_line:
 
     >>> import abo.text
-    >>> i = abo.text.numbered_line(u'xyz')
+    >>> i = abo.text.numbered_line('xyz')
     >>> import pickle
     >>> pickle.dumps(i, 0)
     Traceback (most recent call last):
-    PicklingError: cannot pickle u'xyz' with type <class 'abo.text.numbered_line'>
+    _pickle.PicklingError: cannot pickle 'xyz' with type <class 'abo.text.numbered_line'>
     >>> pickle.dumps(i, 1)
     Traceback (most recent call last):
-    PicklingError: cannot pickle u'xyz' with type <class 'abo.text.numbered_line'>
+    _pickle.PicklingError: cannot pickle 'xyz' with type <class 'abo.text.numbered_line'>
     >>> pickle.dumps(i, 2)
     Traceback (most recent call last):
-    PicklingError: cannot pickle u'xyz' with type <class 'abo.text.numbered_line'>
+    _pickle.PicklingError: cannot pickle 'xyz' with type <class 'abo.text.numbered_line'>
 
     '''
 
@@ -169,10 +150,10 @@ class numbered_line(unicode):
         return self.__wrap(other.__add__(self))
 
     def split(self, *args):
-        return map(self.__wrap, super(numbered_line, self).split(*args))
+        return list(map(self.__wrap, super(numbered_line, self).split(*args)))
 
     def rsplit(self, *args):
-        return map(self.__wrap, super(numbered_line, self).rsplit(*args))
+        return list(map(self.__wrap, super(numbered_line, self).rsplit(*args)))
 
 class LineError(ValueError):
 
@@ -214,13 +195,13 @@ def undent_lines(lines):
     >>> lines = map(numbered_line, ['  abc', 'def', ' ghi', '  jkl', '   mno', ' pqr', 'stu'])
     >>> il = list(undent_lines(lines))
     >>> il
-    [u'abc', u'def', u'ghi', u'jkl', u'mno', u'pqr', u'stu']
+    ['abc', 'def', 'ghi', 'jkl', 'mno', 'pqr', 'stu']
     >>> [i.indent for i in il]
     [1, 0, 1, 2, 3, 1, 0]
     >>> lines = map(numbered_line, ['  abc', ' def'])
     >>> list(undent_lines(lines))
     Traceback (most recent call last):
-    LineError: invalid indent
+    abo.text.LineError: invalid indent
     """
     indent = []
     for line in lines:
@@ -243,10 +224,3 @@ def undent_lines(lines):
 
         iline.indent = len(indent)
         yield iline
-
-def _test():
-    import doctest
-    return doctest.testmod()
-
-if __name__ == "__main__":
-    _test()

@@ -91,6 +91,14 @@
 
 """
 
+if __name__ == "__main__":
+    import sys
+    if sys.path[0] == sys.path[1] + '/abo':
+        del sys.path[0]
+    import doctest
+    import abo.period
+    doctest.testmod(abo.period)
+
 from datetime import (date, datetime, timedelta)
 
 def _today():
@@ -113,7 +121,7 @@ def _parse_periods(args):
         elif args[0] == 'last':
             which = args[0]
             word = args.pop(0)
-            if args < 1:
+            if len(args) < 1:
                 raise ValueError("missing argument after 'last'")
             oargs = list(args)
             try:
@@ -439,9 +447,9 @@ def parse_next(args):
     return start, end
 
 def parse_latest(word, args):
-    if args < 1:
+    if len(args) < 1:
         raise ValueError("missing amount after %r", word)
-    if args < 2:
+    if len(args) < 2:
         raise ValueError("missing unit after %r %r" % (word, args[0],))
     amount = parse_amount(args.pop(0))
     unit = args.pop(0)
@@ -476,11 +484,3 @@ def advance_date(start, months=0, quarters=0, years=0):
     y += m // 12
     m = m % 12
     return start.replace(year=y, month=m + 1)
-
-def _test():
-    import doctest
-    import abo.period
-    return doctest.testmod(abo.period)
-
-if __name__ == "__main__":
-    _test()
