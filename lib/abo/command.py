@@ -339,7 +339,16 @@ def cmd_mako(config, opts):
     import mako
     from mako.template import Template
     import abo.api
-    yield Template(filename=opts['<template>']).render_unicode(*opts['<args>'], abo=abo.api.API(config, opts))
+    yield Template(filename=opts['<template>']).render_unicode(
+            *opts['<args>'],
+            abo= abo.api.API(config, opts),
+            m= abo.api.API.money_format,
+            d= abo.api.API.date_format_factory,
+            dn= abo.api.API.date_format_factory('%-d/%-m/%Y'),
+            dh= abo.api.API.date_format_factory('%-d-%-b-%Y'),
+            ljust= abo.api.API.ljust_factory,
+            rjust= abo.api.API.rjust_factory
+        )
 
 def get_chart(config, opts):
     return abo.cache.chart_cache(config, opts).get()

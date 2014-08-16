@@ -13,16 +13,48 @@ from itertools import chain
 import abo.period
 import abo.cache
 from abo.text import LineError
+import abo.money
 
 class API(object):
 
     advance_date = staticmethod(abo.period.advance_date)
+
+    @staticmethod
+    def money_format(m):
+        if isinstance(m, str):
+            m = abo.money.Money.from_text(m)
+        elif hasattr(m, 'amount') and isinstance(m.date, abo.money.Money):
+            m = m.amount
+        if not isinstance(m, abo.money.Money):
+            raise TypeError('not an abo.money.Money: %r' % (m,))
+        return m.format()
+
+    @staticmethod
+    def date_format_factory(fmt):
+        def formatter(d):
+            if isinstance(d, str):
+                d = datetime.datetime.strptime(d, '%Y-%m-%d').date()
+            elif hasattr(d, 'date') and isinstance(d.date, (datetime.date, datetime.datetime)):
+                d = d.date
+            if not isinstance(d, (datetime.date, datetime.datetime)):
+                raise TypeError('not a date: ' + d)
+            return d.strftime(fmt)
+        return formatter
+
+    @staticmethod
+    def ljust_factory(width, fillchar=' '):
+        return lambda s: s.ljust(width, fillchar)
+
+    @staticmethod
+    def rjust_factory(width, fillchar=' '):
+        return lambda s: s.rjust(width, fillchar)
 
     def __init__(self, config, opts):
         self.config = config
         self.opts = opts
         self._chart = abo.cache.chart_cache(self.config, self.opts).get()
         self._accounts = dict()
+        self.root_account = API_Account(self, None)
 
     def account(self, account):
         if isinstance(account, str):
@@ -47,12 +79,12 @@ class API_Account(object):
 
     def __init__(self, api, account):
         assert isinstance(api, API)
-        assert isinstance(account, abo.account.Account)
+        assert account is None or isinstance(account, abo.account.Account)
         self._api = api
         self._account = account
 
     def __str__(self):
-        return str(self._account)
+        return str(self._account) if self._account is not None else ':'
 
     def __lt__(self, other):
         if not isinstance(other, API_Account):
@@ -61,7 +93,7 @@ class API_Account(object):
 
     def __contains__(self, other):
         assert isinstance(other, API_Account)
-        return self._account in other._account
+        return self._account is None or other._account in self._account
 
     @property
     def entries(self):
@@ -76,7 +108,7 @@ class API_Account(object):
         for t in self._api.all_transactions:
             for e in t._trans.entries:
                 acc = self._api._chart[e.account]
-                if acc in self._account:
+                if self._account is None or acc in self._account:
                     ref = API_Invoice._extract_ref(e)
                     if ref and acc.is_receivable():
                         invoice_refs[ref].append(e)
@@ -86,7 +118,7 @@ class API_Account(object):
             entries = invoice_refs[ref]
             dates = frozenset(e.transaction.date for e in entries)
             if len(dates) != 1:
-                raise LineError('invoice %s has inconsistent dates: %s' % (ref, ', '.join(d.strftime('%-d/%-m/%Y') for d in sorted(dates))))
+                raise LineError('invoice %s has inconsistent dates: %s' % (ref, ', '.join(API.format_date(d) for d in sorted(dates))))
             accounts = frozenset(self._api._chart[e.account].accrual_parent() for e in entries)
             if len(accounts) != 1:
                 raise LineError('invoice %s has inconsistent accounts: %s' % (ref, ', '.join(str(a) for a in sorted(accounts))))
