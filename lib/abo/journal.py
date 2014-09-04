@@ -424,6 +424,8 @@ class Journal(object):
             raise ParseException(acc, 'insubstantial account %r' % account.label)
         bank = tagline('bank')
         bank_account = self._parse_account_label(bank)
+        if not bank_account.is_substantial():
+            raise ParseException(acc, 'insubstantial account %r' % bank_account.label)
         entries = []
         entries.append({'line': acc, 'account': account, 'amount': amount * sign})
         entries.append({'line': bank, 'account': bank_account, 'amount': amount * -sign})
@@ -479,7 +481,6 @@ class Journal(object):
     def _parse_dbcr(self, line):
         entry = {'line': line}
         word, text = self._popword(str(line.text))
-        #print 'line=%r word=%r text=%r' % (line, word, text)
         try:
             entry['account'] = self.chart[word] if self.chart else abo.account.Account(label=word)
         except (KeyError, ValueError) as e:
