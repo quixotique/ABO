@@ -236,6 +236,12 @@ def parse_when(args):
     datetime.date(2012, 1, 1)
     >>> parse_when(['end', 'this', 'fy'])
     datetime.date(2013, 6, 30)
+    >>> parse_when(['eofy'])
+    datetime.date(2013, 6, 30)
+    >>> parse_when(['eofy', '2010'])
+    datetime.date(2010, 6, 30)
+    >>> parse_when(['eoq3'])
+    datetime.date(2013, 3, 31)
 
     """
     whens = _parse_whens(args)
@@ -291,6 +297,22 @@ def parse_date(args):
     elif args[0] in ('tomorrow'):
         d = _today() + timedelta(1)
         args.pop(0)
+    elif args[0] in ('eofy', 'eoq1', 'eoq2', 'eoq3', 'eoq4'):
+        unit = args.pop(0)[2:]
+        year = None
+        if args:
+            try:
+                year = parse_year(args[0])
+                args.pop(0)
+            except ValueError:
+                pass
+        if year is not None:
+            end = date(year, 6, 30)
+        else:
+            start, end = fy_containing(_today())
+        if unit[0] == 'q':
+            start, end = quarter_of_fy_starting(start, int(unit[1]))
+        d = end
     elif len(args) >= 3 and args[2] in ('ago', 'hence'):
         amount = parse_amount(args.pop(0))
         unit = args.pop(0)
