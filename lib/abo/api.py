@@ -55,6 +55,8 @@ class API(object):
         self._chart = abo.cache.chart_cache(self.config, self.opts).get()
         self._accounts = dict()
         self.root_account = API_Account(self, None)
+        self._invoices = None
+        self._movements = None
 
     def account(self, account):
         if isinstance(account, str):
@@ -66,14 +68,57 @@ class API(object):
             self._accounts[account] = api_account
         return api_account
 
+    def _compile(self):
+        self._invoices = dict()
+        self._movements = list()
+        invoice_entries = defaultdict(lambda: [])
+        for t in self._all_transactions:
+            for e in t.entries:
+                acc = self._chart[e.account]
+                ref = API_Invoice._extract_ref(e)
+                if ref and acc.is_receivable():
+                    invoice_entries[ref].append(e)
+                else:
+                    self._movements.append(API_Entry(self, e))
+        for ref, entries in invoice_entries.items():
+            #dates = frozenset(e.transaction.date for e in entries)
+            #if len(dates) != 1:
+            #    raise LineError('invoice %s has inconsistent dates: %s' % (ref, ', '.join(API.format_date(d) for d in sorted(dates))))
+            accounts = frozenset(self._chart[e.account].accrual_parent() for e in entries)
+            if len(accounts) != 1:
+                raise LineError('invoice %s has inconsistent accounts: %s' % (ref, ', '.join(str(a) for a in sorted(accounts))))
+            account = next(iter(accounts))
+            api_account = self.account(account)
+            invoice = API_Invoice(self, ref, api_account, entries)
+            self._invoices[ref] = invoice
+            self._movements.append(invoice)
+        self._movements.sort()
+
     @property
-    def all_transactions(self):
+    def all_movements(self):
+        if self._movements is None:
+            self._compile()
+        return iter(self._movements)
+
+    def invoice(self, ref):
+        if self._invoices is None:
+            self._compile()
+        return self._invoices[ref]
+
+    @property
+    def all_invoices(self):
+        if self._invoices is None:
+            self._compile()
+        for ref in sorted(self._invoices, key=API_Invoice.ref_sort_key):
+            yield self._invoices[ref]
+
+    @property
+    def _all_transactions(self):
         transactions = []
         for cache in abo.cache.transaction_caches(self._chart, self.config, self.opts):
             transactions += cache.transactions()
         transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
-        for t in transactions:
-            yield API_Transaction(self, t)
+        return iter(transactions)
 
 class API_Account(object):
 
@@ -92,48 +137,49 @@ class API_Account(object):
         return str(self._account) < str(other._account)
 
     def __contains__(self, other):
-        assert isinstance(other, API_Account)
-        return self._account is None or other._account in self._account
+        if isinstance(other, abo.account.Account):
+            return self._account is None or other in self._account
+        if isinstance(getattr(other, '_account', None), abo.account.Account):
+            return other._account in self
+        if isinstance(getattr(other, 'account', None), API_Account):
+            return other.account in self
+        if hasattr(other, '_is_in_account'):
+            return other._is_in_account(self)
+        return False
 
     @property
     def entries(self):
-        for e in sorted(chain.from_iterable(t.entries for t in self._api.all_transactions), key=lambda e: (e.date, e.amount, e.account, e.description)):
-            if e.account in self:
-                yield e
+        entries = [e for e in chain.from_iterable(t.entries for t in self._api._all_transactions) if e in self]
+        for e in sorted(entries, key=lambda e: (e.date, e.amount, e.account, e.description)):
+            yield API_Entry(self._api, e)
 
     @property
     def movements(self):
-        invoice_refs = defaultdict(lambda: [])
-        movements = []
-        for t in self._api.all_transactions:
-            for e in t._trans.entries:
-                acc = self._api._chart[e.account]
-                if self._account is None or acc in self._account:
-                    ref = API_Invoice._extract_ref(e)
-                    if ref and acc.is_receivable():
-                        invoice_refs[ref].append(e)
-                    else:
-                        movements.append(API_Movement(API_Entry(self._api, e)))
-        for ref in sorted(invoice_refs, key=API_Invoice.ref_sort_key):
-            entries = invoice_refs[ref]
-            dates = frozenset(e.transaction.date for e in entries)
-            if len(dates) != 1:
-                raise LineError('invoice %s has inconsistent dates: %s' % (ref, ', '.join(API.format_date(d) for d in sorted(dates))))
-            accounts = frozenset(self._api._chart[e.account].accrual_parent() for e in entries)
-            if len(accounts) != 1:
-                raise LineError('invoice %s has inconsistent accounts: %s' % (ref, ', '.join(str(a) for a in sorted(accounts))))
-            account = next(iter(accounts))
-            api_account = self if account is self._account else self._api.account(account)
-            movements.append(API_Invoice(self._api, ref, api_account, entries))
-        for m in sorted(movements, key=lambda e: (e.date, e.amount, e.description)):
-            yield m
+        for m in self._api.all_movements:
+            if m in self:
+                yield m
 
     @property
     def invoices(self):
-        for m in sorted(m for m in self.movements if isinstance(m, API_Invoice)):
-            yield m
+        for i in self._api.all_invoices:
+            if i in self:
+                yield i
 
-class API_Invoice(object):
+class API_Movement(object):
+
+    def __init__(self, api, date, amount, description):
+        assert type(self) is not API_Movement # must be sub-classed
+        self._api = api
+        self.date = date
+        self.amount = amount
+        self.description = description
+
+    def __lt__(self, other):
+        if not isinstance(other, API_Movement):
+            return NotImplemented
+        return (self.date, self.amount, self.description) < (other.date, other.amount, other.description)
+
+class API_Invoice(API_Movement):
 
     _re_ref = re.compile(r'\s*\binv:([A-Za-z0-9.-]+)')
 
@@ -154,25 +200,33 @@ class API_Invoice(object):
         assert isinstance(api, API)
         assert isinstance(ref, str)
         assert isinstance(api_account, API_Account)
-        self._api = api
+        assert len(entries) > 0
+        amount = sum(e.amount for e in entries)
+        assert amount < 0
+        API_Movement.__init__(self, api= api,
+                                    date= sorted(e.transaction.date for e in entries)[-1],
+                                    amount= amount,
+                                    description= 'Invoice ' + ref)
         self.ref = ref
-        self.description = 'Invoice ' + ref
         self.account = api_account
         self._entries = tuple(entries)
-        assert len(self._entries) > 0
-        self.date = self._entries[0].transaction.date
-        self.amount = sum(e.amount for e in self._entries)
-        assert self.amount < 0
         invref = 'inv:' + ref
         for e in self._entries:
             assert self._api._chart[e.account] in self.account._account
             assert self._extract_ref(e) == ref
-            assert e.transaction.date == self.date, 'e.transaction.date=%r, self.date=%r' % (e.transaction.date, self.date)
+            #assert e.transaction.date == self.date, 'e.transaction.date=%r, self.date=%r' % (e.transaction.date, self.date)
 
     def __lt__(self, other):
-        if not isinstance(other, API_Invoice):
-            return NotImplemented
-        return self.ref_sort_key(self.ref) < self.ref_sort_key(other.ref)
+        if isinstance(other, API_Invoice):
+            return self.ref_sort_key(self.ref) < self.ref_sort_key(other.ref)
+        return super(API_Invoice, self).__lt__(other)
+
+    def _is_in_account(self, account):
+        assert isinstance(account, API_Account)
+        for e in self._entries:
+            if e in account:
+                return True
+        return False
 
     @property
     def entries(self):
@@ -180,22 +234,20 @@ class API_Invoice(object):
             desc = '; '.join(part for part in (self._re_ref.sub('', text).strip() for text in (e.transaction.description(), e.detail) if text) if part)
             yield API_Entry(self._api, e, desc=desc)
 
-    def statement(self, since=None):
-        return API_Statement(self._api, self.account, since=since, until=self.date)
+    @property
+    def lines(self):
+        balance = 0
+        for e in self.entries:
+            balance += e.amount
+            yield (e, balance)
+        assert balance == self.amount
 
-class API_Movement(object):
-
-    def __init__(self, entry):
-        assert isinstance(entry, API_Entry)
-        self._api = entry._api
-        self.entry = entry
-        self.date = entry.date
-        self.description = entry.description
-        self.amount = entry.amount
+    def statement(self, since=None, atleast=None):
+        return API_Statement(self._api, self.account, since=since, until=self.date, atleast=atleast)
 
 class API_Statement(object):
 
-    def __init__(self, api, api_account, since=None, until=None, since_zero_balance=True):
+    def __init__(self, api, api_account, since=None, until=None, atleast=None, since_zero_balance=True):
         assert isinstance(api, API)
         assert isinstance(api_account, API_Account)
         if since is not None:
@@ -206,19 +258,26 @@ class API_Statement(object):
         self.account = api_account
         self.since = since
         self.until = until
+        self.atleast = atleast
         self.since_zero_balance = since_zero_balance
 
     @property
     def lines(self):
         balance = 0
         since_zero = []
+        linecount = 0
         for m in self.account.movements:
             if self.until is None or m.date <= self.until:
                 balance += m.amount
-                if self.since is None or m.date >= self.since:
+                if (   (self.since is None and self.atleast is None)
+                    or (self.since is not None and m.date >= self.since)
+                    or (self.atleast is not None and linecount < self.atleast)
+                ):
                     for line in since_zero:
+                        linecount += 1
                         yield line
                     since_zero = []
+                    linecount += 1
                     yield (m, balance)
                 elif self.since_zero_balance:
                     if balance:
@@ -240,14 +299,18 @@ class API_Transaction(object):
             assert e.transaction is self._trans
             yield API_Entry(self._api, e, trans=self)
 
-class API_Entry(object):
+class API_Entry(API_Movement):
 
     def __init__(self, api, entry, trans=None, desc=None):
-        self._api = api
+        if trans is None:
+            trans = API_Transaction(api, entry.transaction)
+        else:
+            assert isinstance(trans, API_Transaction)
+        API_Movement.__init__(self, api= api,
+                                    date= trans.date,
+                                    amount= entry.amount,
+                                    description= desc if desc is not None else entry.description())
         self._entry = entry
-        self.transaction = trans if trans is not None else API_Transaction(api, entry.transaction)
+        self.transaction = trans
         self.account = self._api.account(entry.account)
-        self.date = self.transaction.date
-        self.amount = entry.amount
-        self.description = desc if desc is not None else entry.description()
         self.invoice_ref = API_Invoice._extract_ref(entry)
