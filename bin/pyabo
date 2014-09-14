@@ -90,7 +90,7 @@ def main():
             config.apply_options(opts)
             output = func(config, opts)
         for line in output:
-            print(line, file=sys.stdout)
+            print(line, end=getattr(output, 'sep', '\n'), file=sys.stdout)
     except:
         if opts and opts['--debug']:
             raise

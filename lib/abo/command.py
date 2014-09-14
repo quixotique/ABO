@@ -339,7 +339,7 @@ def cmd_mako(config, opts):
     import mako
     from mako.template import Template
     import abo.api
-    yield Template(filename=opts['<template>']).render_unicode(
+    output = Template(filename=opts['<template>']).render_unicode(
             *opts['<args>'],
             abo= abo.api.API(config, opts),
             m= abo.api.API.money_format,
@@ -349,6 +349,11 @@ def cmd_mako(config, opts):
             ljust= abo.api.API.ljust_factory,
             rjust= abo.api.API.rjust_factory
         )
+    class alist(list):
+        pass
+    ret = alist([output])
+    ret.sep = ''
+    return ret
 
 def get_chart(config, opts):
     return abo.cache.chart_cache(config, opts).get()
