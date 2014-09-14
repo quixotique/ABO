@@ -346,6 +346,7 @@ def cmd_mako(config, opts):
             d= abo.api.API.date_format_factory,
             dn= abo.api.API.date_format_factory('%-d/%-m/%Y'),
             dh= abo.api.API.date_format_factory('%-d-%-b-%Y'),
+            df= abo.api.API.date_format_factory('%-d %B %Y'),
             ljust= abo.api.API.ljust_factory,
             rjust= abo.api.API.rjust_factory
         )
