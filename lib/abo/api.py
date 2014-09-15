@@ -264,27 +264,22 @@ class API_Statement(object):
 
     @property
     def lines(self):
-        balance = 0
-        since_zero = []
-        linecount = 0
-        for m in self.account.movements:
-            if self.until is None or m.date <= self.until:
-                balance += m.amount
-                if (   (self.since is None and self.atleast is None)
-                    or (self.since is not None and m.date >= self.since)
-                    or (self.atleast is not None and linecount < self.atleast)
-                ):
-                    for line in since_zero:
-                        linecount += 1
-                        yield line
-                    since_zero = []
-                    linecount += 1
-                    yield (m, balance)
-                elif self.since_zero_balance:
-                    if balance:
-                        since_zero.append((m, balance))
-                    else:
-                        since_zero = []
+        movements = [m for m in self.account.movements if self.until is None or m.date <= self.until]
+        movements.reverse()
+        balance = sum(m.amount for m in movements)
+        lines = []
+        for m in movements:
+            if (   (self.since is None and self.atleast is None and not self.since_zero_balance)
+                or (self.since is not None and m.date >= self.since)
+                or (self.atleast is not None and len(lines) < self.atleast)
+                or (self.since_zero_balance and balance != 0)
+            ):
+                lines.append((m, balance))
+                balance -= m.amount
+            else:
+                break
+        lines.reverse()
+        return iter(lines)
 
 class API_Transaction(object):
 
