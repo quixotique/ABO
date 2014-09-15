@@ -28,7 +28,7 @@ def cmd_journal(config, opts):
     range, bf, transactions = filter_period(chart, get_transactions(chart, config, opts), opts)
     dw = 11
     bw = config.balance_column_width()
-    aw = max(len(a.shortname()) for a in chart.accounts())
+    aw = max(len(a.short_name()) for a in chart.accounts())
     if config.output_width():
         width = max(50, config.output_width())
         aw = min(15, aw)
@@ -43,7 +43,7 @@ def cmd_journal(config, opts):
     yield fmt % ('Date', 'Particulars', 'Amount', 'DC', 'Account')
     yield fmt % ('-' * dw, '-' * pw, '-' * bw, '--', '-' * aw)
     def entry_fields(e):
-        return (config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), chart[e.account].shortname())
+        return (config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), chart[e.account].short_name())
     if bf:
         for e in bf.entries():
             yield fmt % (('',
