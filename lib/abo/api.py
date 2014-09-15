@@ -127,6 +127,7 @@ class API_Account(object):
         assert account is None or isinstance(account, abo.account.Account)
         self._api = api
         self._account = account
+        self.bare_name = account.bare_name() if account is not None else None
 
     def __str__(self):
         return str(self._account) if self._account is not None else ':'
