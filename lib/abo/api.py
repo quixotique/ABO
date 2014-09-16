@@ -20,14 +20,16 @@ class API(object):
     advance_date = staticmethod(abo.period.advance_date)
 
     @staticmethod
-    def money_format(m):
-        if isinstance(m, str):
-            m = abo.money.Money.from_text(m)
-        elif hasattr(m, 'amount') and isinstance(m.date, abo.money.Money):
-            m = m.amount
-        if not isinstance(m, abo.money.Money):
-            raise TypeError('not an abo.money.Money: %r' % (m,))
-        return m.format()
+    def money_format_factory(**kwargs):
+        def formatter(m):
+            if isinstance(m, str):
+                m = abo.money.Money.from_text(m)
+            elif hasattr(m, 'amount') and isinstance(m.amount, abo.money.Money):
+                m = m.amount
+            if not isinstance(m, abo.money.Money):
+                raise TypeError('not an abo.money.Money: %r' % (m,))
+            return m.format(**kwargs)
+        return formatter
 
     @staticmethod
     def date_format_factory(fmt):

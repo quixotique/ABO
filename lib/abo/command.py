@@ -342,7 +342,8 @@ def cmd_mako(config, opts):
     output = Template(filename=opts['<template>']).render_unicode(
             *opts['<args>'],
             abo= abo.api.API(config, opts),
-            m= abo.api.API.money_format,
+            m= abo.api.API.money_format_factory(),
+            mb= abo.api.API.money_format_factory(symbol=False),
             d= abo.api.API.date_format_factory,
             dn= abo.api.API.date_format_factory('%-d/%-m/%Y'),
             dh= abo.api.API.date_format_factory('%-d-%-b-%Y'),
