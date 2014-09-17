@@ -20,6 +20,10 @@ class API(object):
     advance_date = staticmethod(abo.period.advance_date)
 
     @staticmethod
+    def parse_date(words):
+        return abo.period.parse_when(words)
+
+    @staticmethod
     def money_format_factory(**kwargs):
         def formatter(m):
             if isinstance(m, str):
@@ -168,6 +172,9 @@ class API_Account(object):
             if i in self:
                 yield i
 
+    def statement(self, until=None, since=None, atleast=None):
+        return API_Statement(self._api, self, since=since, until=until, atleast=atleast)
+
 class API_Movement(object):
 
     def __init__(self, api, date, amount, description):
@@ -245,30 +252,35 @@ class API_Invoice(API_Movement):
             yield (e, balance)
         assert balance == self.amount
 
-    def statement(self, since=None, atleast=None):
-        return API_Statement(self._api, self.account, since=since, until=self.date, atleast=atleast)
+    def statement(self, since=None, atleast=None, exclude_this=False):
+        return API_Statement(self._api, self.account, since=since, until=self.date, atleast=atleast, exclude=(self,) if exclude_this else ())
 
 class API_Statement(object):
 
-    def __init__(self, api, api_account, since=None, until=None, atleast=None, since_zero_balance=True):
+    def __init__(self, api, api_account, since=None, until=None, atleast=None, since_zero_balance=True, exclude=()):
         assert isinstance(api, API)
         assert isinstance(api_account, API_Account)
-        if since is not None:
-            assert isinstance(since, datetime.date)
         if until is not None:
             assert isinstance(until, datetime.date)
+        if since is not None and not isinstance(since, datetime.date):
+            assert until is not None
+            if not isinstance(since, datetime.timedelta):
+                since = datetime.timedelta(days=since)
+            since = until - since
         self._api = api
+        self._exclude = frozenset(exclude)
         self.account = api_account
         self.since = since
         self.until = until
         self.atleast = atleast
         self.since_zero_balance = since_zero_balance
+        self._movements = [m for m in self.account.movements if m not in self._exclude and (self.until is None or m.date <= self.until)]
+        self.balance = sum(m.amount for m in self._movements)
 
     @property
     def lines(self):
-        movements = [m for m in self.account.movements if self.until is None or m.date <= self.until]
-        movements.reverse()
-        balance = sum(m.amount for m in movements)
+        movements = reversed(self._movements)
+        balance = self.balance
         lines = []
         for m in movements:
             if (   (self.since is None and self.atleast is None and not self.since_zero_balance)
