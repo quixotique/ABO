@@ -5,6 +5,7 @@
 """Top-level commands.
 """
 
+import os
 import logging
 import textwrap
 import datetime
@@ -339,7 +340,7 @@ def cmd_mako(config, opts):
     import mako
     from mako.template import Template
     import abo.api
-    output = Template(filename=opts['<template>']).render_unicode(
+    output = Template(filename=os.path.abspath(opts['<template>'])).render_unicode(
             *opts['<args>'],
             abo= abo.api.API(config, opts),
             m= abo.api.API.money_format_factory(),
