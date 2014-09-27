@@ -47,6 +47,7 @@ condition = ACC
 import sys
 import logging
 import locale
+import os
 import os.path
 
 try:
@@ -127,6 +128,8 @@ def compa(config, args):
         keys.update(compa_pred(config, word))
     elif preword == '--select':
         keys.update(compa_pred(config, word))
+    elif preword == 'mako':
+        keys.update(compa_mako(config, word))
     keys = sorted(keys)
     logging.debug('keys=%r', keys)
     return keys
@@ -163,6 +166,24 @@ def compa_pred(config, word):
             yield '/'
         for comp in compa_accounts(config, word):
             yield comp
+
+def compa_mako(config, word):
+    dirpath, prefix = os.path.split(word)
+    if not dirpath:
+        if os.path.isdir(prefix):
+            yield prefix + '/'
+            return
+        elif os.path.exists(prefix):
+            yield prefix + ' '
+            return
+    for name in ['..'] + os.listdir(dirpath if dirpath else '.'):
+        if name.startswith(prefix) and 'mako' in name:
+            path = dirpath + ('/' if dirpath else '') + name
+            if os.path.isdir(path):
+                path += '/'
+            elif os.path.exists(path):
+                path += ' '
+            yield path
 
 def shell_quote(text):
     return (text.replace('\\', '\\\\')
