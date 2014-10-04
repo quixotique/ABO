@@ -147,20 +147,41 @@ class API_Account(object):
         return str(self._account) < str(other._account)
 
     def __contains__(self, other):
+        if hasattr(other, '_is_in_account'):
+            return other._is_in_account(self)
         if isinstance(other, abo.account.Account):
             return self._account is None or other in self._account
         if isinstance(getattr(other, '_account', None), abo.account.Account):
             return other._account in self
-        if isinstance(getattr(other, 'account', None), API_Account):
-            return other.account in self
-        if hasattr(other, '_is_in_account'):
-            return other._is_in_account(self)
+        account = getattr(other, 'account', None)
+        if isinstance(account, (abo.account.Account, API_Account)):
+            return account in self
+        if isinstance(account, str) and account in self._api._chart:
+            return self._api._chart[account] in self
         return False
 
     @property
+    def _entries_unsorted(self):
+        for t in self._api._all_transactions:
+            for e in t.entries:
+                if e in self:
+                    yield e
+
+    @property
+    def _entries(self):
+        for e in sorted(self._entries_unsorted, key=lambda e: (e.date, e.amount, e.account, e.description)):
+            yield e
+
+    def balance_at(self, date):
+        balance = 0
+        for e in self._entries_unsorted:
+            if e.transaction.date <= date:
+                balance += e.amount
+        return balance
+
+    @property
     def entries(self):
-        entries = [e for e in chain.from_iterable(t.entries for t in self._api._all_transactions) if e in self]
-        for e in sorted(entries, key=lambda e: (e.date, e.amount, e.account, e.description)):
+        for e in self._entries:
             yield API_Entry(self._api, e)
 
     @property
