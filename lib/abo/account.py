@@ -499,8 +499,15 @@ class Chart(object):
     def __len__(self):
         return len(self._index)
 
+    def __contains__(self, key):
+        try:
+            self[key]
+            return True
+        except AccountKeyError:
+            return False
+
     def __getitem__(self, key):
-        assert key
+        assert key, 'key=%r' % (key,)
         try:
             return self._index[key]
         except KeyError as e:
