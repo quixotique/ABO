@@ -199,6 +199,20 @@ class API_Account(object):
     def statement(self, until=None, since=None, atleast=None):
         return API_Statement(self._api, self, since=since, until=until, atleast=atleast)
 
+    @property
+    def sub_accounts(self):
+        for a in self._api.all_accounts:
+            if a._account.parent is self._account:
+                yield a
+
+    @property
+    def accounts_receivable(self):
+        for a in self.sub_accounts:
+            if a._account.is_receivable():
+                yield a
+            else:
+                yield from a.all_accounts_receivable
+
 class API_Movement(object):
 
     def __init__(self, api, date, amount, description):
