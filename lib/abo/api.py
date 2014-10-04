@@ -64,6 +64,11 @@ class API(object):
         self._invoices = None
         self._movements = None
 
+    @property
+    def all_accounts(self):
+        for a in self._chart.accounts():
+            yield self.account(a)
+
     def account(self, account):
         if isinstance(account, str):
             account = self._chart[account]
@@ -87,9 +92,6 @@ class API(object):
                 else:
                     self._movements.append(API_Entry(self, e))
         for ref, entries in invoice_entries.items():
-            #dates = frozenset(e.transaction.date for e in entries)
-            #if len(dates) != 1:
-            #    raise LineError('invoice %s has inconsistent dates: %s' % (ref, ', '.join(API.format_date(d) for d in sorted(dates))))
             accounts = frozenset(self._chart[e.account].accrual_parent() for e in entries)
             if len(accounts) != 1:
                 raise LineError('invoice %s has inconsistent accounts: %s' % (ref, ', '.join(str(a) for a in sorted(accounts))))
