@@ -525,6 +525,12 @@ class Chart(object):
             pass
         raise AccountKeyError(key)
 
+    def get(self, key, default=None):
+        try:
+            return self.__getitem__(key)
+        except AccountKeyError:
+            return default
+
     def accounts(self):
         return sorted(self._accounts, key= lambda a: str(a))
 

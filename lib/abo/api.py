@@ -63,6 +63,7 @@ class API(object):
         self.root_account = API_Account(self, None)
         self._invoices = None
         self._movements = None
+        self._members_account = self._chart.get('mem')
 
     @property
     def all_accounts(self):
@@ -213,7 +214,17 @@ class API_Account(object):
             else:
                 yield from a.all_accounts_receivable
 
+    @property
+    def concept(self):
+        if self._account.is_receivable() and self._account.is_substantial():
+            if self._api._members_account is not None and self._account in self._api._members_account:
+                return 'member'
+            return 'customer'
+        return None
+
 class API_Movement(object):
+
+    is_invoice = False
 
     def __init__(self, api, date, amount, description):
         assert type(self) is not API_Movement # must be sub-classed
@@ -228,6 +239,8 @@ class API_Movement(object):
         return (self.date, self.amount, self.description) < (other.date, other.amount, other.description)
 
 class API_Invoice(API_Movement):
+
+    is_invoice = True
 
     _re_ref = re.compile(r'\s*\binv:([A-Za-z0-9.-]+)')
 
