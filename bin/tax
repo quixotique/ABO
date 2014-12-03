@@ -469,15 +469,7 @@ def superannuation_contribution(year):
         return 9.25
     if year <= 2015:
         return 9.5
-    if year <= 2016:
-        return 10.
-    if year <= 2017:
-        return 10.5
-    if year <= 2018:
-        return 11.
-    if year <= 2019:
-        return 11.5
-    return 12.
+    return 9.5
 
 if __name__ == '__main__':
     main()
