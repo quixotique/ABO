@@ -119,6 +119,8 @@ sub _h_entry
 	$err = 1 unless $self->assert_is_optone($who);
 	return if $err;
 
+        $date =~ s/=.*//;
+
 	my @en = ();
 	if ($type eq 'invoice' || $type eq 'bill')
 	{

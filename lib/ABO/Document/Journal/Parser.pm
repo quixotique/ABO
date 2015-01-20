@@ -183,7 +183,7 @@ sub parse
 					$self->comment_line($_);
 				}
 			}
-			elsif (/^(\w+)\t(.*)$/o)
+			elsif (/^(\w+)(?:\t(.*))?$/o)
 			{
 				my ($key, $val) = ($1, $2);
 				if (!defined $$ent)
