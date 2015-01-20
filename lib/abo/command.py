@@ -131,7 +131,7 @@ def cmd_acc(config, opts):
     else:
         entries = [e for e in chain(*(t.entries for t in transactions)) if chart[e.account] in accounts]
     for e in entries:
-        date = e.cdate if opts['--control'] and e.cdate else e.transaction.date
+        date = e.cdate if opts['--control'] and e.cdate else e.transaction.edate if opts['--effective'] else e.transaction.date
         balance += e.amount
         if e.amount < 0:
             totdb += e.amount
@@ -149,8 +149,8 @@ def cmd_acc(config, opts):
                         break
             if rel:
                 desc += '; ' + ':'.join(rel)
-        if opts['--control']:
-            desc = e.transaction.date.strftime(r'%-d-%b ') + desc
+        if opts['--control'] or (opts['--effective'] and e.transaction.edate != e.transaction.date):
+            desc = e.transaction.date.strftime(r'%-d-%b-%y' if e.transaction.date.year != date.year else r'%-d-%b') + ' ' + desc
         desc = textwrap.wrap(desc, width=pw)
         yield fmt % (date.strftime(r'%_d-%b-%Y'),
                 desc.pop(0) if desc else '',
@@ -365,7 +365,11 @@ def get_transactions(chart, config, opts):
     transactions = []
     for cache in abo.cache.transaction_caches(chart, config, opts):
         transactions += cache.transactions()
-    transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
+    if opts['--effective']:
+        datekey = lambda t: (t.edate, t.date)
+    else:
+        datekey = lambda t: (t.date, t.edate)
+    transactions.sort(key=lambda t: datekey(t) + (t.who or '', t.what or '', -t.amount()))
     if opts['--remove']:
         for account in opts['--remove']:
             acc = chart[account]
@@ -423,8 +427,8 @@ def filter_period(chart, transactions, opts):
     if opts['<period>']:
         range = parse_range(opts['<period>'])
         if range.first is not None:
-            brought_forward = abo.balance.Balance(transactions, abo.balance.Range(None, range.first - datetime.timedelta(1)), chart=chart)
-        transactions = (t for t in transactions if t.date in range)
+            brought_forward = abo.balance.Balance(transactions, abo.balance.Range(None, range.first - datetime.timedelta(1)), chart=chart, use_edate=opts['--effective'])
+        transactions = (t for t in transactions if (t.edate if opts['--effective'] else t.date) in range)
     else:
         range = abo.balance.Range(None, None)
     return range, brought_forward, transactions

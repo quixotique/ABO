@@ -7,7 +7,7 @@ in the journal.  The movements in a Transaction are represented by a list of
 two or more Entry objects.  The debits and credits of all the Entries in a
 Transaction must balance to zero, and no Entry can be for a zero amount.
 
->>> t1 = Transaction(date=1, who="Someone", what="something",
+>>> t1 = Transaction(date=1, edate=3, who="Someone", what="something",
 ...         entries=({'account':'a2', 'amount':14.56, 'detail':'else'},
 ...                  {'account':'a1', 'amount':-14.56}))
 >>> t1.description()
@@ -21,8 +21,8 @@ True
 >>> t1.entries[1].description()
 'Someone; something, else'
 >>> t1
-Transaction(date=1, who='Someone', what='something', entries=(Entry(account='a1', amount=-14.56), Entry(account='a2', amount=14.56, detail='else')))
->>> t2 = Transaction(date=2, who="Them", what="whatever", entries=t1.entries)
+Transaction(date=1, edate=3, who='Someone', what='something', entries=(Entry(account='a1', amount=-14.56), Entry(account='a2', amount=14.56, detail='else')))
+>>> t2 = Transaction(date=2, edate=4, who="Them", what="whatever", entries=t1.entries)
 >>> t2.entries[0].transaction is t2
 True
 >>> t2.entries[1].description()
@@ -248,7 +248,7 @@ class Transaction(abo.base.Base):
     transaction for humans, and a list of two or more Entries.
     """
 
-    def __init__(self, date=None, who=None, what=None, entries=()):
+    def __init__(self, date=None, edate=None, who=None, what=None, entries=()):
         """Construct a new Transaction object, given its date, optional control
         date, description, and list of Entry objects.
         """
@@ -256,6 +256,7 @@ class Transaction(abo.base.Base):
         assert len(entries) >= 2, 'too few entries'
         self.id = self._make_unique_id()
         self.date = date
+        self.edate = edate if edate is not None else date
         self.who = who
         self.what = self._expand(what, date=date) if what else what
         # Construct member Entry objects and ensure that they sum to zero.
@@ -274,6 +275,8 @@ class Transaction(abo.base.Base):
     def __repr__(self):
         r = []
         r.append(('date', self.date))
+        if self.edate != self.date:
+            r.append(('edate', self.edate))
         if self.who:
             r.append(('who', self.who))
         if self.what:

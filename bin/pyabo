@@ -5,7 +5,7 @@
 r'''Usage:
     pyabo chart [-fvqD] [--select=PRED]
     pyabo index [-fqD]
-    pyabo acc [-bcfwWqD] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
+    pyabo acc [-bcefwWqD] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
     pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWqDs] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
@@ -29,6 +29,7 @@ Options:
     -b --bring-forward      Bring balance of previous transactions forward
     -c --control            Show control account
     -d --detail             Show transaction details
+    -e,--effective          Sort by effective date
     -v --verbose            Show more information
     -r --remove=ACC         Remove account ACC
     -s --subtotals          Show subtotal lines

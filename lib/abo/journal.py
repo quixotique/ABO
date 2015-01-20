@@ -39,12 +39,12 @@
 ... amt 55.65
 ...
 ... type remittance
-... date 18/4/2013
+... date 18/4/2013=30/6/2012
 ... what Remittance text
 ... acc account2
 ... amt 81.11
 ...
-... 7/5/2013 Modern text
+... 7/5/2013=1/1/2013 Modern text
 ...  account1  45.06 ; comment
 ...  account2  -60.00 ; another comment {31/5/2013}
 ...  account3 ; {+15}
@@ -69,10 +69,12 @@
     entries=(Entry(account=':cash', amount=Money.AUD(-55.65)),
              Entry(account=':account1', amount=Money.AUD(55.65)))),
  Transaction(date=datetime.date(2013, 4, 18),
+    edate=datetime.date(2012, 6, 30),
     who='Some body', what='Remittance text',
     entries=(Entry(account=':account2', amount=Money.AUD(-81.11)),
              Entry(account=':cash', amount=Money.AUD(81.11)))),
  Transaction(date=datetime.date(2013, 5, 7),
+    edate=datetime.date(2013, 1, 1),
     what='Modern text',
     entries=(Entry(account=':account2', amount=Money.AUD(-60.00), cdate=datetime.date(2013, 5, 31), detail='another comment'),
              Entry(account=':account3', amount=Money.AUD(14.94), cdate=datetime.date(2013, 5, 22)),
@@ -222,7 +224,7 @@ class Journal(object):
                         continue
                     elif not firstline:
                         try:
-                            ledger_date = self._parse_date(line.tag)
+                            ledger_date = self._parse_date_edate(line.tag)
                             ledger_what = line.text
                         except ValueError:
                             raise ParseException(line, 'invalid tag %r' % line.tag)
@@ -249,7 +251,7 @@ class Journal(object):
                 line, detail = line.split(';', 1)
                 m = self._regex_ledger_due.search(detail)
                 if m:
-                    entry['cdate'] = self._parse_date(m.group(1), relative_to=ledger_date)
+                    entry['cdate'] = self._parse_date(m.group(1), relative_to=ledger_date[0])
                     detail = (detail[:m.start(0)] + ' ' + detail[m.end(0):])
                 entry['detail'] = str(detail).strip()
                 line = line.rstrip()
@@ -282,7 +284,7 @@ class Journal(object):
                 raise ParseException(noamt['line'], 'other entries sum to zero')
             noamt['amount'] = -total
         kwargs = {}
-        kwargs['date'] = ledger_date
+        kwargs['date'], kwargs['edate'] = ledger_date
         kwargs['what'] = ledger_what
         kwargs['entries'] = entries
         return kwargs
@@ -302,7 +304,7 @@ class Journal(object):
         if not meth:
             raise ParseException(tags['type'], 'unknown type %r' % (tags['type'].text,))
         kwargs = {}
-        kwargs['date'] = self._parse_date(tagline('date').text)
+        kwargs['date'], kwargs['edate'] = self._parse_date_edate(tagline('date').text)
         who = tagline('who', optional=True)
         kwargs['who'] = str(who.text) if who else None
         what = tagline('what', optional=True)
@@ -459,6 +461,12 @@ class Journal(object):
         if relative_to is not None and self._regex_relative.match(text):
             return relative_to + datetime.timedelta(int(text))
         raise ParseException(text, 'invalid date %r' % text)
+
+    def _parse_date_edate(self, text):
+        texts = text.split('=', 1)
+        date = self._parse_date(texts[0])
+        edate = self._parse_date(texts[1]) if len(texts) > 1 else None
+        return date, edate
 
     def _gst_account_label(self, line):
         try:

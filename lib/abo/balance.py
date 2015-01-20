@@ -8,12 +8,13 @@ at the end of a range of time.
 >>> from abo.transaction import Transaction, Entry
 >>> t1 = Transaction(date=1, what="One",
 ...         entries=({'account':'a1', 'amount':14.56}, {'account':'a2', 'amount':-14.56}))
->>> t2 = Transaction(date=2, what="Two",
+>>> t2 = Transaction(date=2, edate=5, what="Two",
 ...         entries=({'account':'a1', 'amount':10.01}, {'account':'a2', 'amount':-10.01}))
 >>> t3 = Transaction(date=3, what="Three",
 ...         entries=({'account':'a1', 'amount':-2.50}, {'account':'a2', 'amount':2.50, 'cdate': 6}))
 >>> t4 = Transaction(date=4, what="Four",
 ...         entries=({'account':'a1', 'amount':100.00}, {'account':'a2', 'amount':-100.00, 'cdate': 5}))
+
 >>> b = Balance([t1, t2, t3, t4], date_range=Range(1, 4))
 >>> b.first_date
 1
@@ -32,6 +33,27 @@ at the end of a range of time.
 >>> b.entries() #doctest: +NORMALIZE_WHITESPACE
 (Entry(account='a2', amount=-24.57),
  Entry(account='a1', amount=122.07),
+ Entry(account='a2', amount=-100.0, cdate=5),
+ Entry(account='a2', amount=2.5, cdate=6))
+
+>>> b = Balance([t1, t2, t3, t4], date_range=Range(1, 4), use_edate=True)
+>>> b.first_date
+1
+>>> b.last_date
+4
+>>> b.accounts
+('a1', 'a2')
+>>> b.balance('a1')
+112.06
+>>> b.cbalance('a1')
+112.06
+>>> b.balance('a2')
+-112.06
+>>> b.cbalance('a2')
+-14.56
+>>> b.entries() #doctest: +NORMALIZE_WHITESPACE
+(Entry(account='a2', amount=-14.56),
+ Entry(account='a1', amount=112.06),
  Entry(account='a2', amount=-100.0, cdate=5),
  Entry(account='a2', amount=2.5, cdate=6))
 
@@ -60,7 +82,7 @@ import abo.transaction
 
 class Balance(object):
 
-    def __init__(self, transactions, date_range=None, chart=None, acc_pred=None):
+    def __init__(self, transactions, date_range=None, chart=None, acc_pred=None, use_edate=False):
         self.date_range = date_range
         self.first_date = None
         self.last_date = None
@@ -69,11 +91,12 @@ class Balance(object):
             for acc in chart.substantial_accounts():
                 self._raw_balances[acc].total = 0
         for t in transactions:
-            if self.date_range is None or t.date in self.date_range:
-                if self.first_date is None or t.date < self.first_date:
-                    self.first_date = t.date
-                if self.last_date is None or t.date > self.last_date:
-                    self.last_date = t.date
+            date = t.edate if use_edate else t.date
+            if self.date_range is None or date in self.date_range:
+                if self.first_date is None or date < self.first_date:
+                    self.first_date = date
+                if self.last_date is None or date > self.last_date:
+                    self.last_date = date
                 for e in t.entries:
                     if chart:
                         acc = chart[e.account]
