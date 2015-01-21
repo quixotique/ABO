@@ -9,7 +9,7 @@ r'''Usage:
     pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWqDs] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
-    pyabo profloss [-fWqDs] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    pyabo profloss [-fWqDs] [--compact] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo mako [-fqD] [--remove=PRED...] <template> [<args>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
@@ -28,6 +28,7 @@ Options:
     -a --all                Show all accounts
     -b --bring-forward      Bring balance of previous transactions forward
     -c --control            Show control account
+    --compact               One account per output line
     -d --detail             Show transaction details
     -e,--effective          Sort by effective date
     -v --verbose            Show more information

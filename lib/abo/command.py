@@ -206,40 +206,60 @@ def cmd_profloss(config, opts):
     width = (bw + 1) * len(balances) + 1 + aw
     if config.output_width() and width > config.output_width():
         aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
-    fmt = ('%{bw}s ' * len(balances) + ' %.{aw}s').format(**locals())
+    fmt = ('%-{aw}.{aw}s ' + ' %{bw}s' * len(balances)).format(**locals())
     yield 'PROFIT LOSS STATEMENT'.center(width)
-    line = []
+    line = ['']
     for b in balances:
         line.append(b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '')
-    line.append('')
     yield fmt % tuple(line)
-    line = []
+    line = ['Account']
     for b in balances:
         line.append(b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '')
-    line.append('Account')
+    rulechar = '═'
     yield fmt % tuple(line)
-    yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
+    yield fmt % ((rulechar * aw,) + (rulechar * bw,) * len(balances))
     for section in sections:
         section_accounts = section.accounts
         if section.depth is not None:
             section_accounts = set(a for a in section_accounts if a.depth() <= section.depth)
         section_accounts = filter_display_accounts(section_accounts, opts)
-        if opts['--subtotals']:
-            subaccounts = parentset(section_accounts)
-        for account in chain([None], sorted(section_accounts, key=str)):
+        subaccounts = parentset(section_accounts)
+        all_accounts = [None] + list(sorted(section_accounts | subaccounts, key=str))
+        while all_accounts:
+            account = all_accounts.pop(0)
+            is_subaccount = account in subaccounts
+            if opts['--compact'] and is_subaccount:
+                continue
             line = []
+            if account is None:
+                line.append('TOTAL ' + section.title)
+            elif opts['--compact']:
+                line.append(str(account))
+            else:
+                def has_sibling(account):
+                    if not all_accounts:
+                        return False
+                    for a in all_accounts:
+                        if a.depth() <= account.depth():
+                            break
+                    return a.depth() == account.depth()
+                graph = ['├─╴' if has_sibling(account) else '└─╴']
+                for a in account.all_parents():
+                    graph.append('│  ' if has_sibling(a) else '   ')
+                line.append(''.join(reversed(graph)) + account.bare_name())
             for b in section.balances:
-                line.append(config.format_money(b.balance(account)))
-            line.append(str(account) if account is not None else section.title)
+                if account is None or opts['--subtotals'] or not is_subaccount:
+                    line.append(config.format_money(b.balance(account)))
+                else:
+                    line.append('')
             line = fmt % tuple(line)
-            if opts['--subtotals'] and account is not None and account not in subaccounts:
+            if opts['--subtotals'] and not is_subaccount:
                 line = strong(line)
             yield line
-        yield fmt % (('-' * bw,) * len(section.balances) + ('-' * aw,))
-    line = []
+        yield fmt % ((rulechar * aw,) + (rulechar * bw,) * len(section.balances))
+    line = ['NET PROFIT (LOSS)']
     for b in balances:
         line.append(config.format_money(b.balance(None)))
-    line.append('NET PROFIT (LOSS)')
     yield fmt % tuple(line)
 
 def cmd_balance(config, opts):
