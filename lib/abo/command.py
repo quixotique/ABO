@@ -173,7 +173,7 @@ def cmd_profloss(config, opts):
     selected_accounts = select_accounts(chart, opts)
     transactions = get_transactions(chart, config, opts)
     plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and a in selected_accounts
-    balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, acc_pred=plpred) for p in periods]
+    balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for p in periods]
     all_accounts = set()
     if opts['--tax']:
         section_preds = (
