@@ -202,22 +202,23 @@ def cmd_profloss(config, opts):
         sections.append(struct(depth=depth, title=title, balances=bbalances, accounts=accounts))
         all_accounts.update(accounts)
     bw = config.balance_column_width()
-    aw = max(chain([10], (len(str(a)) for a in all_accounts)))
+    if opts['--compact']:
+        aw = max(chain([10], (len(str(a)) for a in all_accounts)))
+    else:
+        aw = max(chain([10], (3 * a.depth() + len(a.bare_name()) for a in all_accounts)))
     width = (bw + 1) * len(balances) + 1 + aw
     if config.output_width() and width > config.output_width():
         aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
-    fmt = ('%-{aw}.{aw}s ' + ' %{bw}s' * len(balances)).format(**locals())
+        width = config.output_width()
+    def fmt(label, columns, fill=None, label_fill=None, column_fill=None, decor=plain):
+        columns = list(columns)
+        columns += [''] * (len(balances) - len(columns))
+        return label.ljust(aw, label_fill or fill or ' ')[:aw] + ' ' + ''.join(' ' + decor(c.rjust(bw, column_fill or fill or ' ')[:bw]) for c in columns)
+    rule = fmt('', [], fill='═')
     yield 'PROFIT LOSS STATEMENT'.center(width)
-    line = ['']
-    for b in balances:
-        line.append(b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '')
-    yield fmt % tuple(line)
-    line = ['Account']
-    for b in balances:
-        line.append(b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '')
-    rulechar = '═'
-    yield fmt % tuple(line)
-    yield fmt % ((rulechar * aw,) + (rulechar * bw,) * len(balances))
+    yield fmt('', (b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '' for b in balances))
+    yield fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
+    yield rule
     for section in sections:
         section_accounts = section.accounts
         if section.depth is not None:
@@ -230,11 +231,10 @@ def cmd_profloss(config, opts):
             is_subaccount = account in subaccounts
             if opts['--compact'] and is_subaccount:
                 continue
-            line = []
             if account is None:
-                line.append('TOTAL ' + section.title)
+                label = 'TOTAL ' + section.title
             elif opts['--compact']:
-                line.append(str(account))
+                label = str(account)
             else:
                 def has_sibling(account):
                     if not all_accounts:
@@ -246,21 +246,16 @@ def cmd_profloss(config, opts):
                 graph = ['├─╴' if has_sibling(account) else '└─╴']
                 for a in account.all_parents():
                     graph.append('│  ' if has_sibling(a) else '   ')
-                line.append(''.join(reversed(graph)) + account.bare_name())
+                label = ''.join(reversed(graph)) + account.bare_name() + ('' if is_subaccount else ' ' + '.' * aw)
+            columns = []
             for b in section.balances:
                 if account is None or opts['--subtotals'] or not is_subaccount:
-                    line.append(config.format_money(b.balance(account)))
+                    columns.append(config.format_money(b.balance(account)))
                 else:
-                    line.append('')
-            line = fmt % tuple(line)
-            if opts['--subtotals'] and not is_subaccount:
-                line = strong(line)
-            yield line
-        yield fmt % ((rulechar * aw,) + (rulechar * bw,) * len(section.balances))
-    line = ['NET PROFIT (LOSS)']
-    for b in balances:
-        line.append(config.format_money(b.balance(None)))
-    yield fmt % tuple(line)
+                    columns.append('')
+            yield fmt(label, columns, decor= strong if opts['--subtotals'] and not is_subaccount else plain)
+        yield rule
+    yield fmt('NET PROFIT (LOSS)', (config.format_money(b.balance(None)) for b in balances))
 
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
@@ -468,6 +463,9 @@ def range_line(range):
         p.append('TO')
         p.append(range.last.strftime(r'%_d-%b-%Y'))
     return ' '.join(p) if p else 'ALL DATES'
+
+def plain(text):
+    return text
 
 def strong(text):
     pre = []
