@@ -201,8 +201,16 @@ def main():
     def row(label, *amounts):
         return '%-20s' % label + ('%12s' * len(amounts)) % amounts
 
-    def amounts(amt):
-        def fmt(a): return '%10.2f' % a
+    hours = [   workdays_per_year * hours_per_day,
+                workdays_per_year * hours_per_day / 4,
+                workdays_per_year * hours_per_day / 12,
+                hours_per_day * 10,
+                hours_per_day * 5,
+                hours_per_day,
+                1
+             ]
+
+    def amounts(amt, fmt=lambda a: '%10.2f' % a):
         return [fmt(amt),
                 fmt(amt / 4.),
                 fmt(amt / 12.),
@@ -213,6 +221,7 @@ def main():
                ]
 
     print row(year, 'Annual', 'Quarterly', 'Monthly', 'F/nightly', 'Weekly', 'Daily', 'Hourly')
+    print row("Hours", *amounts(workdays_per_year * hours_per_day, fmt=lambda a: ('%10.2f' % a).replace('.00', '   ')))
     if r.extra:
         print row("Gross income", *amounts(r.gross))
         print row("Extra untaxed income", *amounts(r.extra))
