@@ -215,10 +215,11 @@ def cmd_profloss(config, opts):
         columns += [''] * (len(balances) - len(columns))
         return label.ljust(aw, label_fill or fill or ' ')[:aw] + ' ' + ''.join(' ' + decor(c.rjust(bw, column_fill or fill or ' ')[:bw]) for c in columns)
     rule = fmt('', [], fill='═')
-    yield 'PROFIT LOSS STATEMENT'.center(width)
-    yield fmt('', (b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '' for b in balances))
-    yield fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
-    yield rule
+    if not opts['--bare']:
+        yield 'PROFIT LOSS STATEMENT'.center(width)
+        yield fmt('', (b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '' for b in balances))
+        yield fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
+        yield rule
     for section in sections:
         section_accounts = section.accounts
         if section.depth is not None:
@@ -232,6 +233,8 @@ def cmd_profloss(config, opts):
             if opts['--compact'] and is_subaccount:
                 continue
             if account is None:
+                if opts['--bare']:
+                    continue
                 label = 'TOTAL ' + section.title
             elif opts['--compact']:
                 label = str(account)
@@ -254,8 +257,10 @@ def cmd_profloss(config, opts):
                 else:
                     columns.append('')
             yield fmt(label, columns, decor= strong if opts['--subtotals'] and not is_subaccount else plain)
-        yield rule
-    yield fmt('NET PROFIT (LOSS)', (config.format_money(b.balance(None)) for b in balances))
+        if not opts['--bare']:
+            yield rule
+    if not opts['--bare']:
+        yield fmt('NET PROFIT (LOSS)', (config.format_money(b.balance(None)) for b in balances))
 
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
