@@ -9,8 +9,9 @@ if __name__ == "__main__":
     import sys
     if sys.path[0] == sys.path[1] + '/abo':
         del sys.path[0]
+    import abo.money
     import doctest
-    doctest.testmod()
+    doctest.testmod(abo.money)
 
 import logging
 # Suppress error caused by duplicate numeric code in iso_15294.xml
@@ -315,16 +316,16 @@ class Currency(object):
         r'''Return a string representation of the Decimal amount with the
         currency symbol as prefix or suffix.
         >>> Currency.AUD.format(1)
-        u'$1.00'
+        '$1.00'
         >>> Currency.AUD.format(-1)
-        u'$-1.00'
+        '$-1.00'
         >>> Currency.AUD.format(-100, negative_prefix='(', negative_sign='', negative_suffix=')')
-        u'($100.00)'
+        '($100.00)'
         >>> Currency.AUD.format(10000000)
-        u'$10000000.00'
+        '$10000000.00'
         >>> Currency.AUD.format(10000000, thousands=True)
-        u'$10,000,000.00'
-        >>> Currency.EUR.format(1) == u'1.00 €'
+        '$10,000,000.00'
+        >>> Currency.EUR.format(1) == '1.00 €'
         True
         '''
         amt = self.quantize(amount)
@@ -370,7 +371,7 @@ class Money(object):
     def register(cls, currency=None):
         r'''Create a subclass of Money which is bound to a specific currency.
         >>> Money.register(Currency('HKD', 2))
-        <class '__main__.HKD'>
+        <class 'abo.money.HKD'>
         >>> Money.HKD(-6.99)
         Money.HKD(-6.99)
         >>> class Vatu(Money):
@@ -378,7 +379,7 @@ class Money(object):
         >>> Vatu(1200)
         Vatu(1200)
         >>> Vatu.register()
-        <class '__main__.Vatu'>
+        <class 'abo.money.Vatu'>
         >>> Vatu(1200)
         Money.VUV(1200)
         '''
@@ -437,7 +438,7 @@ class Money(object):
         >>> Greenback(100)
         Greenback(100)
         >>> Greenback.register()
-        <class '__main__.Greenback'>
+        <class 'abo.money.Greenback'>
         >>> Money.USD(100)
         Money.USD(100)
         >>> Greenback(100)

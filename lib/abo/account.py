@@ -10,7 +10,8 @@ if __name__ == "__main__":
     if sys.path[0] == sys.path[1] + '/abo':
         del sys.path[0]
     import doctest
-    doctest.testmod()
+    import abo.account
+    doctest.testmod(abo.account)
 
 import logging
 import string
@@ -39,9 +40,6 @@ class AccountKeyError(KeyError):
         self.key = key
         KeyError.__init__(self, key)
 
-    def __unicode__(self):
-        return 'unknown account "%s"' % self.key
-
     def __str__(self):
         return 'unknown account %r' % self.key
 
@@ -50,9 +48,6 @@ class InvalidAccountPredicate(ValueError):
     def __init__(self, pred):
         self.pred = pred
         ValueError.__init__(self, pred)
-
-    def __unicode__(self):
-        return 'invalid account predicate "%s"' % self.pred
 
     def __str__(self):
         return 'invalid account predicate %r' % self.pred
@@ -70,17 +65,15 @@ class Account(object):
     >>> c
     Account(label='c', parent=Account(label='b', parent=Account(label='a'), tags=('x',)), tags=('x', 'y'))
     >>> c.bare_name()
-    u'c'
+    'c'
     >>> c.full_name()
-    u':a:b:c'
-    >>> unicode(c)
-    u':a:b:c'
+    ':a:b:c'
     >>> d
     Account(label='d', parent=Account(label='a'), atype=AccountType.ProfitLoss)
     >>> c.relative_name(a)
-    u'b:c'
+    'b:c'
     >>> c.relative_name(b)
-    u'c'
+    'c'
     >>> a in c
     False
     >>> c in a
@@ -100,12 +93,12 @@ class Account(object):
     >>> d.atype
     AccountType.ProfitLoss
     >>> a.tags
-    set([])
+    set()
     >>> b.tags
-    set(['x'])
-    >>> c.tags == set(['x', 'y'])
+    {'x'}
+    >>> c.tags == {'x', 'y'}
     True
-    >>> e.tags == set(['a', 'b'])
+    >>> e.tags == {'a', 'b'}
     True
 
     Account objects can be pickled and unpickled using protocol 2:
@@ -147,11 +140,11 @@ class Account(object):
             self.tags |= parent.tags
             self.parent._childcount += 1
 
-    def __unicode__(self):
+    def __str__(self):
         return self.full_name()
 
-    def __str__(self):
-        return (str(self.parent) if self.parent else '') + ':' + ('*' if self.wild else str(self.name or self.label))
+    #def __str__(self):
+    #    return (str(self.parent) if self.parent else '') + ':' + ('*' if self.wild else str(self.name or self.label))
 
     def __repr__(self):
         r = []
@@ -311,27 +304,27 @@ class Chart(object):
     ...   bank asset:cash "Bank account"
     ...   loose_change asset:cash "Loose change"
     ... ''')
-    >>> for a in c1.accounts(): print repr(unicode(a)), repr(a.label), repr(a.atype), repr(tuple(sorted(a.tags)))
-    u':Cash assets' 'cash_assets' AccountType.AssetLiability ('AL', 'asset')
-    u':Cash assets:Bank account' 'bank' AccountType.AssetLiability ('AL', 'asset', 'cash')
-    u':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability ('AL', 'asset', 'cash')
-    u':Expenses' 'exp' AccountType.ProfitLoss ('PL',)
-    u':Expenses:Household' None AccountType.ProfitLoss ('PL',)
-    u':Expenses:Household:Consumibles' None AccountType.ProfitLoss ('PL', 'cons', 'nd')
-    u':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss ('PL', 'cons', 'nd')
-    u':Expenses:Household:Transport' None AccountType.ProfitLoss ('PL',)
-    u':Expenses:Household:Transport:Car' None AccountType.ProfitLoss ('PL', 'nd')
-    u':Expenses:Household:Transport:Car:Petrol for cars' 'petrol' AccountType.ProfitLoss ('PL', 'nd')
-    u':Expenses:Household:Transport:Car:rego, insurance, maintenance' 'car' AccountType.ProfitLoss ('PL', 'nd')
-    u':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss ('PL',)
-    u':Expenses:Household:Utilities' None AccountType.ProfitLoss ('PL',)
-    u':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss ('PL', 'nd')
-    u':Expenses:Household:Utilities:Gas' 'gas' AccountType.ProfitLoss ('PL', 'nd')
-    u':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss ('PL', 'cons', 'nd')
-    u':Income' 'inc' AccountType.ProfitLoss ('PL',)
-    u':Income:Prizes' 'prizes' AccountType.ProfitLoss ('PL',)
-    u':Income:Rent' 'rent' AccountType.ProfitLoss ('PL', 'nd')
-    u':Income:Salary' None AccountType.ProfitLoss ('PL', 'nd')
+    >>> for a in c1.accounts(): print(repr(str(a)), repr(a.label), repr(a.atype), repr(tuple(sorted(a.tags))))
+    ':Cash assets' 'cash_assets' AccountType.AssetLiability ('AL', 'asset')
+    ':Cash assets:Bank account' 'bank' AccountType.AssetLiability ('AL', 'asset', 'cash')
+    ':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability ('AL', 'asset', 'cash')
+    ':Expenses' 'exp' AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household' None AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household:Consumibles' None AccountType.ProfitLoss ('PL', 'cons', 'nd')
+    ':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss ('PL', 'cons', 'nd')
+    ':Expenses:Household:Transport' None AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household:Transport:Car' None AccountType.ProfitLoss ('PL', 'nd')
+    ':Expenses:Household:Transport:Car:Petrol for cars' 'petrol' AccountType.ProfitLoss ('PL', 'nd')
+    ':Expenses:Household:Transport:Car:rego, insurance, maintenance' 'car' AccountType.ProfitLoss ('PL', 'nd')
+    ':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household:Utilities' None AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss ('PL', 'nd')
+    ':Expenses:Household:Utilities:Gas' 'gas' AccountType.ProfitLoss ('PL', 'nd')
+    ':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss ('PL', 'cons', 'nd')
+    ':Income' 'inc' AccountType.ProfitLoss ('PL',)
+    ':Income:Prizes' 'prizes' AccountType.ProfitLoss ('PL',)
+    ':Income:Rent' 'rent' AccountType.ProfitLoss ('PL', 'nd')
+    ':Income:Salary' None AccountType.ProfitLoss ('PL', 'nd')
 
     >>> c1.tags()
     ['AL', 'PL', 'asset', 'cash', 'cons', 'nd']
@@ -370,7 +363,7 @@ class Chart(object):
     >>> p1 = c2.parse_predicate('=AL')
     >>> for a in c2.accounts():
     ...     if p1(a):
-    ...         print unicode(a)
+    ...         print(str(a))
     :Cash assets
     :Cash assets:Bank account
     :Cash assets:Loose change
@@ -378,7 +371,7 @@ class Chart(object):
     >>> p1 = c2.parse_predicate('=UTIL')
     >>> for a in c2.accounts():
     ...     if p1(a):
-    ...         print unicode(a)
+    ...         print(str(a))
     :Expenses:Household:Utilities
     :Expenses:Household:Utilities:Electricity
     :Expenses:Household:Utilities:Gas
@@ -387,7 +380,7 @@ class Chart(object):
     >>> p1 = c1.parse_predicate('=cons')
     >>> for a in c2.accounts():
     ...     if p1(a):
-    ...         print unicode(a)
+    ...         print(str(a))
     :Expenses:Household:Consumibles
     :Expenses:Household:Consumibles:Food
     :Expenses:Household:Utilities:Water usage
@@ -395,13 +388,13 @@ class Chart(object):
     >>> p1 = c2.parse_predicate('=energy&!=UTIL')
     >>> for a in c2.accounts():
     ...     if p1(a):
-    ...         print unicode(a)
+    ...         print(str(a))
     :Expenses:Household:Transport:Car:Petrol for cars
 
     >>> p1 = c2.parse_predicate('/u')
     >>> for a in c2.accounts():
     ...     if p1(a):
-    ...         print unicode(a)
+    ...         print(str(a))
     :Cash assets:Bank account
     :Expenses:Household
     :Expenses:Household:Consumibles
@@ -419,7 +412,7 @@ class Chart(object):
     >>> p2 = c2.parse_predicate('inc|/oo')
     >>> for a in c2.accounts():
     ...     if p2(a):
-    ...         print unicode(a)
+    ...         print(str(a))
     :Cash assets:Loose change
     :Expenses:Household:Consumibles:Food
     :Income
@@ -429,7 +422,7 @@ class Chart(object):
 
     >>> c2.parse_predicate('nonexistent')
     Traceback (most recent call last):
-    InvalidAccountPredicate: invalid account predicate 'nonexistent'
+    abo.account.InvalidAccountPredicate: invalid account predicate 'nonexistent'
 
     >>> c3 = Chart.from_file(r'''
     ... People
@@ -438,18 +431,18 @@ class Chart(object):
     ...   Adam =c
     ... Things
     ... ''')
-    >>> for a in c3.accounts(): print repr(unicode(a)), repr(a.label), repr(a.atype)
-    u':People' None None
-    u':People:Adam' None None
-    u':People:Eve' None None
-    u':Things' None None
-    >>> c3[u':People']
-    Account(name=u'People')
-    >>> c3[u':People:Somebody']
-    Account(name=u'Somebody', parent=Account(name=u'People'), tags=('b',))
-    >>> c3[u':Things:Somebody']
+    >>> for a in c3.accounts(): print(repr(str(a)), repr(a.label), repr(a.atype))
+    ':People' None None
+    ':People:Adam' None None
+    ':People:Eve' None None
+    ':Things' None None
+    >>> c3[':People']
+    Account(name='People')
+    >>> c3[':People:Somebody']
+    Account(name='Somebody', parent=Account(name='People'), tags=('b',))
+    >>> c3[':Things:Somebody']
     Traceback (most recent call last):
-    AccountKeyError: unknown account u':Things:Somebody'
+    abo.account.AccountKeyError: unknown account ':Things:Somebody'
 
     """
 

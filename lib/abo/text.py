@@ -52,8 +52,8 @@ def number_lines(lines, name=None, start=1):
 
 class numbered_line(str):
 
-    r'''Sub-class of unicode which carries extra attributes such as
-    'line_number' and 'name', which it preserves where needed.
+    r'''Sub-class of str which carries extra attributes such as 'line_number'
+    and 'name', which it preserves where needed.
 
     >>> i = numbered_line('abc ')
     >>> i.line_number = 42
