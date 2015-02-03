@@ -143,9 +143,6 @@ class Account(object):
     def __str__(self):
         return self.full_name()
 
-    #def __str__(self):
-    #    return (str(self.parent) if self.parent else '') + ':' + ('*' if self.wild else str(self.name or self.label))
-
     def __repr__(self):
         r = []
         if self.label is not None:
@@ -177,6 +174,11 @@ class Account(object):
             return NotImplemented
         return not self.__eq__(other)
 
+    def __lt__(self, other):
+        if not isinstance(other, Account):
+            return NotImplemented
+        return self.full_name_tuple() < other.full_name_tuple()
+
     def __contains__(self, account):
         if not isinstance(account, Account):
             return False
@@ -194,11 +196,14 @@ class Account(object):
     def is_accrual(self):
         return self.is_receivable() or self.is_payable()
 
+    def full_name_tuple(self):
+        return (self.parent.full_name_tuple() if self.parent else ()) + (self.bare_name(),)
+
     def full_name(self):
-        return (str(self.parent) if self.parent else '') + ':' + self.bare_name()
+        return ':' + ':'.join(self.full_name_tuple())
 
     def bare_name(self):
-        return ('*' if self.wild else str(self.name or self.label))
+        return '*' if self.wild else str(self.name or self.label)
 
     def relative_name(self, context_account):
         return ':'.join(a.bare_name() for a in chain(reversed(list(self.parents_not_in_common_with(context_account))), (self,)))
@@ -276,7 +281,6 @@ def common_root(accounts):
             roots.difference_update(account.all_parents())
     assert len(roots) == 1
     return roots.pop()
-        
 
 class Chart(object):
 
@@ -525,10 +529,10 @@ class Chart(object):
             return default
 
     def accounts(self):
-        return sorted(self._accounts, key= lambda a: str(a))
+        return sorted(self._accounts)
 
     def substantial_accounts(self):
-        return sorted((a for a in self._accounts if a.is_substantial()), key= lambda a: str(a))
+        return sorted(a for a in self._accounts if a.is_substantial())
 
     def keys(self):
         return self._index.keys()

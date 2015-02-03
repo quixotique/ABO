@@ -63,7 +63,7 @@ def cmd_journal(config, opts):
 
 def cmd_chart(config, opts):
     chart = get_chart(config, opts)
-    for account in sorted(select_accounts(chart, opts), key=str):
+    for account in sorted(select_accounts(chart, opts)):
         line = [str(account)]
         if opts['--verbose']:
             if account.label:
@@ -226,7 +226,7 @@ def cmd_profloss(config, opts):
             section_accounts = set(a for a in section_accounts if a.depth() <= section.depth)
         section_accounts = filter_display_accounts(section_accounts, opts)
         subaccounts = parentset(section_accounts)
-        all_accounts = [None] + list(sorted(section_accounts | subaccounts, key=str))
+        all_accounts = [None] + list(sorted(section_accounts | subaccounts))
         while all_accounts:
             account = all_accounts.pop(0)
             is_subaccount = account in subaccounts
@@ -267,7 +267,7 @@ def cmd_balance(config, opts):
     selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
     whens, balances = filter_at(chart, all_transactions, opts, acc_pred=lambda a: a in selected_accounts)
-    display_accounts = sorted(filter_display_accounts(chain(*(b.accounts for b in balances)), opts), key=str)
+    display_accounts = sorted(filter_display_accounts(chain(*(b.accounts for b in balances)), opts))
     logging.debug('display_accounts = %r' % display_accounts)
     aw = max(chain([10], (len(str(a)) for a in display_accounts)))
     bw = config.balance_column_width()

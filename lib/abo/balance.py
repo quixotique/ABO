@@ -138,7 +138,7 @@ class Balance(object):
     @property
     def accounts(self):
         self._tally()
-        return tuple(sorted((b for b in self._balances if b is not None), key=str))
+        return tuple(sorted((b for b in self._balances if b is not None)))
 
     def balance(self, account=None):
         self._tally()
