@@ -89,6 +89,15 @@
 >>> parse_periods(['last', '5', 'days'])
 [(datetime.date(2013, 3, 27), datetime.date(2013, 3, 31))]
 
+>>> parse_periods(['3', 'months', 'ago'])
+[(datetime.date(2012, 12, 1), datetime.date(2012, 12, 31))]
+
+>>> parse_periods(['last', 'year'])
+[(datetime.date(2012, 1, 1), datetime.date(2012, 12, 31))]
+
+>>> parse_periods(['1/7/2016'])
+[(datetime.date(2016, 7, 1), datetime.date(2016, 7, 1))]
+
 """
 
 if __name__ == "__main__":
@@ -202,7 +211,10 @@ def _parse_periods(args):
                     start = next_start
             periods = newperiods
         else:
-            break
+            try:
+                periods.append(parse_fromto(args))
+            except ValueError:
+                break
     return periods
 
 def parse_whens(args):
@@ -283,8 +295,7 @@ def parse_fromto(args):
         if args.pop(0) == 'ago':
             amount = -amount
         return enclosing_range(advance_date_unit(_today(), unit, amount), unit)
-    else:
-        d = parse_date(args)
+    d = parse_date(args)
     return d, d
 
 def parse_date(args):
