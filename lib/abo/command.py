@@ -185,6 +185,10 @@ def cmd_profloss(config, opts):
             (0,    'Income After Tax', (lambda a, m: m > 0 or 'nd' not in a.tags or 'tax' in a.tags)),
             (None, 'Expenses', (lambda a, m: m < 0 and 'nd' in a.tags and 'tax' not in a.tags)),
         )
+    elif opts['--bare']:
+        section_preds = (
+            (None, '', (lambda a, m: True)),
+        )
     else:
         section_preds = (
             (None, 'Income', (lambda a, m: m > 0)),
@@ -206,6 +210,8 @@ def cmd_profloss(config, opts):
         aw = max(chain([10], (len(str(a)) for a in all_accounts)))
     else:
         aw = max(chain([10], (3 * a.depth() + len(a.bare_name()) for a in all_accounts)))
+        if opts['--bare']:
+            aw -= 3
     width = (bw + 1) * len(balances) + 1 + aw
     if config.output_width() and width > config.output_width():
         aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
@@ -249,6 +255,8 @@ def cmd_profloss(config, opts):
                 graph = ['├─╴' if has_sibling(account) else '└─╴']
                 for a in account.all_parents():
                     graph.append('│  ' if has_sibling(a) else '   ')
+                if opts['--bare']:
+                    graph.pop()
                 label = ''.join(reversed(graph)) + account.bare_name() + ('' if is_subaccount else ' ' + '.' * aw)
             columns = []
             for b in section.balances:
