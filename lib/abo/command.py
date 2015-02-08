@@ -96,9 +96,10 @@ def cmd_acc(config, opts):
         pw = 35
         width = dw + 2 + pw + 2 * (mw + 1) + 1 + bw
     fmt = '%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
-    yield 'STATEMENT OF ACCOUNT'.center(width)
-    yield range_line(range).center(width)
-    yield ''
+    if not opts['--bare']:
+        yield 'STATEMENT OF ACCOUNT'.center(width)
+        yield range_line(range).center(width)
+        yield ''
     yield fmt % ('Date', 'Particulars', 'Debit', 'Credit', 'Balance')
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
     balance = 0

@@ -5,7 +5,7 @@
 r'''Usage:
     pyabo chart [-fvqD] [--select=PRED]
     pyabo index [-fqD]
-    pyabo acc [-bcefwWqD] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
+    pyabo acc [-bcefwWqD] [--bare] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
     pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWqDs] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
