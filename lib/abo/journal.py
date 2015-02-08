@@ -383,7 +383,7 @@ class Journal(object):
         if gst_amount is not None:
             if gst_amount == 0:
                 raise ParseException(amt, 'zero gst amount not allowed: %s' % gst_amount)
-            gst_account = self._gst_account_label(gst)
+            gst_account = self._gst_account_invoice(gst) if sign < 0 else self._gst_account_bill(gst) 
             total += gst_amount
             entries.append({'line': gst, 'account': gst_account, 'amount': gst_amount * -sign})
         entry_noamt = None
@@ -468,10 +468,36 @@ class Journal(object):
         edate = self._parse_date(texts[1]) if len(texts) > 1 else None
         return date, edate
 
-    def _gst_account_label(self, line):
+    def _gst_account_bill(self, line):
+        # TODO: move these account names into configuration
+        if self.chart:
+            try:
+                return self.chart['gst_credit']
+            except KeyError:
+                pass
+            try:
+                return self.chart['gst']
+            except KeyError as e:
+                raise ParseException(line, e)
         try:
-            return self.chart['gst'] if self.chart else abo.account.Account(label='gst')
-        except (ValueError, KeyError) as e:
+            return abo.account.Account(label='gst')
+        except ValueError as e:
+            raise ParseException(line, e)
+
+    def _gst_account_invoice(self, line):
+        # TODO: move these account names into configuration
+        if self.chart:
+            try:
+                return self.chart['gst_sales']
+            except KeyError:
+                pass
+            try:
+                return self.chart['gst']
+            except KeyError as e:
+                raise ParseException(line, e)
+        try:
+            return abo.account.Account(label='gst')
+        except ValueError as e:
             raise ParseException(line, e)
 
     def _parse_account_label(self, line):

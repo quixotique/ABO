@@ -101,7 +101,7 @@ class Balance(object):
                     if chart:
                         acc = chart[e.account]
                         assert acc is not None
-                        assert acc.is_substantial()
+                        assert acc.is_substantial(), 'acc=%r' % (acc,)
                     else:
                         acc = e.account
                     if acc_pred is None or acc_pred(acc):
