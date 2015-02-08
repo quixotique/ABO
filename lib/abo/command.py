@@ -102,30 +102,37 @@ def cmd_acc(config, opts):
         yield ''
     yield fmt % ('Date', 'Particulars', 'Debit', 'Credit', 'Balance')
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
-    balance = 0
-    totdb = 0
-    totcr = 0
+    tally = struct()
+    tally.balance = 0
+    tally.totdb = 0
+    tally.totcr = 0
     if bf:
-        for account in accounts:
-            if account.is_substantial() and account.atype is not abo.account.AccountType.ProfitLoss or opts['--bring-forward']:
-                if opts['--control']:
-                    amount = bf.cbalance(account)
-                    if amount != 0:
-                        balance += amount
-                        yield fmt % ('', '; '.join(filter(bool, ['Brought forward', account.relative_name(common_root_account)])),
-                                config.format_money(-amount) if amount < 0 else '',
-                                config.format_money(amount) if amount > 0 else '',
-                                config.format_money(balance))
-                else:
-                    for e in bf.entries():
-                        if chart[e.account] is account and e.amount != 0:
-                            balance += e.amount
-                            yield fmt % ('', '; '.join(filter(bool, ['Brought forward',
-                                                                     'due ' + e.cdate.strftime(r'%-d-%b-%Y') if e.cdate else '',
-                                                                     account.relative_name(common_root_account)])),
-                                    config.format_money(-e.amount) if e.amount < 0 else '',
-                                    config.format_money(e.amount) if e.amount > 0 else '',
-                                    config.format_money(balance))
+        def bflines():
+            for account in accounts:
+                if account.is_substantial() and account.atype is not abo.account.AccountType.ProfitLoss or opts['--bring-forward']:
+                    if opts['--control']:
+                        amount = bf.cbalance(account)
+                        if amount != 0:
+                            tally.balance += amount
+                            yield fmt % ('', '; '.join(filter(bool, ['Brought forward', account.relative_name(common_root_account)])),
+                                    config.format_money(-amount) if amount < 0 else '',
+                                    config.format_money(amount) if amount > 0 else '',
+                                    config.format_money(tally.balance))
+                    else:
+                        for e in bf.entries():
+                            if chart[e.account] is account and e.amount != 0:
+                                tally.balance += e.amount
+                                yield fmt % ('', '; '.join(filter(bool, ['Brought forward',
+                                                                        'due ' + e.cdate.strftime(r'%-d-%b-%Y') if e.cdate else '',
+                                                                        account.relative_name(common_root_account)])),
+                                        config.format_money(-e.amount) if e.amount < 0 else '',
+                                        config.format_money(e.amount) if e.amount > 0 else '',
+                                        config.format_money(tally.balance))
+
+        lines = list(bflines())
+        if not opts['--bare'] or tally.balance != 0:
+            for line in lines:
+                yield line
     if opts['--control']:
         entries = [e for e in chain(*(t.entries for t in all_transactions)) if chart[e.account] in accounts and (e.cdate or e.transaction.date) in range]
         entries.sort(key=lambda e: e.cdate or e.transaction.date)
@@ -133,11 +140,11 @@ def cmd_acc(config, opts):
         entries = [e for e in chain(*(t.entries for t in transactions)) if chart[e.account] in accounts]
     for e in entries:
         date = e.cdate if opts['--control'] and e.cdate else e.transaction.edate if opts['--effective'] else e.transaction.date
-        balance += e.amount
+        tally.balance += e.amount
         if e.amount < 0:
-            totdb += e.amount
+            tally.totdb += e.amount
         elif e.amount > 0:
-            totcr += e.amount
+            tally.totcr += e.amount
         desc = e.description()
         acc = chart[e.account]
         if acc is not common_root_account:
@@ -157,16 +164,16 @@ def cmd_acc(config, opts):
                 desc.pop(0) if desc else '',
                 config.format_money(-e.amount) if e.amount < 0 else '',
                 config.format_money(e.amount) if e.amount > 0 else '',
-                config.format_money(balance))
+                config.format_money(tally.balance))
         if opts['--wrap']:
             while desc:
                 yield fmt % ('', desc.pop(0), '', '', '')
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
     yield fmt % ('', 'Totals for period',
-            config.format_money(-totdb),
-            config.format_money(totcr),
+            config.format_money(-tally.totdb),
+            config.format_money(tally.totcr),
             '')
-    yield fmt % ('', 'Balance', '', '', config.format_money(balance))
+    yield fmt % ('', 'Balance', '', '', config.format_money(tally.balance))
 
 def cmd_profloss(config, opts):
     periods = parse_periods(opts)
