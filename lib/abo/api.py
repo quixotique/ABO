@@ -216,7 +216,7 @@ class API_Account(object):
 
     @property
     def concept(self):
-        if self._account.is_receivable() and self._account.is_substantial():
+        if self._account.is_receivable():# and self._account.is_substantial():
             if self._api._members_account is not None and self._account in self._api._members_account:
                 return 'member'
             return 'customer'
