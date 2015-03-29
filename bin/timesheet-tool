@@ -1,0 +1,475 @@
+#!/usr/bin/env python
+# vim:fileencoding=utf8 nomod
+
+import sys
+import locale
+import codecs
+import re
+import traceback
+from datetime import datetime
+
+def main():
+    locale.setlocale(locale.LC_ALL, '')
+    result = Result()
+    for path in sys.argv[1:]:
+        result += process(path)
+    wds = 's' if result.working_days != 1 else ''
+    dps = 's' if result.days_present != 1 else ''
+    print fmt % ('', '------', '')
+    print fmt % ('TOTAL', Duration.format(result.totals.minutes), '')
+    if result.working_days:
+        print fmt % ('AVERAGE', Duration.format(result.totals.minutes / result.working_days), ' per day over %u working day%s' % (result.working_days, wds))
+    if result.days_present:
+        print fmt % ('AVERAGE', Duration.format(result.totals.minutes / result.days_present), ' per day over %u day%s present' % (result.days_present, dps))
+    print fmt % ('', '------', '')
+    for label, minutes in sorted(result.totals.labels.iteritems()):
+        if minutes:
+            print fmt % ('TASK', Duration.format(minutes), ' = ' + label)
+
+fmt = '%-15s  %6s%s'
+
+def process(path):
+    # First pass to discover all the labels to exclude.
+    cursor = PithyCursor(FileCursor(path))
+    excluded_labels = set()
+    for line in cursor:
+        if line.startswith('EXCLUDE '):
+            excluded_labels.update(line[8:].split())
+    # Second pass to sum all the hours, excluding non-billable hours.
+    cursor = PithyCursor(FileCursor(path))
+    result = Result()
+    try:
+        cursor.advance()
+        while not cursor.eof():
+            if cursor.current().startswith('EXCLUDE '):
+                cursor.advance()
+                continue
+            total = Total.parse(cursor)
+            if total is not None:
+                running = result.totals - result.totals.slice(excluded_labels)
+                if total.minutes != running.minutes:
+                    raise ParseError('TOTAL [%s] does not equal running total [%s]' % (
+                                Duration.format(total.minutes), Duration.format(running.minutes)),
+                            line=total.line)
+                continue
+            day = Day.parse(cursor)
+            if day is not None:
+                notes = []
+                if day.is_pubhol:
+                    notes.append(' - public holiday')
+                elif day.is_weekend:
+                    notes.append(' - weekend')
+                print fmt % (
+                        day.date.strftime('%a %_d %b %Y'),
+                        Duration.format(day.totals.minutes) if day.totals.minutes else 'no hours',
+                        ''.join(notes)
+                    )
+                result.add_day(day)
+                continue
+            raise ParseError('malformed line', line=cursor.current())
+        exclude = result.totals.slice(excluded_labels)
+        for label, minutes in exclude.labels.iteritems():
+            if minutes:
+                print fmt % ('EXCLUDE', '-' + Duration.format(minutes), ' = ' + label)
+        result.totals -= exclude
+        return result
+    except ParseError, e:
+        print >>sys.stderr, unicode(e)
+        sys.exit(1)
+
+class Line(unicode):
+
+    def where(self):
+        return '%s, line %s' % (self.file.name, self.lineno)
+
+    def indent(self):
+        return len(self) - len(self.lstrip())
+
+class ParseError(Exception):
+
+    def __init__(self, msg, line=None):
+        if hasattr(line, 'where') and callable(line.where):
+            msg = line.where() + ': ' + msg
+        Exception.__init__(self, msg)
+        self.line = line
+
+class Cursor(object):
+
+    def eof(self):
+        return self._current is None
+
+    def current(self):
+        assert self._current is not None
+        return self._current
+
+    def advance(self):
+        raise NotImplementedError()
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        self.advance()
+        if self.eof():
+            raise StopIteration()
+        return self._current
+
+class FileCursor(Cursor):
+
+    def __init__(self, path):
+        super(FileCursor, self).__init__()
+        firstline = file(path).readline()
+        enc = locale.getlocale()[1]
+        if firstline:
+            m = re.search(r'coding[=:]\s*([-\w.]+)', firstline)
+            if m is not None:
+                enc = m.group(1)
+        self._file = codecs.open(path, 'r', enc)
+        self._lineno = 0
+
+    def advance(self):
+        try:
+            self._current = Line(self._file.next())
+            self._lineno += 1
+            self._current.file = self._file
+            self._current.lineno = self._lineno
+        except StopIteration:
+            self._current = None
+            self._lineno = None
+        return self._current
+
+class FilteredCursor(Cursor):
+
+    def __init__(self, orig_cursor):
+        super(FilteredCursor, self).__init__()
+        self.orig = orig_cursor
+
+    def filter(self, line):
+        return True
+
+    def advance(self):
+        self._current = self.orig.advance()
+        while not self.eof() and not self.filter(self._current):
+            self._current = self.orig.advance()
+        return self._current
+
+class PithyCursor(FilteredCursor):
+
+    def __init__(self, orig_cursor):
+        super(PithyCursor, self).__init__(orig_cursor)
+
+    def filter(self, line):
+        return not (line == '' or line.isspace() or (line.lineno <= 5 and line.startswith('vim:')))
+
+class TotalMinutes(object):
+
+    def __init__(self, minutes=None, labels=()):
+        self.minutes = minutes
+        self.labels = dict(labels)
+
+    def __repr__(self):
+        return '%s(minutes=%r, labels=%r)' % (type(self).__name__, self.minutes, self.labels)
+
+    def copy(self):
+        new = type(self)()
+        new.minutes = self.minutes
+        new.labels = self.labels.copy()
+        return new
+
+    def __nonzero__(self):
+        return ((self.minutes or 0) + sum(self.labels.values())) != 0
+
+    def __add__(self, other):
+        new = self.copy()
+        new += other
+        return new
+
+    def __sub__(self, other):
+        new = self.copy()
+        new -= other
+        return new
+
+    def __iadd__(self, other):
+        if other.minutes is not None:
+            self.minutes = (self.minutes or 0) + other.minutes
+        for label, minutes in other.labels.iteritems():
+            self.labels[label] = self.labels.get(label, 0) + minutes
+        return self
+
+    def __isub__(self, other):
+        if other.minutes is not None:
+            self.minutes = (self.minutes or 0) - other.minutes
+        for label, minutes in other.labels.iteritems():
+            self.labels[label] = self.labels.get(label, 0) - minutes
+        return self
+
+    def add(self, minutes, label=None):
+        if label:
+            self.labels[label] = self.labels.get(label, 0) + minutes
+        else:
+            self.minutes = (self.minutes or 0) + minutes
+
+    def sum_labels(self):
+        return sum(self.labels.itervalues())
+
+    def slice(self, labels):
+        self.validate_sum()
+        slc = type(self)()
+        for label in labels:
+            if label in self.labels:
+                slc.add(self.labels[label], label)
+        if self.minutes is not None:
+            slc.minutes = slc.sum_labels()
+        return slc
+
+    def validate_sum(self):
+        lsum = self.sum_labels()
+        if self.minutes is None:
+            self.minutes = lsum
+        elif lsum != self.minutes:
+            raise ValueError('labels [%s] do not sum to total [%s]' % (Duration.format(lsum), Duration.format(self.minutes)))
+
+class Total(object):
+
+    def __init__(self, minutes, line):
+        self.minutes = minutes
+        self.line = line
+
+    @classmethod
+    def parse(cls, cursor):
+        if not cursor.eof():
+            line = cursor.current()
+            if line.startswith('TOTAL '):
+                d = Duration.parse(line, 0)
+                if d is not None and d.prefix == 'TOTAL' and line[d.end:].strip() == '':
+                    cursor.advance()
+                    return cls(d.minutes, line)
+        return None
+
+class Day(object):
+
+    def __init__(self, date):
+        self.date = date
+        self.blocks = []
+        self.is_pubhol = False
+        self.is_weekend = False
+        self.totals = TotalMinutes()
+
+    @classmethod
+    def parse(cls, cursor):
+        # Day stanzas must start with a non-indented line like "Day DD Mon YYYY".
+        if cursor.eof() or cursor.current().indent() != 0:
+            return None
+        line = cursor.current()
+        words = line.split(None)
+        try:
+            day = cls(datetime.strptime(' '.join(words[:4]), '%a %d %b %Y'))
+        except ValueError:
+            raise ParseError('malformed date: %s' % (' '.join(words[:4])), line=line)
+        day.is_pubhol = 'public holiday' in ' '.join(words[4:]).lower()
+        day.is_weekend = 'weekend' in ' '.join(words[4:]).lower()
+        cursor.advance()
+        for block in Block.parseiter(cursor):
+            day.blocks.append(block)
+            day.totals += block.totals
+        return day
+
+class Result(object):
+
+    def __init__(self):
+        self.totals = TotalMinutes()
+        self.working_days = 0
+        self.days_present = 0
+
+    def __iadd__(self, other):
+        self.totals += other.totals
+        self.working_days += other.working_days
+        self.days_present += other.days_present
+        return self
+
+    def add_day(self, day):
+        self.totals += day.totals
+        if not day.is_pubhol and not day.is_weekend:
+            self.working_days += 1
+        if day.totals:
+            self.days_present += 1
+
+class Block(object):
+
+    def __init__(self):
+        self.totals = TotalMinutes()
+        self.wildlabel = None
+
+    @classmethod
+    def parseiter(cls, cursor):
+        while True:
+            block = cls.parse(cursor)
+            if block is None:
+                break
+            yield block
+
+    @classmethod
+    def parse(cls, cursor):
+        if cursor.eof() or cursor.current().indent() == 0:
+            return None
+        block = cls()
+        firstline = None
+        while not cursor.eof() and cursor.current().indent():
+            if firstline is None:
+                firstline = cursor.current()
+            bl = BlockLine.parse(cursor.current(), wildlabel=block.wildlabel)
+            if bl.wildlabel:
+                if block.wildlabel and bl.wildlabel != block.wildlabel:
+                    raise ParseError('conflicting labels for [*]', line=firstline)
+                block.wildlabel = bl.wildlabel
+            block.totals += bl.totals
+            cursor.advance()
+        if block.wildlabel:
+            if block.totals.minutes is None:
+                raise ParseError('missing total hours, cannot compute [*]', line=firstline)
+            lsum = block.totals.sum_labels()
+            if lsum < block.totals.minutes:
+                block.totals.add(block.totals.minutes - lsum, label=block.wildlabel)
+        try:
+            block.totals.validate_sum()
+        except ValueError, e:
+            assert not block.wildlabel
+            raise ParseError(str(e), line=firstline)
+        if block.totals.minutes is None:
+            block.totals.minutes = block.totals.sum_labels()
+        return block
+
+class BlockLine(object):
+
+    def __init__(self):
+        self.totals = TotalMinutes()
+        self.wildlabel = None
+
+    @classmethod
+    def parse(cls, line, wildlabel=None):
+        bl = cls()
+        bl.wildlabel = wildlabel
+        label = None
+        lastpos = 0
+        rminutes = None
+        label = None
+        while True:
+            d = Duration.parse(line, lastpos)
+            r = Range.parse(line, lastpos)
+            if r is None and (d is None or d.prefix) and rminutes is not None and label is None:
+                print '%s: time range missing total [%s]' % (line.where(), Duration.format(rminutes))
+            if d is None and r is None:
+                break
+            if r is None or (d is not None and d.start < r.start):
+                label = d.prefix.split()[-1] if d.prefix else None
+                if d.minutes is None: # wild
+                    if rminutes is not None:
+                        raise ParseError('%s following time range' % (d.text,), line=line)
+                    if not d.prefix:
+                        raise ParseError('missing label before %s' % (d.text,), line=line)
+                    if bl.wildlabel and bl.wildlabel != label:
+                        raise ParseError('conflifting label "%s" before %s (is already "%s")' % (label, d.text, bl.wildlabel), line=line)
+                    bl.wildlabel = label
+                elif rminutes is not None:
+                    if rminutes != d.minutes:
+                        raise ParseError('%s != total %s' % (d.text, Duration.format(rminutes)), line=line)
+                    rminutes = None
+                else:
+                    bl.totals.add(d.minutes, label=label)
+                lastpos = d.end
+                d = Duration.parse(line, lastpos)
+            else:
+                if r.prefix:
+                    label = r.prefix.split()[-1]
+                    rminutes = None
+                rminutes = (rminutes or 0) + r.minutes
+                bl.totals.add(r.minutes, label=label)
+                lastpos = r.end
+                r = Range.parse(line, lastpos)
+        return bl
+
+class Duration(object):
+
+    re_duration = re.compile(ur'\[\s*(?:(?:(?P<h1>\d*)(?P<m1>¼|½|¾|⅓|⅔|⅕|⅖|⅗|⅘|:\d\d|\.\d+)h?)|(?:(?:(?P<h2>\d+)\s*[hH])?\s*(?:(?P<m2>\d+)\s*[mM])?)|(?P<wild>\*))\s*\]')
+
+    @classmethod
+    def parse(cls, line, start=0):
+        mt = cls.re_duration.search(line, start)
+        if mt is None:
+            return None
+        if mt.group('wild'):
+            tminutes = None
+        else:
+            hours = mt.group('h1') or mt.group('h2') or '0'
+            minutes = mt.group('m1') or mt.group('m2') or ''
+            tminutes = int(hours) * 60
+            if minutes.isdigit():
+                tminutes += int(minutes)
+            elif minutes.startswith(':'):
+                tminutes += int(minutes[1:])
+            elif minutes.startswith('.'):
+                tminutes += int(float(minutes) * 60)
+            elif minutes == u'¼':
+                tminutes += 15
+            elif minutes == u'½':
+                tminutes += 30
+            elif minutes == u'¾':
+                tminutes += 45
+            elif minutes == u'⅓':
+                tminutes += 20
+            elif minutes == u'⅔':
+                tminutes += 40
+            elif minutes == u'⅕':
+                tminutes += 12
+            elif minutes == u'⅖':
+                tminutes += 24
+            elif minutes == u'⅗':
+                tminutes += 36
+            elif minutes == u'⅘':
+                tminutes += 48
+            elif minutes != '':
+                raise ParseError('invalid duration: %s' % mt.group(0), line=line)
+        dur = cls()
+        dur.text = mt.group(0)
+        dur.start = mt.start(0)
+        dur.end = mt.end(0)
+        dur.prefix = line[start:mt.start(0)].strip(' ,:')
+        dur.minutes = tminutes
+        return dur
+
+    @staticmethod
+    def format(minutes):
+        h = minutes // 60
+        m = minutes % 60
+        return '%u:%02u' % (h, m)
+        #hs = 's' if h != 1 else ''
+        #ms = 's' if m != 1 else ''
+        #mstr = ' %u minute%s' % (m, ms) if m else ''
+        #return '%u hour%s%s' % (h, hs, mstr)
+
+class Range(object):
+
+    re_timerange = re.compile(r'(\d?\d):(\d\d)\s*-\s*(\d?\d):(\d\d)')
+
+    @classmethod
+    def parse(cls, line, start=0):
+        mr = cls.re_timerange.search(line, start)
+        if mr is None:
+            return None
+        starttime = int(mr.group(1)) * 60 + int(mr.group(2))
+        endtime = int(mr.group(3)) * 60 + int(mr.group(4))
+        if endtime < starttime:
+            raise ParseError("invalid range: %s" % mr.group(0), line=line)
+        prefix = line[start:mr.start(0)].strip(' ,:')
+        tr = cls()
+        tr.text = mr.group(0)
+        tr.start = mr.start(0)
+        tr.end = mr.end(0)
+        tr.prefix = line[start:mr.start(0)].strip(' ,:')
+        tr.start_minutes = starttime
+        tr.end_minutes = endtime
+        tr.minutes = endtime - starttime
+        return tr
+
+if __name__ == '__main__':
+    main()
