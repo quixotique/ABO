@@ -5,11 +5,11 @@
 r'''Usage:
     pyabo chart [-fvqD] [--select=PRED]
     pyabo index [-fqD]
-    pyabo acc [-bcefwWqD] [--bare] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
-    pyabo journal [-fwWqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
-    pyabo balance [-faWqDs] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
-    pyabo due [-fWqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
-    pyabo profloss [-efWqDs] [--compact] [--bare] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    pyabo acc [-bcefwWpqD] [--bare] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
+    pyabo journal [-fwWpqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
+    pyabo balance [-faWpqDs] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
+    pyabo due [-fWpqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
+    pyabo profloss [-efWpqDs] [--compact] [--bare] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo mako [-fqD] [--remove=PRED...] <template> [<args>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
@@ -32,6 +32,7 @@ Options:
     --bare                  Omit headers, subtotals, totals, separators
     -d --detail             Show transaction details
     -e,--effective          Sort by effective date
+    -p,--projection         Include projected transactions
     -v --verbose            Show more information
     -r --remove=ACC         Remove account ACC
     -s --subtotals          Show subtotal lines

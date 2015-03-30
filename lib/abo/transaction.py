@@ -248,7 +248,7 @@ class Transaction(abo.base.Base):
     transaction for humans, and a list of two or more Entries.
     """
 
-    def __init__(self, date=None, edate=None, who=None, what=None, entries=()):
+    def __init__(self, date=None, edate=None, who=None, what=None, is_projection=False, entries=()):
         """Construct a new Transaction object, given its date, optional control
         date, description, and list of Entry objects.
         """
@@ -259,6 +259,7 @@ class Transaction(abo.base.Base):
         self.edate = edate if edate is not None else date
         self.who = who
         self.what = self._expand(what, date=date) if what else what
+        self.is_projection = is_projection
         # Construct member Entry objects and ensure that they sum to zero.
         ents = []
         bal = 0
@@ -398,7 +399,7 @@ def _divide_entries(entries, amount):
 
 __test__ = {
 'accessors':"""
-    >>> t = Transaction(date=1, who="Someone", what="something", \\
+    >>> t = Transaction(date=1, who="Someone", what="something", is_projection=True, \\
     ...         entries=({'account':'a1', 'amount':-14.56, 'detail':'else'}, \\
     ...                  {'account':'a2', 'amount':14.56, 'cdate': 7}))
     >>> t.date
@@ -407,6 +408,8 @@ __test__ = {
     'Someone'
     >>> t.what
     'something'
+    >>> t.is_projection
+    True
     >>> len(t.entries)
     2
     >>> t.amount()

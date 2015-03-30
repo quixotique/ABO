@@ -4,7 +4,7 @@
 
 """A Journal is a source of Transactions parsed from a text file.
 
->>> Journal(_testconfig, r'''
+>>> j = Journal(_testconfig, r'''
 ... type transaction
 ... date 16/3/2013
 ... who Somebody
@@ -32,6 +32,18 @@
 ... gst 8.12
 ... amt 81.18
 ...
+... %projection
+...
+... type bill
+... date 18/4/2013
+... who Another body
+... acc account2
+... item expense
+... gst 9.17
+... amt 98.97
+...
+... %end projection
+...
 ... type receipt
 ... date 17/4/2013
 ... what Receipt text
@@ -49,7 +61,8 @@
 ...  account2  -60.00 ; another comment {31/5/2013}
 ...  account3 ; {+15}
 ...
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''')
+>>> [t for t in j.transactions() if not t.is_projection] #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 3, 16),
     who='Somebody', what='something',
     entries=(Entry(account=':account1', amount=Money.AUD(-21.90), detail='a debit'),
@@ -79,6 +92,12 @@
     entries=(Entry(account=':account2', amount=Money.AUD(-60.00), cdate=datetime.date(2013, 5, 31), detail='another comment'),
              Entry(account=':account3', amount=Money.AUD(14.94), cdate=datetime.date(2013, 5, 22)),
              Entry(account=':account1', amount=Money.AUD(45.06), detail='comment')))]
+>>> [t for t in j.transactions() if t.is_projection] #doctest: +NORMALIZE_WHITESPACE
+[Transaction(date=datetime.date(2013, 4, 18),
+    who='Another body',
+    entries=(Entry(account=':expense', amount=Money.AUD(-89.80)),
+             Entry(account=':gst', amount=Money.AUD(-9.17)),
+             Entry(account=':account2', amount=Money.AUD(98.97))))]
 
 """
 
@@ -171,6 +190,7 @@ class Journal(object):
             'amt': None,
         }
         defaults = copy.deepcopy(template)
+        in_projection = False
         self._period = None
         for block in blocks:
             firstline = None
@@ -178,8 +198,13 @@ class Journal(object):
             ledger_what = None
             ledger_lines = []
             tags = copy.deepcopy(template)
+            percent_block = None
             for line in block:
                 words = line.split(None, 1)
+                if words[0].startswith('%'):
+                    if percent_block is False:
+                        raise ParseException(line, 'at ' + words[0] + ': not permitted within transaction')
+                    percent_block = True
                 if words[0] == '%default':
                     try:
                         self._parse_line_tagtext(line, words[1])
@@ -193,8 +218,7 @@ class Journal(object):
                         defaults[line.tag] = [line]
                     else:
                         defaults[line.tag] = line
-                    continue
-                if words[0] == '%period':
+                elif words[0] == '%period':
                     self._period = None
                     try:
                         start, end = list(map(self._parse_date, words[1].split(None, 1)))
@@ -203,8 +227,24 @@ class Journal(object):
                     if end <= start or end >= start + datetime.timedelta(366) or end.replace(year=start.year) >= start:
                         raise ParseException(line, 'invalid %%period date range')
                     self._period = (start, end)
+                elif words[0] == '%projection':
+                    if len(words) > 1:
+                        raise ParseException(line, 'spurious %%projection arguments')
+                    if in_projection:
+                        raise ParseException(line, 'unexpected %%projection (missing %%end projection)')
+                    in_projection = True
+                elif words[0] == '%end':
+                    if len(words) < 2:
+                        raise ParseException(line, 'missing %%end argument')
+                    if words[1] == 'projection':
+                        if not in_projection:
+                            raise ParseException(line, 'unexpected %%end projection (missing %%projection?)')
+                        in_projection = False
+                    else:
+                        raise ParseException(line, 'unsupported %%end argument')
                 if words[0].startswith('%'):
                     continue
+                percent_block = False
                 if ledger_date:
                     if line[0].isspace():
                         ledger_lines.append(line.lstrip())
@@ -238,6 +278,7 @@ class Journal(object):
             if kwargs:
                 for entry in kwargs['entries']:
                     del entry['line']
+                kwargs['is_projection'] = in_projection
                 self._transactions.append(Transaction(**kwargs))
 
     _regex_ledger_due = re.compile(r'\s*{([^}]*)}\s*')

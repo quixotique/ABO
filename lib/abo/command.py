@@ -401,6 +401,8 @@ def get_transactions(chart, config, opts):
     transactions = []
     for cache in abo.cache.transaction_caches(chart, config, opts):
         transactions += cache.transactions()
+    if not opts['--projection']:
+        transactions = [t for t in transactions if not t.is_projection]
     if opts['--effective']:
         datekey = lambda t: (t.edate, t.date)
     else:
