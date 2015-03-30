@@ -353,14 +353,21 @@ class BlockLine(object):
         lastpos = 0
         rminutes = None
         label = None
+        # Consume the line as either:
+        #   Range [ "," Range ]* Duration
+        #   label Duration
         while True:
             d = Duration.parse(line, lastpos)
             r = Range.parse(line, lastpos)
             if r is None and (d is None or d.prefix) and rminutes is not None and label is None:
+                # after at least one Range, either a missing Duration or a Duration with some preceding text
+                # tell the user what we calculate the total duration ought to be
                 print '%s: time range missing total [%s]' % (line.where(), Duration.format(rminutes))
             if d is None and r is None:
+                # found Neither Range nor Duration
                 break
             if r is None or (d is not None and d.start < r.start):
+                # found Duration
                 label = d.prefix.split()[-1] if d.prefix else None
                 if d.minutes is None: # wild
                     if rminutes is not None:
@@ -379,6 +386,7 @@ class BlockLine(object):
                 lastpos = d.end
                 d = Duration.parse(line, lastpos)
             else:
+                # found Range
                 if r.prefix:
                     label = r.prefix.split()[-1]
                     rminutes = None
@@ -459,7 +467,10 @@ class Range(object):
         starttime = int(mr.group(1)) * 60 + int(mr.group(2))
         endtime = int(mr.group(3)) * 60 + int(mr.group(4))
         if endtime < starttime:
-            raise ParseError("invalid range: %s" % mr.group(0), line=line)
+            # allow end times past midnight if the resulting range is less than 8 hours
+            endtime += 24 * 60
+            if endtime < starttime or endtime - starttime > 8 * 60:
+                raise ParseError("invalid range: %s" % mr.group(0), line=line)
         prefix = line[start:mr.start(0)].strip(' ,:')
         tr = cls()
         tr.text = mr.group(0)
