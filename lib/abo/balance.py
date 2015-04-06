@@ -82,7 +82,7 @@ import abo.transaction
 
 class Balance(object):
 
-    def __init__(self, transactions, date_range=None, chart=None, acc_pred=None, use_edate=False):
+    def __init__(self, transactions, date_range=None, chart=None, acc_pred=None, acc_map=None, use_edate=False):
         self.date_range = date_range
         self.first_date = None
         self.last_date = None
@@ -104,6 +104,10 @@ class Balance(object):
                         assert acc.is_substantial(), 'acc=%r' % (acc,)
                     else:
                         acc = e.account
+                    if acc_map is not None:
+                        mapped = acc_map(acc)
+                        if mapped is not None:
+                            acc = mapped
                     if acc_pred is None or acc_pred(acc):
                         cdate = None if e.cdate is None or self.date_range is None or e.cdate in self.date_range else e.cdate
                         rb = self._raw_balances[acc]

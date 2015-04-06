@@ -338,6 +338,20 @@ class Chart(object):
     >>> c1['food'] in c1['inc']
     False
 
+    >>> a1 = c1[':Expenses:Household:Consumibles']
+    >>> a1 #doctest: +NORMALIZE_WHITESPACE
+    Account(name='Consumibles',
+            parent=Account(name='Household',
+                           parent=Account(label='exp', name='Expenses', atype=AccountType.ProfitLoss, tags=('PL',)),
+                           atype=AccountType.ProfitLoss,
+                           tags=('PL',)),
+            atype=AccountType.ProfitLoss,
+            tags=('PL', 'cons', 'nd'))
+
+    >>> a3 = c1.get_or_create(name='Food', label='food', parent=a1, atype=AccountType.ProfitLoss)
+    >>> a3.tags == {'PL', 'cons', 'nd'}
+    True
+
     >>> c2 = Chart.from_file(r'''
     ... Expenses =PL [exp]
     ...   Household
@@ -464,7 +478,7 @@ class Chart(object):
     @classmethod
     def from_accounts(cls, accounts):
         self = cls()
-        self._accounts = set()
+        self._accounts = {}
         self._tags = set()
         self._wild = {}
         self._index = {}
@@ -475,23 +489,27 @@ class Chart(object):
     def _add_account(self, account):
         if account.wild:
             if account.parent in self._wild:
-                if self._wild[account.parent] != account:
+                existing = self._wild[account.parent]
+                if existing != account:
                     raise ValueError('duplicate wild account %r' % (str(account),))
-                return False # already added
-            self._wild[account.parent] = account
+                account = existing
+            else:
+                self._wild[account.parent] = account
         else:
             if account in self._accounts:
+                existing = self._accounts[account]
                 for name in account.all_full_names():
-                    assert self._index.get(name) is account
-                return False # already added
-            for name in account.all_full_names():
-                if name in self._index:
-                    raise ValueError('duplicate account %r' % (name,))
-            self._accounts.add(account)
-            for name in account.all_full_names():
-                self._index[name] = account
+                    assert self._index.get(name) is existing
+                account = existing
+            else:
+                for name in account.all_full_names():
+                    if name in self._index:
+                        raise ValueError('duplicate account %r' % (name,))
+                self._accounts[account] = account
+                for name in account.all_full_names():
+                    self._index[name] = account
         self._tags.update(account.tags)
-        return True
+        return account
 
     def __len__(self):
         return len(self._index)
@@ -527,6 +545,10 @@ class Chart(object):
             return self.__getitem__(key)
         except AccountKeyError:
             return default
+
+    def get_or_create(self, name=None, label=None, parent=None, atype=None, tags=()):
+        account = Account(name=name, label=label, parent=parent, atype=atype, tags=tags)
+        return self._add_account(account)
 
     def accounts(self):
         return sorted(self._accounts)
@@ -606,7 +628,7 @@ class Chart(object):
     _regex_tag = re.compile(r'\s*=(' + Account.rxpat_tag + ')\s*')
 
     def _parse(self, source_file):
-        self._accounts = set()
+        self._accounts = {}
         self._tags = set()
         self._index = {}
         self._wild = {}

@@ -243,7 +243,7 @@ class Formatter(object):
     def centre(self, text):
         return text.center(self.width)
 
-    def tree(self, title, accounts, balances, depth=None):
+    def tree(self, title, accounts, amount_columns, depth=None):
         if depth is not None:
             accounts = set(a for a in accounts if a.depth() <= depth)
         accounts = filter_display_accounts(accounts, self.opts) # TODO refactor filter_display_accounts() as method of Formatter
@@ -252,7 +252,7 @@ class Formatter(object):
         while all_accounts:
             account = all_accounts.pop(0)
             is_subaccount = account in subaccounts
-            if not self.opt_subtotals and is_subaccount:
+            if not self.opt_subtotals and self.opt_fullnames and is_subaccount:
                 continue
             if account is None:
                 if self.opt_bare:
@@ -275,15 +275,26 @@ class Formatter(object):
                     graph.pop()
                 label = ''.join(reversed(graph)) + account.bare_name()
             columns = []
-            for b in balances:
-                if account is None or self.opt_subtotals or not is_subaccount:
-                    columns.append(self.config.format_money(b.balance(account)))
+            for acol in amount_columns:
+                if (account is None or self.opt_subtotals or not is_subaccount) and account in acol:
+                    columns.append(self.config.format_money(acol[account]))
                 else:
                     columns.append('')
-            yield self.fmt(label + ' ', (' ' + c for c in columns),
+            yield self.fmt(label + ' ', ((' ' + c if c else '') for c in columns),
                             label_fill= '' if is_subaccount else '.',
                             column_fill= '' if is_subaccount else '.',
                             strong= self.opt_subtotals and not is_subaccount)
+
+def make_sections(section_preds, balances):
+    for depth, title, pred in section_preds:
+        accounts = set()
+        bbalances = []
+        for b in balances:
+            bb = b.clone()
+            bb.set_predicate(pred)
+            accounts.update(bb.accounts)
+            bbalances.append(bb)
+        yield struct(depth=depth, title=title, balances=bbalances, accounts=accounts)
 
 def cmd_profloss(config, opts):
     if opts['--tax']:
@@ -305,24 +316,14 @@ def cmd_profloss(config, opts):
             (None, 'Income', (lambda a, m: m > 0)),
             (None, 'Expenses', (lambda a, m: m < 0)),
         )
-    periods = parse_periods(opts)
+    ranges = parse_ranges(opts)
     chart = get_chart(config, opts)
     selected_accounts = select_accounts(chart, opts)
     transactions = get_transactions(chart, config, opts)
     plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and a in selected_accounts
-    balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for p in periods]
-    all_accounts = set()
-    sections = []
-    for depth, title, pred in section_preds:
-        accounts = set()
-        bbalances = []
-        for b in balances:
-            bb = b.clone()
-            bb.set_predicate(pred)
-            accounts.update(bb.accounts)
-            bbalances.append(bb)
-        sections.append(struct(depth=depth, title=title, balances=bbalances, accounts=accounts))
-        all_accounts.update(accounts)
+    balances = [abo.balance.Balance(transactions, r, chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for r in ranges]
+    sections = list(make_sections(section_preds, balances))
+    all_accounts = set(chain(*(s.accounts for s in sections)))
     f = Formatter(config, opts, all_accounts, len(balances))
     if not f.opt_bare:
         yield f.centre('PROFIT LOSS STATEMENT')
@@ -330,17 +331,50 @@ def cmd_profloss(config, opts):
         yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
         yield f.rule()
     for section in sections:
-        yield from f.tree(section.title, section.accounts, section.balances, depth=section.depth)
+        columns = [dict((a, b.balance(a)) for a in chain(section.accounts, [None])) for b in section.balances]
+        yield from f.tree(section.title, section.accounts, columns, depth=section.depth)
         if not f.opt_bare:
             yield f.rule()
     if not f.opt_bare:
         yield f.fmt('NET PROFIT (LOSS)', (config.format_money(b.balance(None)) for b in balances))
 
+def cmd_bsheet(config, opts):
+    plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss
+    alpred = lambda a: a.atype == abo.account.AccountType.AssetLiability
+    eqpred = lambda a: a.atype == abo.account.AccountType.Equity
+    section_preds = (
+        (None, 'Assets', lambda a, m: alpred(a) and m < 0),
+        (None, 'Liabilities', lambda a, m: alpred(a) and m > 0),
+        (None, 'Equity', lambda a, m: eqpred(a)),
+    )
+    chart = get_chart(config, opts)
+    retained = chart.get_or_create(name='Retained profits', atype=abo.account.AccountType.Equity)
+    selected_accounts = select_accounts(chart, opts)
+    all_transactions = get_transactions(chart, config, opts)
+    ranges = parse_whens(opts)
+    balances = [abo.balance.Balance(all_transactions, r, chart=chart,
+                                    acc_pred=lambda a: a in selected_accounts,
+                                    acc_map=lambda a: retained if plpred(a) else a)
+                for r in ranges]
+    sections = list(make_sections(section_preds, balances))
+    all_accounts = set(chain(*(s.accounts for s in sections)))
+    f = Formatter(config, opts, all_accounts, len(balances))
+    if not f.opt_bare:
+        yield f.centre('BALANCE SHEET')
+        yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
+        yield f.rule()
+    for section in sections:
+        columns = [dict((a, -b.balance(a)) for a in chain(section.accounts, [None])) for b in section.balances]
+        yield from f.tree(section.title, section.accounts, columns, depth=section.depth)
+        if not f.opt_bare:
+            yield f.rule()
+
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
     selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
-    whens, balances = filter_at(chart, all_transactions, opts, acc_pred=lambda a: a in selected_accounts)
+    ranges = parse_whens(opts)
+    balances = [abo.balance.Balance(all_transactions, r, chart=chart, acc_pred=lambda a: a in selected_accounts) for r in ranges]
     display_accounts = sorted(filter_display_accounts(chain(*(b.accounts for b in balances)), opts))
     logging.debug('display_accounts = %r' % display_accounts)
     aw = max(chain([10], (len(str(a)) for a in display_accounts)))
@@ -352,8 +386,8 @@ def cmd_balance(config, opts):
     yield 'ACCOUNT BALANCES'.center(width)
     yield ''
     line = []
-    for when in whens:
-        line.append(when.strftime(r'%_d-%b-%Y'))
+    for b in balances:
+        line.append(b.date_range.last.strftime(r'%_d-%b-%Y'))
     line.append('Account')
     yield fmt % tuple(line)
     yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
@@ -495,13 +529,16 @@ def leafset(accounts):
     leaves = set(accounts)
     return leaves.difference(parentset(leaves))
 
-def parse_periods(opts):
-    brought_forward = None
+def parse_whens(opts):
+    whens = abo.period.parse_whens(opts['<when>']) if opts['<when>'] else [datetime.date.today()]
+    return [abo.balance.Range(None, when) for when in whens]
+
+def parse_ranges(opts):
     if opts['<period>']:
         periods = abo.period.parse_periods(opts['<period>'])
     else:
         periods = [(None, None)]
-    return [(p[0], p[1] if p[1] is not None else datetime.date.today()) for p in periods]
+    return [abo.balance.Range(p[0], p[1] if p[1] is not None else datetime.date.today()) for p in periods]
 
 def parse_range(words):
     periods = abo.period.parse_periods(words)
@@ -520,12 +557,6 @@ def filter_period(chart, transactions, opts):
     else:
         range = abo.balance.Range(None, None)
     return range, brought_forward, transactions
-
-def filter_at(chart, transactions, opts, acc_pred=None):
-    whens = abo.period.parse_whens(opts['<when>']) if opts['<when>'] else [datetime.date.today()]
-    ranges = [abo.balance.Range(None, when) for when in whens]
-    balances = [abo.balance.Balance(transactions, range, chart=chart, acc_pred=acc_pred) for range in ranges]
-    return whens, balances
 
 def range_line(range):
     p = []
