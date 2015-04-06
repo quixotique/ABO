@@ -9,7 +9,7 @@ r'''Usage:
     pyabo journal [-fwWpqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWpqDs] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWpqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
-    pyabo profloss [-efWpqDs] [--compact] [--bare] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    pyabo profloss [-efWpqDs] [--fullnames] [--bare] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo mako [-fqD] [--remove=PRED...] <template> [<args>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
@@ -17,27 +17,27 @@ r'''Usage:
 
 Options:
     -h --help               Show this message
-    --version               Show version and exit
+       --version            Show version and exit
     -D --debug              Log debug on stderr
     -q --quiet              Suppress information logging on stderr
     -f --force              Force re-population of transaction cache
-    --select=PRED           Only show accounts satisfying PRED
+       --select=PRED        Only show accounts satisfying PRED
     -w --wrap               Wrap long lines
-    --width=COLUMNS         Maximum line length (default from 'COLUMNS' env var)
+       --width=COLUMNS      Maximum line length (default from 'COLUMNS' env var)
     -W --wide               Wide output, no maximum width
     -a --all                Show all accounts
     -b --bring-forward      Bring balance of previous transactions forward
     -c --control            Show control account
-    --compact               One account per output line
-    --bare                  Omit headers, subtotals, totals, separators
+       --fullnames          Show full account names instead of tree
+       --bare               Omit headers, subtotals, totals, separators
     -d --detail             Show transaction details
-    -e,--effective          Sort by effective date
-    -p,--projection         Include projected transactions
+    -e --effective          Sort by effective date
+    -p --projection         Include projected transactions
     -v --verbose            Show more information
     -r --remove=ACC         Remove account ACC
     -s --subtotals          Show subtotal lines
     -n --depth=N            Show accounts to this depth only
-    --tax                   Separate tax-free and tax-deductible sections
+       --tax                Separate tax-free and tax-deductible sections
 
 PRED = condition | disjunction
 disjunction = conjunction "|" disjunction

@@ -190,11 +190,11 @@ class Formatter(object):
         self.config = config
         self.opts = opts # TODO get rid of this, only needed to pass to filter_display_accounts()
         self.opt_bare = bool(opts['--bare'])
-        self.opt_compact = bool(opts['--compact'])
+        self.opt_fullnames = bool(opts['--fullnames'])
         self.opt_subtotals = bool(opts['--subtotals'])
         self.num_columns = ncolumns
         self.balwid = self.config.balance_column_width()
-        if self.opt_compact:
+        if self.opt_fullnames:
             self.accwid = max(chain([10], (len(str(a)) for a in accounts)))
         else:
             self.accwid = max(chain([10], (3 * a.depth() + len(a.bare_name()) for a in accounts)))
@@ -258,7 +258,7 @@ class Formatter(object):
                 if self.opt_bare:
                     continue
                 label = 'TOTAL ' + title
-            elif self.opt_compact:
+            elif self.opt_fullnames:
                 label = str(account)
             else:
                 def has_sibling(account):
