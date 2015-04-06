@@ -175,14 +175,117 @@ def cmd_acc(config, opts):
             '')
     yield fmt % ('', 'Balance', '', '', config.format_money(tally.balance))
 
+# TODO refactor filter_display_accounts() as method of Formatter
+def filter_display_accounts(accounts, opts):
+    accounts = set(accounts) # unroll iterator once only
+    if opts['--depth'] is not None:
+        accounts = set(a for a in accounts if a.depth() <= int(opts['--depth']))
+    if not opts['--subtotals']:
+        accounts = leafset(accounts)
+    return accounts
+
+class Formatter(object):
+
+    def __init__(self, config, opts, accounts, ncolumns):
+        self.config = config
+        self.opts = opts # TODO get rid of this, only needed to pass to filter_display_accounts()
+        self.opt_bare = bool(opts['--bare'])
+        self.opt_compact = bool(opts['--compact'])
+        self.opt_subtotals = bool(opts['--subtotals'])
+        self.num_columns = ncolumns
+        self.balwid = self.config.balance_column_width()
+        if self.opt_compact:
+            self.accwid = max(chain([10], (len(str(a)) for a in accounts)))
+        else:
+            self.accwid = max(chain([10], (3 * a.depth() + len(a.bare_name()) for a in accounts)))
+            if self.opt_bare:
+                self.accwid -= 3
+        self.width = (self.balwid + 1) * self.num_columns + self.accwid
+        if self.config.output_width() and self.width > self.config.output_width():
+            self.accwid = max(10, self.config.output_width() - ((self.balwid + 1) * self.num_columns))
+            self.width = self.config.output_width()
+
+    @staticmethod
+    def plain(text):
+        return text
+
+    @staticmethod
+    def strong(text):
+        pre = []
+        picture = []
+        pos = 0
+        for c in text:
+            if c == '\x08':
+                pos -= 1
+            else:
+                if pos < 0:
+                    pre[-pos] = c
+                elif pos < len(picture):
+                    picture[pos].append(c)
+                else:
+                    assert pos == len(picture)
+                    picture.append([c])
+                pos += 1
+        for p in picture:
+            if p[-1] not in p[:-1]:
+                p.append(p[-1])
+        return ''.join(chain(reversed(pre), ('\x08'.join(p) for p in picture)))
+
+    def fmt(self, label, columns, fill=None, label_fill=None, column_fill=None, strong=False):
+        decor = self.strong if strong else self.plain
+        columns = list(columns)
+        columns += [''] * (self.num_columns - len(columns))
+        return label.ljust(self.accwid, label_fill or fill or ' ')[:self.accwid] + ''.join(' ' + ((column_fill or fill or ' ') * (self.balwid - len(c)) + decor(c[-self.balwid:])) for c in columns)
+
+    def rule(self, fill='═'):
+        return self.fmt('', [], fill=fill)
+
+    def centre(self, text):
+        return text.center(self.width)
+
+    def tree(self, title, accounts, balances, depth=None):
+        if depth is not None:
+            accounts = set(a for a in accounts if a.depth() <= depth)
+        accounts = filter_display_accounts(accounts, self.opts) # TODO refactor filter_display_accounts() as method of Formatter
+        subaccounts = parentset(accounts)
+        all_accounts = [None] + list(sorted(accounts | subaccounts))
+        while all_accounts:
+            account = all_accounts.pop(0)
+            is_subaccount = account in subaccounts
+            if not self.opt_subtotals and is_subaccount:
+                continue
+            if account is None:
+                if self.opt_bare:
+                    continue
+                label = 'TOTAL ' + title
+            elif self.opt_compact:
+                label = str(account)
+            else:
+                def has_sibling(account):
+                    if not all_accounts:
+                        return False
+                    for a in all_accounts:
+                        if a.depth() <= account.depth():
+                            break
+                    return a.depth() == account.depth()
+                graph = ['├─╴' if has_sibling(account) else '└─╴']
+                for a in account.all_parents():
+                    graph.append('│  ' if has_sibling(a) else '   ')
+                if self.opt_bare:
+                    graph.pop()
+                label = ''.join(reversed(graph)) + account.bare_name()
+            columns = []
+            for b in balances:
+                if account is None or self.opt_subtotals or not is_subaccount:
+                    columns.append(self.config.format_money(b.balance(account)))
+                else:
+                    columns.append('')
+            yield self.fmt(label + ' ', (' ' + c for c in columns),
+                            label_fill= '' if is_subaccount else '.',
+                            column_fill= '' if is_subaccount else '.',
+                            strong= self.opt_subtotals and not is_subaccount)
+
 def cmd_profloss(config, opts):
-    periods = parse_periods(opts)
-    chart = get_chart(config, opts)
-    selected_accounts = select_accounts(chart, opts)
-    transactions = get_transactions(chart, config, opts)
-    plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and a in selected_accounts
-    balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for p in periods]
-    all_accounts = set()
     if opts['--tax']:
         section_preds = (
             (None, 'Taxable Income', (lambda a, m: m > 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
@@ -202,6 +305,13 @@ def cmd_profloss(config, opts):
             (None, 'Income', (lambda a, m: m > 0)),
             (None, 'Expenses', (lambda a, m: m < 0)),
         )
+    periods = parse_periods(opts)
+    chart = get_chart(config, opts)
+    selected_accounts = select_accounts(chart, opts)
+    transactions = get_transactions(chart, config, opts)
+    plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and a in selected_accounts
+    balances = [abo.balance.Balance(transactions, abo.balance.Range(p[0], p[1]), chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for p in periods]
+    all_accounts = set()
     sections = []
     for depth, title, pred in section_preds:
         accounts = set()
@@ -213,70 +323,18 @@ def cmd_profloss(config, opts):
             bbalances.append(bb)
         sections.append(struct(depth=depth, title=title, balances=bbalances, accounts=accounts))
         all_accounts.update(accounts)
-    bw = config.balance_column_width()
-    if opts['--compact']:
-        aw = max(chain([10], (len(str(a)) for a in all_accounts)))
-    else:
-        aw = max(chain([10], (3 * a.depth() + len(a.bare_name()) for a in all_accounts)))
-        if opts['--bare']:
-            aw -= 3
-    width = (bw + 1) * len(balances) + 1 + aw
-    if config.output_width() and width > config.output_width():
-        aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
-        width = config.output_width()
-    def fmt(label, columns, fill=None, label_fill=None, column_fill=None, decor=plain):
-        columns = list(columns)
-        columns += [''] * (len(balances) - len(columns))
-        return label.ljust(aw, label_fill or fill or ' ')[:aw] + ' ' + ''.join(' ' + decor(c.rjust(bw, column_fill or fill or ' ')[:bw]) for c in columns)
-    rule = fmt('', [], fill='═')
-    if not opts['--bare']:
-        yield 'PROFIT LOSS STATEMENT'.center(width)
-        yield fmt('', (b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '' for b in balances))
-        yield fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
-        yield rule
+    f = Formatter(config, opts, all_accounts, len(balances))
+    if not f.opt_bare:
+        yield f.centre('PROFIT LOSS STATEMENT')
+        yield f.fmt('', (b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '' for b in balances))
+        yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
+        yield f.rule()
     for section in sections:
-        section_accounts = section.accounts
-        if section.depth is not None:
-            section_accounts = set(a for a in section_accounts if a.depth() <= section.depth)
-        section_accounts = filter_display_accounts(section_accounts, opts)
-        subaccounts = parentset(section_accounts)
-        all_accounts = [None] + list(sorted(section_accounts | subaccounts))
-        while all_accounts:
-            account = all_accounts.pop(0)
-            is_subaccount = account in subaccounts
-            if opts['--compact'] and is_subaccount:
-                continue
-            if account is None:
-                if opts['--bare']:
-                    continue
-                label = 'TOTAL ' + section.title
-            elif opts['--compact']:
-                label = str(account)
-            else:
-                def has_sibling(account):
-                    if not all_accounts:
-                        return False
-                    for a in all_accounts:
-                        if a.depth() <= account.depth():
-                            break
-                    return a.depth() == account.depth()
-                graph = ['├─╴' if has_sibling(account) else '└─╴']
-                for a in account.all_parents():
-                    graph.append('│  ' if has_sibling(a) else '   ')
-                if opts['--bare']:
-                    graph.pop()
-                label = ''.join(reversed(graph)) + account.bare_name() + ('' if is_subaccount else ' ' + '.' * aw)
-            columns = []
-            for b in section.balances:
-                if account is None or opts['--subtotals'] or not is_subaccount:
-                    columns.append(config.format_money(b.balance(account)))
-                else:
-                    columns.append('')
-            yield fmt(label, columns, decor= strong if opts['--subtotals'] and not is_subaccount else plain)
-        if not opts['--bare']:
-            yield rule
-    if not opts['--bare']:
-        yield fmt('NET PROFIT (LOSS)', (config.format_money(b.balance(None)) for b in balances))
+        yield from f.tree(section.title, section.accounts, section.balances, depth=section.depth)
+        if not f.opt_bare:
+            yield f.rule()
+    if not f.opt_bare:
+        yield f.fmt('NET PROFIT (LOSS)', (config.format_money(b.balance(None)) for b in balances))
 
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
@@ -427,14 +485,6 @@ def filter_accounts(chart, text):
         accounts = set(filter(pred, accounts))
     return accounts
 
-def filter_display_accounts(accounts, opts):
-    accounts = set(accounts) # unroll iterator once only
-    if opts['--depth'] is not None:
-        accounts = set(a for a in accounts if a.depth() <= int(opts['--depth']))
-    if not opts['--subtotals']:
-        accounts = leafset(accounts)
-    return accounts
-
 def parentset(accounts):
     parents = set()
     for a in accounts:
@@ -486,27 +536,3 @@ def range_line(range):
         p.append('TO')
         p.append(range.last.strftime(r'%_d-%b-%Y'))
     return ' '.join(p) if p else 'ALL DATES'
-
-def plain(text):
-    return text
-
-def strong(text):
-    pre = []
-    picture = []
-    pos = 0
-    for c in text:
-        if c == '\x08':
-            pos -= 1
-        else:
-            if pos < 0:
-                pre[-pos] = c
-            elif pos < len(picture):
-                picture[pos].append(c)
-            else:
-                assert pos == len(picture)
-                picture.append([c])
-            pos += 1
-    for p in picture:
-        if p[-1] not in p[:-1]:
-            p.append(p[-1])
-    return ''.join(chain(reversed(pre), ('\x08'.join(p) for p in picture)))
