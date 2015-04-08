@@ -352,9 +352,17 @@ def cmd_bsheet(config, opts):
     selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
+    amap = {}
+    for a in fullset(selected_accounts):
+        parent = a.accrual_parent()
+        if parent is None or parent is a:
+            parent = a.loan_parent()
+        if parent is not None and parent is not a:
+            amap[a] = parent
+    pred = lambda a: a.atype != abo.account.AccountType.ProfitLoss and a in selected_accounts
     balances = [abo.balance.Balance(all_transactions, r, chart=chart,
-                                    acc_pred=lambda a: a in selected_accounts,
-                                    acc_map=lambda a: retained if plpred(a) else a)
+                                    acc_pred=pred,
+                                    acc_map=lambda a: retained if plpred(a) else amap.get(a, a))
                 for r in ranges]
     sections = list(make_sections(section_preds, balances))
     all_accounts = set(chain(*(s.accounts for s in sections)))
@@ -518,6 +526,12 @@ def filter_accounts(chart, text):
             raise InvalidArg(e)
         accounts = set(filter(pred, accounts))
     return accounts
+
+def fullset(accounts):
+    full = set()
+    for a in accounts:
+        full.update(a.self_and_all_parents())
+    return full
 
 def parentset(accounts):
     parents = set()

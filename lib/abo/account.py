@@ -196,6 +196,9 @@ class Account(object):
     def is_accrual(self):
         return self.is_receivable() or self.is_payable()
 
+    def is_loan(self):
+        return self.atype is AccountType.AssetLiability and 'loans' in self.tags
+
     def full_name_tuple(self):
         return (self.parent.full_name_tuple() if self.parent else ()) + (self.bare_name(),)
 
@@ -235,6 +238,9 @@ class Account(object):
 
     def accrual_parent(self):
         return None if not self.is_accrual() else self if self.parent is None or not self.parent.is_accrual() else self.parent.accrual_parent()
+
+    def loan_parent(self):
+        return None if not self.is_loan() else self if self.parent is None or not self.parent.is_loan() else self.parent.loan_parent()
 
     def all_full_names(self):
         if self.label:
