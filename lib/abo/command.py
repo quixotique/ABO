@@ -509,9 +509,9 @@ def get_transactions(chart, config, opts):
         datekey = lambda t: (t.date, t.edate)
     transactions.sort(key=lambda t: datekey(t) + (t.who or '', t.what or '', -t.amount()))
     if opts['--remove']:
-        for account in opts['--remove']:
-            acc = chart[account]
-            transactions = abo.account.remove_account(chart, lambda a: a in acc, transactions)
+        for text in opts['--remove']:
+            pred = chart.parse_predicate(text)
+            transactions = abo.account.remove_account(chart, pred, transactions)
     return transactions
 
 def select_accounts(chart, opts):
