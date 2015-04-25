@@ -568,7 +568,7 @@ class Journal(object):
             try:
                 money = self.config.parse_money(word)
             except ValueError:
-                raise ParseException(line, 'invalid amount %r' % word)
+                detail = text
         else:
             detail = text
         if detail:
