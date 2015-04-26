@@ -295,7 +295,7 @@ class Journal(object):
                     entry['cdate'] = self._parse_date(m.group(1), relative_to=ledger_date[0])
                     detail = (detail[:m.start(0)] + ' ' + detail[m.end(0):])
                 entry['detail'] = str(detail).strip()
-                line = line.rstrip()
+            line = line.rstrip()
             if '  ' in line:
                 acc, amt = line.rsplit('  ', 1)
                 acc = str(acc.strip())
