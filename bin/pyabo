@@ -104,7 +104,7 @@ def main():
         import abo.command
         try:
             raise
-        except abo.command.InvalidArg as e:
+        except abo.config.InvalidInput as e:
             fatal(str(e))
         except abo.text.LineError as e:
             fatal(str(e))
@@ -118,7 +118,7 @@ def compa(config, args):
     logging.disable(logging.INFO)
     if len(args) != 3:
         import abo.command
-        raise abo.command.InvalidArg("expecting exactly three arguments after 'compa'")
+        raise abo.config.InvalidInput("expecting exactly three arguments after 'compa'")
     command, word, preword = args
     logging.debug('command=%r word=%r preword=%r', command, word, preword)
     keys = set()

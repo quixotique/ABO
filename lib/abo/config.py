@@ -9,8 +9,39 @@ import os
 import os.path
 import sys
 
+class InvalidInput(ValueError):
+
+    def __init__(self, label, cause=None):
+        ValueError.__init__(self)
+        self.label = label
+        self.cause = cause
+        self.args = (label, cause)
+
+    def __str__(self):
+        if self.cause is not None:
+            return '%s: %s' % (self.label, self.cause)
+        return self.label
+
+class InvalidArg(InvalidInput):
+    pass
+
+class InvalidOption(InvalidInput):
+    pass
+
+class InvalidEnviron(InvalidInput):
+    pass
+
 class ConfigException(Exception):
     pass
+
+def warn(text):
+    print('Warning: %s' % (text,), file=sys.stderr)
+
+def uint(text):
+    i = int(text)
+    if i < 0:
+        raise ValueError('invalid unsigned int: %d' % i)
+    return i
 
 class Config(object):
 
@@ -18,6 +49,12 @@ class Config(object):
         self.input_file_paths = []
         self.chart_file_path = None
         self.width = None
+        text = os.environ.get('PYABO_WIDTH')
+        if text is not None:
+            try:
+                self.width = uint(text)
+            except ValueError as e:
+                warn('ignoring invalid environment variable PYABO_WIDTH: %r' % text)
 
     def read_from(self, path):
         basedir = os.path.dirname(path)
@@ -26,7 +63,13 @@ class Config(object):
         return self
 
     def apply_options(self, opts):
-        self.width = 0 if opts['--wide'] else int(opts['--width']) if opts['--width'] else None
+        if opts['--wide']:
+            self.width = 0
+        elif opts['--width']:
+            try:
+                self.width = uint(opts['--width'])
+            except ValueError as e:
+                raise InvalidOption('--width', e)
         return self
 
     def load(self):
@@ -64,7 +107,12 @@ class Config(object):
         return self.money_column_width() + 1
 
     def output_width(self):
-        return self.width if self.width is not None else int(os.environ.get('COLUMNS', 80))
+        if self.width is not None:
+            return self.width
+        try:
+            return uint(os.environ['COLUMNS'])
+        except (ValueError, KeyError):
+            return 80
 
     def cache_dir_path(self):
         return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo')

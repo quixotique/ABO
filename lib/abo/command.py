@@ -20,9 +20,7 @@ import abo.transaction
 from abo.transaction import sign
 import abo.balance
 from abo.types import struct
-
-class InvalidArg(ValueError):
-    pass
+from abo.config import InvalidArg, InvalidOption
 
 def cmd_journal(config, opts):
     chart = get_chart(config, opts)
@@ -80,7 +78,10 @@ def cmd_index(config, opts):
 
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
-    accounts = filter_accounts(chart, opts['<PRED>'].lstrip())
+    try:
+        accounts = filter_accounts(chart, opts['<PRED>'].lstrip())
+    except ValueError as e:
+        raise InvalidArg('<PRED>', e)
     logging.debug('accounts = %r' % list(map(str, accounts)))
     common_root_account = abo.account.common_root(accounts)
     logging.debug('common_root_account = %r' % str(common_root_account))
@@ -510,20 +511,23 @@ def get_transactions(chart, config, opts):
     transactions.sort(key=lambda t: datekey(t) + (t.who or '', t.what or '', -t.amount()))
     if opts['--remove']:
         for text in opts['--remove']:
-            pred = chart.parse_predicate(text)
+            try:
+                pred = chart.parse_predicate(text)
+            except ValueError as e:
+                raise InvalidOption('--remove', e)
             transactions = abo.account.remove_account(chart, pred, transactions)
     return transactions
 
 def select_accounts(chart, opts):
-    return filter_accounts(chart, (opts['--select'] or '').lstrip())
+    try:
+        return filter_accounts(chart, (opts['--select'] or '').lstrip())
+    except ValueError as e:
+        raise InvalidOption('--select', e)
 
 def filter_accounts(chart, text):
     accounts = set(chart.accounts())
     if text:
-        try:
-            pred = chart.parse_predicate(text)
-        except abo.account.InvalidAccountPredicate as e:
-            raise InvalidArg(e)
+        pred = chart.parse_predicate(text)
         accounts = set(filter(pred, accounts))
     return accounts
 
@@ -564,7 +568,10 @@ def parse_range(words):
 def filter_period(chart, transactions, opts):
     brought_forward = None
     if opts['<period>']:
-        range = parse_range(opts['<period>'])
+        try:
+            range = parse_range(opts['<period>'])
+        except ValueError as e:
+            raise InvalidArg('<period>', e)
         if range.first is not None:
             brought_forward = abo.balance.Balance(transactions, abo.balance.Range(None, range.first - datetime.timedelta(1)), chart=chart, use_edate=opts['--effective'])
         transactions = (t for t in transactions if (t.edate if opts['--effective'] else t.date) in range)
