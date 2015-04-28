@@ -7,6 +7,7 @@ import codecs
 import re
 import traceback
 from datetime import datetime
+from collections import defaultdict
 
 def main():
     locale.setlocale(locale.LC_ALL, '')
@@ -25,8 +26,12 @@ def main():
     for label, minutes in sorted(result.totals.labels.iteritems()):
         if minutes:
             print fmt % ('TASK', Duration.format(minutes), ' = ' + label)
+    for rlabel in result.reports:
+        for label, minutes in sorted(result.reports[rlabel].labels.iteritems()):
+            if minutes:
+                print fmt % ('REPORT ' + rlabel, Duration.format(minutes), ' = ' + label)
 
-fmt = '%-15s  %6s%s'
+fmt = '%-16.16s  %6s%s'
 
 def process(path):
     # First pass to discover all the labels to exclude.
@@ -224,9 +229,7 @@ class TotalMinutes(object):
 
     def validate_sum(self):
         lsum = self.sum_labels()
-        if self.minutes is None:
-            self.minutes = lsum
-        elif lsum != self.minutes:
+        if self.minutes is not None and lsum != self.minutes:
             raise ValueError('labels [%s] do not sum to total [%s]' % (Duration.format(lsum), Duration.format(self.minutes)))
 
 class Total(object):
@@ -254,6 +257,7 @@ class Day(object):
         self.is_pubhol = False
         self.is_weekend = False
         self.totals = TotalMinutes()
+        self.reports = defaultdict(TotalMinutes)
 
     @classmethod
     def parse(cls, cursor):
@@ -272,23 +276,30 @@ class Day(object):
         for block in Block.parseiter(cursor):
             day.blocks.append(block)
             day.totals += block.totals
+            for label in block.reports:
+                day.reports[label] += block.reports[label]
         return day
 
 class Result(object):
 
     def __init__(self):
         self.totals = TotalMinutes()
+        self.reports = defaultdict(TotalMinutes)
         self.working_days = 0
         self.days_present = 0
 
     def __iadd__(self, other):
         self.totals += other.totals
+        for label in other.reports:
+            self.reports[label] += other.reports[label]
         self.working_days += other.working_days
         self.days_present += other.days_present
         return self
 
     def add_day(self, day):
         self.totals += day.totals
+        for label in day.reports:
+            self.reports[label] += day.reports[label]
         if not day.is_pubhol and not day.is_weekend:
             self.working_days += 1
         if day.totals:
@@ -298,6 +309,8 @@ class Block(object):
 
     def __init__(self):
         self.totals = TotalMinutes()
+        self.reports = defaultdict(TotalMinutes)
+        self.tasklabel = None
         self.wildlabel = None
 
     @classmethod
@@ -317,23 +330,27 @@ class Block(object):
         while not cursor.eof() and cursor.current().indent():
             if firstline is None:
                 firstline = cursor.current()
-            bl = BlockLine.parse(cursor.current(), wildlabel=block.wildlabel)
+            bl = BlockLine.parse(cursor.current(), tasklabel=block.tasklabel, wildlabel=block.wildlabel)
+            if bl.tasklabel:
+                block.tasklabel = bl.tasklabel
             if bl.wildlabel:
                 if block.wildlabel and bl.wildlabel != block.wildlabel:
                     raise ParseError('conflicting labels for [*]', line=firstline)
                 block.wildlabel = bl.wildlabel
             block.totals += bl.totals
+            for label in bl.reports:
+                block.reports[label] += bl.reports[label]
             cursor.advance()
         if block.wildlabel:
             if block.totals.minutes is None:
                 raise ParseError('missing total hours, cannot compute [*]', line=firstline)
             lsum = block.totals.sum_labels()
-            if lsum < block.totals.minutes:
-                block.totals.add(block.totals.minutes - lsum, label=block.wildlabel)
+            if lsum >= block.totals.minutes:
+                raise ParseError('no hours to allocate to [*]', line=firstline)
+            block.totals.add(block.totals.minutes - lsum, label=block.wildlabel)
         try:
             block.totals.validate_sum()
         except ValueError, e:
-            assert not block.wildlabel
             raise ParseError(str(e), line=firstline)
         if block.totals.minutes is None:
             block.totals.minutes = block.totals.sum_labels()
@@ -343,19 +360,22 @@ class BlockLine(object):
 
     def __init__(self):
         self.totals = TotalMinutes()
+        self.reports = defaultdict(TotalMinutes)
+        self.tasklabel = None
         self.wildlabel = None
 
     @classmethod
-    def parse(cls, line, wildlabel=None):
+    def parse(cls, line, tasklabel=None, wildlabel=None):
         bl = cls()
+        bl.tasklabel = tasklabel
         bl.wildlabel = wildlabel
         label = None
         lastpos = 0
         rminutes = None
-        label = None
         # Consume the line as either:
         #   Range [ "," Range ]* Duration
-        #   label Duration
+        #   tasklabel Duration
+        #   [ "=" ] reportlabel Duration
         while True:
             d = Duration.parse(line, lastpos)
             r = Range.parse(line, lastpos)
@@ -368,20 +388,38 @@ class BlockLine(object):
                 break
             if r is None or (d is not None and d.start < r.start):
                 # found Duration
-                label = d.prefix.split()[-1] if d.prefix else None
-                if d.minutes is None: # wild
+                is_report = False
+                label = None
+                if d.prefix:
+                    words = d.prefix.split()
+                    if len(words) == 1:
+                        label = words[0]
+                    elif len(words) == 2 and words[0] == '=':
+                        is_report = True
+                        label = words[1]
+                    else:
+                        raise ParseError('malformed label before %s' % (d.text,), line=line)
+                if d.minutes is None: # wild "[*]"
                     if rminutes is not None:
                         raise ParseError('%s following time range' % (d.text,), line=line)
-                    if not d.prefix:
+                    if not label:
                         raise ParseError('missing label before %s' % (d.text,), line=line)
+                    if is_report:
+                        raise ParseError('%s not valid for reported time' % (d.text,), line=line)
                     if bl.wildlabel and bl.wildlabel != label:
                         raise ParseError('conflifting label "%s" before %s (is already "%s")' % (label, d.text, bl.wildlabel), line=line)
+                    bl.tasklabel = label
                     bl.wildlabel = label
                 elif rminutes is not None:
                     if rminutes != d.minutes:
                         raise ParseError('%s != total %s' % (d.text, Duration.format(rminutes)), line=line)
                     rminutes = None
+                elif is_report:
+                    if bl.tasklabel is None:
+                        raise ParseError('%s report without prior task label' % (label,), line=line)
+                    bl.reports[label].add(d.minutes, label=bl.tasklabel)
                 else:
+                    bl.tasklabel = label
                     bl.totals.add(d.minutes, label=label)
                 lastpos = d.end
                 d = Duration.parse(line, lastpos)
