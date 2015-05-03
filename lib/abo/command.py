@@ -337,7 +337,7 @@ def cmd_profloss(config, opts):
         if not f.opt_bare:
             yield f.rule()
     if not f.opt_bare:
-        yield f.fmt('NET PROFIT (LOSS)', (config.format_money(b.balance(None)) for b in balances))
+        yield f.fmt('NET PROFIT/-LOSS', (config.format_money(b.balance(None)) for b in balances))
 
 def cmd_bsheet(config, opts):
     plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss
