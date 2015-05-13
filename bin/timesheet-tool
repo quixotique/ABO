@@ -27,6 +27,9 @@ def main():
         if minutes:
             print fmt % ('TASK', Duration.format(minutes), ' = ' + label)
     for rlabel in result.reports:
+        print fmt % ('', '------', '')
+        total = sum(result.reports[rlabel].labels.itervalues())
+        print fmt % ('TOTAL ' + rlabel, Duration.format(total), '')
         for label, minutes in sorted(result.reports[rlabel].labels.iteritems()):
             if minutes:
                 print fmt % ('REPORT ' + rlabel, Duration.format(minutes), ' = ' + label)
