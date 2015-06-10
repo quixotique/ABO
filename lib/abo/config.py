@@ -7,6 +7,8 @@
 
 import os
 import os.path
+import glob
+from itertools import chain
 import sys
 
 class InvalidInput(ValueError):
@@ -58,7 +60,7 @@ class Config(object):
 
     def read_from(self, path):
         basedir = os.path.dirname(path)
-        self.input_file_paths = [os.path.join(basedir, line.rstrip('\n')) for line in open(path, 'rU')]
+        self.input_file_paths = list(chain.from_iterable(glob.glob(os.path.join(basedir, line.rstrip('\n'))) for line in open(path, 'rU')))
         self.chart_file_path = os.path.join(basedir, 'accounts')
         return self
 
