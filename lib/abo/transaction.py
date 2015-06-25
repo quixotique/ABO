@@ -106,12 +106,21 @@ class Entry(abo.base.Base):
     def sign(self):
         return sign(self.amount)
 
-    def description(self):
+    def description(self, with_due=False, config=None):
         """Return the full description for this Entry, by appending its detail
         string to the description string of its Transaction, separated by a
         comma and space.
         """
-        return ', '.join([s for s in (self.transaction.description(), self.detail) if s])
+        return ', '.join([s for s in (self.transaction.description(),
+                                      self.detail,
+                                      'due ' + config.format_date_short(self.cdate, relative_to=self.transaction.date)
+                                            if      with_due is not None
+                                                and config is not None
+                                                and self.cdate and self.cdate != self.transaction.date
+                                            else ''
+                                     )
+                            if s]
+                        )
 
     def others(self):
         """Return an iterator over all other Entries in this Entry's transaction.

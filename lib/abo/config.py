@@ -83,6 +83,9 @@ class Config(object):
             trydir = os.path.dirname(trydir)
         raise ConfigException('no configuration file')
 
+    def format_date_short(self, date, relative_to=None):
+        return date.strftime(r'%-d-%b-%y' if relative_to is not None and relative_to.year != date.year else r'%-d-%b')
+
     @property
     def currency(self):
         global abo

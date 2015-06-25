@@ -146,7 +146,7 @@ def cmd_acc(config, opts):
             tally.totdb += e.amount
         elif e.amount > 0:
             tally.totcr += e.amount
-        desc = e.description()
+        desc = e.description(with_due=True, config=config)
         acc = chart[e.account]
         if acc is not common_root_account:
             rel = []
@@ -159,7 +159,7 @@ def cmd_acc(config, opts):
             if rel:
                 desc += '; ' + ':'.join(rel)
         if opts['--control'] or (opts['--effective'] and e.transaction.edate != e.transaction.date):
-            desc = e.transaction.date.strftime(r'%-d-%b-%y' if e.transaction.date.year != date.year else r'%-d-%b') + ' ' + desc
+            desc = config.format_date_short(e.transaction.date, relative_to=date) + ' ' + desc
         desc = textwrap.wrap(desc, width=pw)
         yield fmt % (date.strftime(r'%_d-%b-%Y'),
                 desc.pop(0) if desc else '',
