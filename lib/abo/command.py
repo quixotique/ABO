@@ -44,7 +44,7 @@ def cmd_journal(config, opts):
     def entry_fields(e):
         return (config.format_money(abs(e.amount)), ('db' if e.amount < 0 else 'cr'), chart[e.account].short_name())
     if bf:
-        for e in bf.entries():
+        for e in sorted(bf.entries(), key=lambda e: (e.cdate or datetime.date.min, e.amount, e.account)):
             yield fmt % (('',
                 'Brought forward' + (' due ' + e.cdate.strftime(r'%-d-%b-%Y') if e.cdate else ''),)
                 + entry_fields(e))
@@ -120,7 +120,7 @@ def cmd_acc(config, opts):
                                     config.format_money(amount) if amount > 0 else '',
                                     config.format_money(tally.balance))
                     else:
-                        for e in bf.entries():
+                        for e in sorted(bf.entries(), key=lambda e: (e.cdate or datetime.date.min, e.amount, e.account)):
                             if chart[e.account] is account and e.amount != 0:
                                 tally.balance += e.amount
                                 yield fmt % ('', '; '.join(filter(bool, ['Brought forward',

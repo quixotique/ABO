@@ -30,11 +30,11 @@ at the end of a range of time.
 -122.07
 >>> b.cbalance('a2')
 -24.57
->>> b.entries() #doctest: +NORMALIZE_WHITESPACE
-(Entry(account='a2', amount=-24.57),
+>>> sorted(b.entries(), key=lambda e: (e.cdate or 0, e.amount, e.account)) #doctest: +NORMALIZE_WHITESPACE
+[Entry(account='a2', amount=-24.57),
  Entry(account='a1', amount=122.07),
  Entry(account='a2', amount=-100.0, cdate=5),
- Entry(account='a2', amount=2.5, cdate=6))
+ Entry(account='a2', amount=2.5, cdate=6)]
 
 >>> b = Balance([t1, t2, t3, t4], date_range=Range(1, 4), use_edate=True)
 >>> b.first_date
@@ -51,19 +51,19 @@ at the end of a range of time.
 -112.06
 >>> b.cbalance('a2')
 -14.56
->>> b.entries() #doctest: +NORMALIZE_WHITESPACE
-(Entry(account='a2', amount=-14.56),
+>>> sorted(b.entries(), key=lambda e: (e.cdate or 0, e.amount, e.account)) #doctest: +NORMALIZE_WHITESPACE
+[Entry(account='a2', amount=-14.56),
  Entry(account='a1', amount=112.06),
  Entry(account='a2', amount=-100.0, cdate=5),
- Entry(account='a2', amount=2.5, cdate=6))
+ Entry(account='a2', amount=2.5, cdate=6)]
 
 >>> b = Balance([t1, t2, t3, t4], date_range=Range(1, 4), acc_pred=lambda a: a == 'a1')
 >>> b.accounts
 ('a1',)
 >>> b.balance('a1')
 122.07
->>> b.entries() #doctest: +NORMALIZE_WHITESPACE
-(Entry(account='a1', amount=122.07),)
+>>> list(b.entries()) #doctest: +NORMALIZE_WHITESPACE
+[Entry(account='a1', amount=122.07)]
 
 """
 
@@ -159,12 +159,9 @@ class Balance(object):
         for account, amounts in self._balances.items():
             if account is not None:
                 if amounts[None]:
-                    without_cdate.append(abo.transaction.Entry(transaction=None, amount=amounts[None], account=account))
+                    yield abo.transaction.Entry(transaction=None, amount=amounts[None], account=account)
                 for cdate in sorted(d for d in amounts if d is not None):
-                    with_cdate.append(abo.transaction.Entry(transaction=None, amount=amounts[cdate], account=account, cdate=cdate))
-        without_cdate.sort(key= lambda e: (e.amount, e.account))
-        with_cdate.sort(key= lambda e: (e.cdate, e.amount, e.account))
-        return tuple(without_cdate + with_cdate)
+                    yield abo.transaction.Entry(transaction=None, amount=amounts[cdate], account=account, cdate=cdate)
 
 def iter_lineage(account):
     while account:
