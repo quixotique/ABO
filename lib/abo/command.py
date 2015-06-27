@@ -194,6 +194,7 @@ class Formatter(object):
         self.opt_fullnames = bool(opts['--fullnames'])
         self.opt_subtotals = bool(opts['--subtotals'])
         self.num_columns = ncolumns
+        self.labelwid = max(chain([8], (len(a.label or '') for a in accounts)))
         self.balwid = self.config.balance_column_width()
         if self.opt_fullnames:
             self.accwid = max(chain([10], (len(str(a)) for a in accounts)))
@@ -232,11 +233,14 @@ class Formatter(object):
                 p.append(p[-1])
         return ''.join(chain(reversed(pre), ('\x08'.join(p) for p in picture)))
 
-    def fmt(self, label, columns, fill=None, label_fill=None, column_fill=None, strong=False):
+    def fmt(self, text, columns, label=None, fill=None, text_fill=None, column_fill=None, strong=False):
         decor = self.strong if strong else self.plain
         columns = list(columns)
         columns += [''] * (self.num_columns - len(columns))
-        return label.ljust(self.accwid, label_fill or fill or ' ')[:self.accwid] + ''.join(' ' + ((column_fill or fill or ' ') * (self.balwid - len(c)) + decor(c[-self.balwid:])) for c in columns)
+        return (    ((label or '').ljust(self.labelwid) if self.opts['--labels'] else '')
+                  + text.ljust(self.accwid, text_fill or fill or ' ')[:self.accwid]
+                  + ''.join(' ' + ((column_fill or fill or ' ') * (self.balwid - len(c)) + decor(c[-self.balwid:])) for c in columns)
+               )
 
     def rule(self, fill='═'):
         return self.fmt('', [], fill=fill)
@@ -258,9 +262,9 @@ class Formatter(object):
             if account is None:
                 if self.opt_bare:
                     continue
-                label = 'TOTAL ' + title
+                text = 'TOTAL ' + title
             elif self.opt_fullnames:
-                label = str(account)
+                text = str(account)
             else:
                 def has_sibling(account):
                     if not all_accounts:
@@ -274,15 +278,16 @@ class Formatter(object):
                     graph.append('│  ' if has_sibling(a) else '   ')
                 if self.opt_bare:
                     graph.pop()
-                label = ''.join(reversed(graph)) + account.bare_name()
+                text = ''.join(reversed(graph)) + account.bare_name()
             columns = []
             for acol in amount_columns:
                 if (account is None or self.opt_subtotals or not is_subaccount) and account in acol:
                     columns.append(self.config.format_money(acol[account]))
                 else:
                     columns.append('')
-            yield self.fmt(label + ' ', ((' ' + c if c else '') for c in columns),
-                            label_fill= '' if is_subaccount else '.',
+            yield self.fmt(text + ' ', ((' ' + c if c else '') for c in columns),
+                            label= (account and account.label) or '',
+                            text_fill= '' if is_subaccount else '.',
                             column_fill= '' if is_subaccount else '.',
                             strong= self.opt_subtotals and not is_subaccount)
 
