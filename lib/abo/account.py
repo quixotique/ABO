@@ -315,29 +315,29 @@ class Chart(object):
     ...   loose_change asset:cash "Loose change"
     ... ''')
     >>> for a in c1.accounts(): print(repr(str(a)), repr(a.label), repr(a.atype), repr(tuple(sorted(a.tags))))
-    ':Cash assets' 'cash_assets' AccountType.AssetLiability ('AL', 'asset')
-    ':Cash assets:Bank account' 'bank' AccountType.AssetLiability ('AL', 'asset', 'cash')
-    ':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability ('AL', 'asset', 'cash')
-    ':Expenses' 'exp' AccountType.ProfitLoss ('PL',)
-    ':Expenses:Household' None AccountType.ProfitLoss ('PL',)
-    ':Expenses:Household:Consumibles' None AccountType.ProfitLoss ('PL', 'cons', 'nd')
-    ':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss ('PL', 'cons', 'nd')
-    ':Expenses:Household:Transport' None AccountType.ProfitLoss ('PL',)
-    ':Expenses:Household:Transport:Car' None AccountType.ProfitLoss ('PL', 'nd')
-    ':Expenses:Household:Transport:Car:Petrol for cars' 'petrol' AccountType.ProfitLoss ('PL', 'nd')
-    ':Expenses:Household:Transport:Car:rego, insurance, maintenance' 'car' AccountType.ProfitLoss ('PL', 'nd')
-    ':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss ('PL',)
-    ':Expenses:Household:Utilities' None AccountType.ProfitLoss ('PL',)
-    ':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss ('PL', 'nd')
-    ':Expenses:Household:Utilities:Gas' 'gas' AccountType.ProfitLoss ('PL', 'nd')
-    ':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss ('PL', 'cons', 'nd')
-    ':Income' 'inc' AccountType.ProfitLoss ('PL',)
-    ':Income:Prizes' 'prizes' AccountType.ProfitLoss ('PL',)
-    ':Income:Rent' 'rent' AccountType.ProfitLoss ('PL', 'nd')
-    ':Income:Salary' None AccountType.ProfitLoss ('PL', 'nd')
+    ':Cash assets' 'cash_assets' AccountType.AssetLiability ('asset',)
+    ':Cash assets:Bank account' 'bank' AccountType.AssetLiability ('asset', 'cash')
+    ':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability ('asset', 'cash')
+    ':Expenses' 'exp' AccountType.ProfitLoss ()
+    ':Expenses:Household' None AccountType.ProfitLoss ()
+    ':Expenses:Household:Consumibles' None AccountType.ProfitLoss ('cons', 'nd')
+    ':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss ('cons', 'nd')
+    ':Expenses:Household:Transport' None AccountType.ProfitLoss ()
+    ':Expenses:Household:Transport:Car' None AccountType.ProfitLoss ('nd',)
+    ':Expenses:Household:Transport:Car:Petrol for cars' 'petrol' AccountType.ProfitLoss ('nd',)
+    ':Expenses:Household:Transport:Car:rego, insurance, maintenance' 'car' AccountType.ProfitLoss ('nd',)
+    ':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss ()
+    ':Expenses:Household:Utilities' None AccountType.ProfitLoss ()
+    ':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss ('nd',)
+    ':Expenses:Household:Utilities:Gas' 'gas' AccountType.ProfitLoss ('nd',)
+    ':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss ('cons', 'nd')
+    ':Income' 'inc' AccountType.ProfitLoss ()
+    ':Income:Prizes' 'prizes' AccountType.ProfitLoss ()
+    ':Income:Rent' 'rent' AccountType.ProfitLoss ('nd',)
+    ':Income:Salary' None AccountType.ProfitLoss ('nd',)
 
     >>> c1.tags()
-    ['AL', 'PL', 'asset', 'cash', 'cons', 'nd']
+    ['asset', 'cash', 'cons', 'nd']
 
     >>> c1['food'] in c1['exp']
     True
@@ -348,14 +348,13 @@ class Chart(object):
     >>> a1 #doctest: +NORMALIZE_WHITESPACE
     Account(name='Consumibles',
             parent=Account(name='Household',
-                           parent=Account(label='exp', name='Expenses', atype=AccountType.ProfitLoss, tags=('PL',)),
-                           atype=AccountType.ProfitLoss,
-                           tags=('PL',)),
+                           parent=Account(label='exp', name='Expenses', atype=AccountType.ProfitLoss),
+                           atype=AccountType.ProfitLoss),
             atype=AccountType.ProfitLoss,
-            tags=('PL', 'cons', 'nd'))
+            tags=('cons', 'nd'))
 
     >>> a3 = c1.get_or_create(name='Food', label='food', parent=a1, atype=AccountType.ProfitLoss)
-    >>> a3.tags == {'PL', 'cons', 'nd'}
+    >>> a3.tags == {'cons', 'nd'}
     True
 
     >>> c2 = Chart.from_file(r'''
@@ -610,6 +609,9 @@ class Chart(object):
             m = self._regex_cond_tag.match(text, 1)
             if m:
                 tag = m.group()
+                atype = tag_to_atype.get(tag)
+                if atype is not None:
+                    return (lambda a: atype == a.atype), text[m.end():]
                 return (lambda a: tag in a.tags), text[m.end():]
         if text.startswith('/'):
             m = self._regex_cond_pattern.match(text, 1)
@@ -684,18 +686,23 @@ class Chart(object):
                     if atype is None:
                         atype = stack[-1].atype
                     name = self._deduplicate(name, [a.name for a in stack])
-                if atype is not None:
-                    tags.add(atype_to_tag[atype])
             else:
                 label = None
                 atype = None
+                line_without_tags = ''
+                offset = 0
                 for m in self._regex_tag.finditer(line):
                     try:
-                        atype = tag_to_atype[m.group(1)]
+                        tag_atype = tag_to_atype[m.group(1)]
+                        if atype is not None and atype != tag_atype:
+                            raise abo.text.LineError('conflicting account types (%s) (%s)' % (atype_to_tag[atype], atype_to_tag[tag_atype]), line=line)
+                        atype = tag_atype
                     except KeyError:
-                        pass
-                    tags.add(m.group(1))
-                    line = (line[:m.start(0)] + ' ' + line[m.end(0):]).strip()
+                        tags.add(m.group(1))
+                    line_without_tags += line[offset:m.start(0)] + ' '
+                    offset = m.end(0)
+                line_without_tags += line[offset:]
+                line = line_without_tags.strip()
                 if atype is None and stack:
                     atype = stack[-1].atype
                 if line == '*':
