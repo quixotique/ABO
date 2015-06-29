@@ -11,7 +11,7 @@
 ... what something
 ... db account1 21.90 a debit
 ... db account2 another debit
-... cr account3 a credit
+... cr "account three" a credit
 ... amt 22
 ...
 ... %default who Some body
@@ -27,7 +27,7 @@
 ... type bill
 ... date 18/3/2013
 ... who Another body
-... acc account2
+... acc account two
 ... item expense
 ... gst 8.12
 ... amt 81.18
@@ -57,9 +57,9 @@
 ... amt 81.11
 ...
 ... 7/5/2013=1/1/2013 Modern text
-...  account1  45.06 ; comment
-...  account2  -60.00 ; another comment {31/5/2013}
-...  account3 ; {+15}
+...  account one  45.06 ; comment
+...  account two  -60.00 ; another comment {31/5/2013}
+...  account three ; {+15}
 ...
 ... ''')
 >>> [t for t in j.transactions() if not t.is_projection] #doctest: +NORMALIZE_WHITESPACE
@@ -67,7 +67,7 @@
     who='Somebody', what='something',
     entries=(Entry(account=':account1', amount=Money.AUD(-21.90), detail='a debit'),
              Entry(account=':account2', amount=Money.AUD(-0.10), detail='another debit'),
-             Entry(account=':account3', amount=Money.AUD(22.00), detail='a credit'))),
+             Entry(account=':account three', amount=Money.AUD(22.00), detail='a credit'))),
  Transaction(date=datetime.date(2013, 3, 17),
     who='Some body', what='Invoice text',
     entries=(Entry(account=':account1', amount=Money.AUD(-100.00)),
@@ -76,7 +76,7 @@
     who='Another body',
     entries=(Entry(account=':expense', amount=Money.AUD(-73.06)),
              Entry(account=':gst', amount=Money.AUD(-8.12)),
-             Entry(account=':account2', amount=Money.AUD(81.18)))),
+             Entry(account=':account two', amount=Money.AUD(81.18)))),
  Transaction(date=datetime.date(2013, 4, 17),
     who='Some body', what='Receipt text',
     entries=(Entry(account=':cash', amount=Money.AUD(-55.65)),
@@ -89,9 +89,9 @@
  Transaction(date=datetime.date(2013, 5, 7),
     edate=datetime.date(2013, 1, 1),
     what='Modern text',
-    entries=(Entry(account=':account2', amount=Money.AUD(-60.00), cdate=datetime.date(2013, 5, 31), detail='another comment'),
-             Entry(account=':account3', amount=Money.AUD(14.94), cdate=datetime.date(2013, 5, 22)),
-             Entry(account=':account1', amount=Money.AUD(45.06), detail='comment')))]
+    entries=(Entry(account=':account two', amount=Money.AUD(-60.00), cdate=datetime.date(2013, 5, 31), detail='another comment'),
+             Entry(account=':account three', amount=Money.AUD(14.94), cdate=datetime.date(2013, 5, 22)),
+             Entry(account=':account one', amount=Money.AUD(45.06), detail='comment')))]
 >>> [t for t in j.transactions() if t.is_projection] #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 4, 18),
     who='Another body',
@@ -556,6 +556,7 @@ class Journal(object):
     def _parse_dbcr(self, line):
         entry = {'line': line}
         word, text = self._popword(str(line.text))
+        assert word, "line.text=%r word=%r" % (line.text, word,)
         try:
             entry['account'] = self.chart[word] if self.chart else abo.account.Account(label=word)
         except (KeyError, ValueError) as e:
@@ -577,10 +578,15 @@ class Journal(object):
             entry['amount'] = money
         return entry
 
-    @staticmethod
-    def _popword(text):
-        words = text.split(None, 1)
-        return tuple(words) if len(words) == 2 else (words[0], '') if len(words) == 1 else ('', '')
+    _regex_word = re.compile(r'(?:"([^"]+)"|(\S+))(?=$|\s)')
+
+    @classmethod
+    def _popword(cls, text):
+        m = cls._regex_word.match(text)
+        if m:
+            remain = text[m.end(0):].lstrip()
+            return (m.group(1), remain) if m.group(1) else (m.group(2) or '', remain)
+        return ('', '')
 
     _regex_amount = re.compile(r'\d*\.\d+|\d+')
 
