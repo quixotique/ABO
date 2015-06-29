@@ -61,15 +61,17 @@ def cmd_journal(config, opts):
 
 def cmd_chart(config, opts):
     chart = get_chart(config, opts)
-    for account in sorted(select_accounts(chart, opts)):
-        line = [str(account)]
+    for account in sorted(fullset(select_accounts(chart, opts))):
         if opts['--verbose']:
-            if account.label:
-                line.append('[%s]' % (account.label,))
-            for tag in account.tags:
-                line.append('=%s' % (tag,))
-            #if account.atype and not (account.parent and account.parent.atype == account.atype):
-            #    line.append('=%s' % (abo.account.atype_to_tag[account.atype]))
+            line = [account.full_name()]
+        else:
+            line = ['\t' * (account.depth() - 1) + account.bare_name()]
+        if account.label:
+            line.append('[%s]' % (account.label,))
+        if account.atype and not (account.parent and account.parent.atype == account.atype):
+            line.append('=%s' % (abo.account.atype_to_tag[account.atype]))
+        for tag in account.tags:
+            line.append('=%s' % (tag,))
         yield ' '.join(line)
 
 def cmd_index(config, opts):
