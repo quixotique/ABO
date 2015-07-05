@@ -472,10 +472,13 @@ def cmd_due(config, opts):
                         details.append(t.what)
                 if e.detail:
                     details.append(e.detail)
+        account = str(due.account)
+        if opts['--labels'] and due.account.label:
+            account += ' [' + due.account.label + ']'
         yield fmt % (date.strftime(r'%a %_d-%b-%Y'),
                      '*' if date < when else '=' if date == when else ' ',
                      config.format_money(balance),
-                     '; '.join([str(due.account)] + details))
+                     '; '.join([account] + details))
 
 def cmd_mako(config, opts):
     import sys

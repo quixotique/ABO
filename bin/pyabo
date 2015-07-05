@@ -8,7 +8,7 @@ r'''Usage:
     pyabo acc [-bcefwWpqD] [--bare] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
     pyabo journal [-fwWpqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWpqDs] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
-    pyabo due [-fWpqD] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
+    pyabo due [-fWpqD] [--labels] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
     pyabo profloss [-efWpqDs] [--fullnames] [--labels] [--bare] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo bsheet [-efWpqDs] [--fullnames] [--labels] [--bare] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo mako [-fqD] [--remove=PRED...] <template> [<args>...]
