@@ -161,7 +161,8 @@ class Balance(object):
                 if amounts[None]:
                     yield abo.transaction.Entry(transaction=None, amount=amounts[None], account=account)
                 for cdate in sorted(d for d in amounts if d is not None):
-                    yield abo.transaction.Entry(transaction=None, amount=amounts[cdate], account=account, cdate=cdate)
+                    if amounts[cdate]:
+                        yield abo.transaction.Entry(transaction=None, amount=amounts[cdate], account=account, cdate=cdate)
 
 def iter_lineage(account):
     while account:

@@ -57,7 +57,7 @@ class Entry(abo.base.Base):
         """
         assert account is not None, 'missing account'
         assert amount is not None, 'missing amount'
-        assert amount != 0, 'zero amount'
+        assert amount != 0, 'zero amount: account=%r cdate=%r detail=%r' % (account, cdate, detail)
         self.id = self._make_unique_id()
         self.transaction = transaction
         self.account = str(account)
