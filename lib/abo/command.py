@@ -311,7 +311,8 @@ def cmd_profloss(config, opts):
             (None, 'Deductible Expenses', (lambda a, m: m < 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
             (0,    'Net Taxable Income', (lambda a, m: 'nd' not in a.tags and 'tax' not in a.tags)),
             (None, 'Tax', (lambda a, m: 'tax' in a.tags)),
-            (None, 'Non-Taxable Income', (lambda a, m: m > 0 and 'nd' in a.tags and 'tax' not in a.tags)),
+            (None, 'Taxable Super', (lambda a, m: m > 0 and 'nd' in a.tags and 'sd' in a.tags and 'tax' not in a.tags)),
+            (None, 'Non-Taxable Income', (lambda a, m: m > 0 and 'nd' in a.tags and 'sd' not in a.tags and 'tax' not in a.tags)),
             (0,    'Income After Tax', (lambda a, m: m > 0 or 'nd' not in a.tags or 'tax' in a.tags)),
             (None, 'Expenses', (lambda a, m: m < 0 and 'nd' in a.tags and 'tax' not in a.tags)),
         )
