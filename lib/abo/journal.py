@@ -201,6 +201,8 @@ class Journal(object):
             percent_block = None
             for line in block:
                 words = line.split(None, 1)
+                if not words:
+                    continue
                 if words[0].startswith('%'):
                     if percent_block is False:
                         raise ParseException(line, 'at ' + words[0] + ': not permitted within transaction')
