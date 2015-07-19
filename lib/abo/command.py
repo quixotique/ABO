@@ -293,37 +293,46 @@ class Formatter(object):
                             column_fill= '' if is_subaccount else '.',
                             strong= self.opt_subtotals and not is_subaccount)
 
-def make_sections(section_preds, balances):
-    for depth, title, pred in section_preds:
+class Section(object):
+
+    def __init__(self, sign, depth, title, pred):
+        self.sign = sign
+        self.depth = depth
+        self.title = title
+        self.pred = pred
+
+def make_sections(sections, balances):
+    for section in sections:
         accounts = set()
         bbalances = []
         for b in balances:
             bb = b.clone()
-            bb.set_predicate(pred)
+            bb.set_predicate(section.pred)
             accounts.update(bb.accounts)
             bbalances.append(bb)
-        yield struct(depth=depth, title=title, balances=bbalances, accounts=accounts)
+        section.balances = bbalances
+        section.accounts = accounts
 
 def cmd_profloss(config, opts):
     if opts['--tax']:
-        section_preds = (
-            (None, 'Taxable Income', (lambda a, m: m > 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
-            (None, 'Deductible Expenses', (lambda a, m: m < 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
-            (0,    'Net Taxable Income', (lambda a, m: 'nd' not in a.tags and 'tax' not in a.tags)),
-            (None, 'Tax', (lambda a, m: 'tax' in a.tags)),
-            (None, 'Taxable Super', (lambda a, m: m > 0 and 'nd' in a.tags and 'sd' in a.tags and 'tax' not in a.tags)),
-            (None, 'Non-Taxable Income', (lambda a, m: m > 0 and 'nd' in a.tags and 'sd' not in a.tags and 'tax' not in a.tags)),
-            (0,    'Income After Tax', (lambda a, m: m > 0 or 'nd' not in a.tags or 'tax' in a.tags)),
-            (None, 'Expenses', (lambda a, m: m < 0 and 'nd' in a.tags and 'tax' not in a.tags)),
+        sections = (
+            Section(1, None, 'Taxable Income', (lambda a, m: m > 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
+            Section(1, None, 'Deductible Expenses', (lambda a, m: m < 0 and 'nd' not in a.tags and 'tax' not in a.tags)),
+            Section(1, 0,    'Net Taxable Income', (lambda a, m: 'nd' not in a.tags and 'tax' not in a.tags)),
+            Section(1, None, 'Tax', (lambda a, m: 'tax' in a.tags)),
+            Section(1, None, 'Taxable Super', (lambda a, m: m > 0 and 'nd' in a.tags and 'sd' in a.tags and 'tax' not in a.tags)),
+            Section(1, None, 'Non-Taxable Income', (lambda a, m: m > 0 and 'nd' in a.tags and 'sd' not in a.tags and 'tax' not in a.tags)),
+            Section(1, 0,    'Income After Tax', (lambda a, m: m > 0 or 'nd' not in a.tags or 'tax' in a.tags)),
+            Section(1, None, 'Expenses', (lambda a, m: m < 0 and 'nd' in a.tags and 'tax' not in a.tags)),
         )
     elif opts['--bare']:
-        section_preds = (
-            (None, '', (lambda a, m: True)),
+        sections = (
+            Section(1, None, '', (lambda a, m: True)),
         )
     else:
-        section_preds = (
-            (None, 'Income', (lambda a, m: m > 0)),
-            (None, 'Expenses', (lambda a, m: m < 0)),
+        sections = (
+            Section(1, None, 'Income', (lambda a, m: m > 0)),
+            Section(1, None, 'Expenses', (lambda a, m: m < 0)),
         )
     ranges = parse_ranges(opts)
     chart = get_chart(config, opts)
@@ -331,7 +340,7 @@ def cmd_profloss(config, opts):
     transactions = get_transactions(chart, config, opts)
     plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and a in selected_accounts
     balances = [abo.balance.Balance(transactions, r, chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for r in ranges]
-    sections = list(make_sections(section_preds, balances))
+    make_sections(sections, balances)
     all_accounts = set(chain(*(s.accounts for s in sections)))
     f = Formatter(config, opts, all_accounts, len(balances))
     if not f.opt_bare:
@@ -340,7 +349,7 @@ def cmd_profloss(config, opts):
         yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
         yield f.rule()
     for section in sections:
-        columns = [dict((a, b.balance(a)) for a in chain(section.accounts, [None])) for b in section.balances]
+        columns = [dict((a, section.sign * b.balance(a)) for a in chain(section.accounts, [None])) for b in section.balances]
         yield from f.tree(section.title, section.accounts, columns, depth=section.depth)
         if not f.opt_bare:
             yield f.rule()
@@ -351,13 +360,13 @@ def cmd_bsheet(config, opts):
     plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss
     alpred = lambda a: a.atype == abo.account.AccountType.AssetLiability
     eqpred = lambda a: a.atype == abo.account.AccountType.Equity
-    section_preds = (
-        (None, 'Assets', lambda a, m: alpred(a) and m < 0),
-        (None, 'Liabilities', lambda a, m: alpred(a) and m > 0),
-        (None, 'Equity', lambda a, m: eqpred(a)),
+    sections = (
+        Section(-1, None, 'Assets', lambda a, m: alpred(a) and m < 0),
+        Section(1, None, 'Liabilities', lambda a, m: alpred(a) and m > 0),
+        Section(1, None, 'Equity', lambda a, m: eqpred(a)),
     )
     chart = get_chart(config, opts)
-    retained = chart.get_or_create(name='Retained profits', atype=abo.account.AccountType.Equity)
+    retained = chart.get_or_create(name='Retained profit(-loss)', atype=abo.account.AccountType.Equity)
     selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
@@ -373,7 +382,7 @@ def cmd_bsheet(config, opts):
                                     acc_pred=pred,
                                     acc_map=lambda a: retained if plpred(a) else amap.get(a, a))
                 for r in ranges]
-    sections = list(make_sections(section_preds, balances))
+    make_sections(sections, balances)
     all_accounts = set(chain(*(s.accounts for s in sections)))
     f = Formatter(config, opts, all_accounts, len(balances))
     if not f.opt_bare:
@@ -381,7 +390,7 @@ def cmd_bsheet(config, opts):
         yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
         yield f.rule()
     for section in sections:
-        columns = [dict((a, -b.balance(a)) for a in chain(section.accounts, [None])) for b in section.balances]
+        columns = [dict((a, section.sign * b.balance(a)) for a in chain(section.accounts, [None])) for b in section.balances]
         yield from f.tree(section.title, section.accounts, columns, depth=section.depth)
         if not f.opt_bare:
             yield f.rule()
