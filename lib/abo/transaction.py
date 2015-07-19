@@ -114,7 +114,7 @@ class Entry(abo.base.Base):
         return ', '.join([s for s in (self.transaction.description(),
                                       self.detail,
                                       'due ' + config.format_date_short(self.cdate, relative_to=self.transaction.date)
-                                            if      with_due is not None
+                                            if      with_due
                                                 and config is not None
                                                 and self.cdate and self.cdate != self.transaction.date
                                             else ''

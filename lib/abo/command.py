@@ -148,7 +148,7 @@ def cmd_acc(config, opts):
             tally.totdb += e.amount
         elif e.amount > 0:
             tally.totcr += e.amount
-        desc = e.description(with_due=True, config=config)
+        desc = e.description(with_due=not opts['--control'], config=config)
         acc = chart[e.account]
         if acc is not common_root_account:
             rel = []
