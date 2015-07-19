@@ -19,6 +19,9 @@
 >>> parse_periods(['this', 'fy'])
 [(datetime.date(2012, 7, 1), datetime.date(2013, 6, 30))]
 
+>>> parse_periods(['this', 'fy', 'to', 'date'])
+[(datetime.date(2012, 7, 1), datetime.date(2013, 3, 20))]
+
 >>> parse_periods(['last', 'fy'])
 [(datetime.date(2011, 7, 1), datetime.date(2012, 6, 30))]
 
@@ -126,6 +129,10 @@ def _parse_periods(args):
             which = args[0]
             args.pop(0)
             start, end = parse_this(args)
+            if len(args) >= 2 and args[:2] == ['to', 'date']:
+                end = _today()
+                args.pop(0)
+                args.pop(0)
             periods.append((start, end))
         elif args[0] == 'last':
             which = args[0]
