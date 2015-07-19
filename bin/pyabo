@@ -7,7 +7,7 @@ r'''Usage:
     pyabo index [-fqD]
     pyabo acc [-bcefwWpqD] [--bare] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
     pyabo journal [-fwWpqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
-    pyabo balance [-faWpqDs] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
+    pyabo balance [-faWpqDsj] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWpqD] [--labels] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
     pyabo profloss [-efWpqDs] [--fullnames] [--labels] [--bare] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo bsheet [-efWpqDs] [--fullnames] [--labels] [--bare] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
@@ -38,6 +38,7 @@ Options:
     -v --verbose            Show more information
     -r --remove=ACC         Remove account ACC
     -s --subtotals          Show subtotal lines
+    -j --journal            Display in journal format
     -n --depth=N            Show accounts to this depth only
        --tax                Separate tax-free and tax-deductible sections
 

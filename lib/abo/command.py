@@ -409,29 +409,37 @@ def cmd_balance(config, opts):
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
     balances = [abo.balance.Balance(all_transactions, r, chart=chart, acc_pred=lambda a: a in selected_accounts) for r in ranges]
-    display_accounts = sorted(filter_display_accounts(chain(*(b.accounts for b in balances)), opts))
-    logging.debug('display_accounts = %r' % display_accounts)
-    aw = max(chain([10], (len(str(a)) for a in display_accounts)))
-    bw = config.balance_column_width()
-    width = (bw + 1) * len(balances) + 1 + aw
-    if config.output_width() and width > config.output_width():
-        aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
-    fmt = ('%{bw}s ' * len(balances) + ' %.{aw}s').format(**locals())
-    if config.heading:
-        yield config.heading.center(width)
-    yield 'ACCOUNT BALANCES'.center(width)
-    yield ''
-    line = []
-    for b in balances:
-        line.append(b.date_range.last.strftime(r'%_d-%b-%Y'))
-    line.append('Account')
-    yield fmt % tuple(line)
-    yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
-    for account in display_accounts:
-        bals = tuple(b.balance(account) for b in balances)
-        if list(filter(bool, bals)) or opts['--all']:
-            yield fmt % (tuple(config.format_money(bal) for bal in bals) + (str(account),))
-    yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
+    if opts['--journal']:
+        for b in balances:
+            yield b.date_range.last.strftime(r'%-d/%-m/%Y') + ' balance'
+            for e in sorted((e for e in b.entries() if chart[e.account].is_substantial()), key=lambda e: (chart[e.account].short_name(), e.cdate or datetime.date.min, e.amount)):
+                yield (' ' + chart[e.account].short_name()
+                           + '  ' + config.format_money(e.amount, symbol=False, thousands=False)
+                           + (e.cdate.strftime(r' ; {%-d/%-m/%Y}') if e.cdate is not None else ''))
+    else:
+        display_accounts = sorted(filter_display_accounts(chain(*(b.accounts for b in balances)), opts))
+        logging.debug('display_accounts = %r' % display_accounts)
+        aw = max(chain([10], (len(str(a)) for a in display_accounts)))
+        bw = config.balance_column_width()
+        width = (bw + 1) * len(balances) + 1 + aw
+        if config.output_width() and width > config.output_width():
+            aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
+        fmt = ('%{bw}s ' * len(balances) + ' %.{aw}s').format(**locals())
+        if config.heading:
+            yield config.heading.center(width)
+        yield 'ACCOUNT BALANCES'.center(width)
+        yield ''
+        line = []
+        for b in balances:
+            line.append(b.date_range.last.strftime(r'%_d-%b-%Y'))
+        line.append('Account')
+        yield fmt % tuple(line)
+        yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
+        for account in display_accounts:
+            bals = tuple(b.balance(account) for b in balances)
+            if opts['--all'] or list(filter(bool, bals)):
+                yield fmt % (tuple(config.format_money(bal) for bal in bals) + (str(account),))
+        yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
 
 def cmd_due(config, opts):
     chart = get_chart(config, opts)

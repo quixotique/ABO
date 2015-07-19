@@ -110,12 +110,12 @@ class Config(object):
     def money(self, amount):
         return self.currency.money(amount)
 
-    def format_money(self, amount):
+    def format_money(self, amount, symbol=False, thousands=True):
         global abo
         import abo.money
         if not isinstance(amount, abo.money.Money):
             amount = self.money(amount)
-        return amount.format(symbol=False, thousands=True)
+        return amount.format(symbol=symbol, thousands=thousands)
 
     def money_column_width(self):
         return len(self.format_money(self.money(1000000)))
