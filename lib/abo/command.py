@@ -159,7 +159,7 @@ def cmd_acc(config, opts):
                         rel.append(b)
                         break
             if rel:
-                desc += '; ' + ':'.join(rel)
+                desc = '; '.join(s for s in [':'.join(rel), desc] if s)
         if opts['--control'] or (opts['--effective'] and e.transaction.edate != e.transaction.date):
             desc = config.format_date_short(e.transaction.date, relative_to=date) + ' ' + desc
         desc = textwrap.wrap(desc, width=pw)
