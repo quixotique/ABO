@@ -10,6 +10,9 @@
 >>> parse_periods(['from', '1/3/2012', 'to', '16/3/2013'])
 [(datetime.date(2012, 3, 1), datetime.date(2013, 3, 16))]
 
+>>> parse_periods(['to', 'date'])
+[(None, datetime.date(2013, 3, 20))]
+
 >>> parse_periods(['fy', '2010'])
 [(datetime.date(2009, 7, 1), datetime.date(2010, 6, 30))]
 
@@ -171,7 +174,11 @@ def _parse_periods(args):
             args.pop(0)
             if not args:
                 raise ValueError("missing argument after 'to'")
-            end = parse_fromto(args)[1]
+            if args[0] == 'date':
+                end = _today()
+                args.pop(0)
+            else:
+                end = parse_fromto(args)[1]
             periods.append((None, end))
         elif args[0] in ('fy', 'q1', 'q2', 'q3', 'q4'):
             unit = args.pop(0)
