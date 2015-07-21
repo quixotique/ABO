@@ -88,7 +88,7 @@ def chart_cache(config, opts=None):
                 for tc in transaction_caches(chart, config, opts):
                     tc.get()
             return chart
-        _chart_cache = FileCache(config, config.chart_file_path, compile_chart, config.input_file_paths, force=opts and opts['--force'])
+        _chart_cache = FileCache(config, config.chart_file_path, compile_chart, config.journal_file_paths, force=opts and opts['--force'])
     return _chart_cache
 
 _transaction_caches = None
@@ -98,7 +98,7 @@ def transaction_caches(chart, config, opts=None):
     if _transaction_caches is None:
         import abo.journal
         _transaction_caches = []
-        for path in config.input_file_paths:
+        for path in config.journal_file_paths:
             _transaction_caches.append(TransactionCache(config, path, abo.journal.Journal(config, open_detect_encoding(path), chart=chart), [config.chart_file_path], force=opts and opts['--force']))
     return _transaction_caches
 

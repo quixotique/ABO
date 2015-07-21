@@ -8,6 +8,7 @@
 import os
 import os.path
 import glob
+import shlex
 from itertools import chain
 import sys
 
@@ -48,7 +49,7 @@ def uint(text):
 class Config(object):
 
     def __init__(self):
-        self.input_file_paths = []
+        self.journal_file_paths = []
         self.chart_file_path = None
         self.width = None
         text = os.environ.get('PYABO_WIDTH')
@@ -60,7 +61,30 @@ class Config(object):
 
     def read_from(self, path):
         basedir = os.path.dirname(path)
-        self.input_file_paths = list(chain.from_iterable(glob.glob(os.path.join(basedir, line.rstrip('\n'))) for line in open(path, 'rU')))
+        with open(path) as f:
+            lex = shlex.shlex(f, path, posix=True)
+            lex.whitespace_split = True
+            import sys
+            err = lex.error_leader()
+            #print(err, file=sys.stderr)
+            tok = lex.get_token()
+            while tok is not None:
+                if tok == 'journal':
+                    err = lex.error_leader()
+                    #print(err, file=sys.stderr)
+                    tok = lex.get_token()
+                    while tok is not None and tok != ';':
+                        self.journal_file_paths += glob.glob(os.path.join(basedir, tok))
+                        err = lex.error_leader()
+                        tok = lex.get_token()
+                    if tok != ';':
+                        raise ConfigException(err + "expecting ';', got " + ('EOF' if tok is None else repr(tok)))
+                    err = lex.error_leader()
+                    tok = lex.get_token()
+                else:
+                    break
+            if tok is not None:
+                raise ConfigException(err + "unknown token: %r" % tok)
         self.chart_file_path = os.path.join(basedir, 'accounts')
         return self
 
