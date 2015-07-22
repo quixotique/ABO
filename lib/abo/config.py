@@ -51,6 +51,7 @@ class Config(object):
     def __init__(self):
         self.journal_file_paths = []
         self.chart_file_path = None
+        self.heading = None
         self.width = None
         text = os.environ.get('PYABO_WIDTH')
         if text is not None:
@@ -60,33 +61,20 @@ class Config(object):
                 warn('ignoring invalid environment variable PYABO_WIDTH: %r' % text)
 
     def read_from(self, path):
-        basedir = os.path.dirname(path)
-        with open(path) as f:
-            lex = shlex.shlex(f, path, posix=True)
-            lex.whitespace_split = True
-            import sys
-            err = lex.error_leader()
-            #print(err, file=sys.stderr)
-            tok = lex.get_token()
-            while tok is not None:
-                if tok == 'journal':
-                    err = lex.error_leader()
-                    #print(err, file=sys.stderr)
-                    tok = lex.get_token()
-                    while tok is not None and tok != ';':
-                        self.journal_file_paths += glob.glob(os.path.join(basedir, tok))
-                        err = lex.error_leader()
-                        tok = lex.get_token()
-                    if tok != ';':
-                        raise ConfigException(err + "expecting ';', got " + ('EOF' if tok is None else repr(tok)))
-                    err = lex.error_leader()
-                    tok = lex.get_token()
-                else:
-                    break
-            if tok is not None:
-                raise ConfigException(err + "unknown token: %r" % tok)
-        self.chart_file_path = os.path.join(basedir, 'accounts')
+        with Parser(path) as parser:
+            self.chart_file_path = os.path.join(parser.basedir, 'accounts')
+            parser.add_keyword('journal', self._set_journal)
+            parser.add_keyword('heading', self._set_heading)
+            parser.parse()
         return self
+
+    def _set_journal(self, parser, word):
+        self.journal_file_paths += glob.glob(os.path.join(parser.basedir, word))
+
+    def _set_heading(self, parser, word):
+        if self.heading is not None:
+            raise ConfigException("heading is already set")
+        self.heading = word
 
     def apply_options(self, opts):
         if opts['--wide']:
@@ -145,3 +133,51 @@ class Config(object):
 
     def cache_dir_path(self):
         return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo')
+
+class Parser(object):
+
+    def __init__(self, path):
+        self.path = path
+        self.basedir = os.path.dirname(path)
+
+    def __enter__(self):
+        self.instream = open(self.path)
+        self.lex = shlex.shlex(self.instream, self.path, posix=True)
+        self.lex.whitespace_split = True
+        self.error_leader = self.lex.error_leader()
+        self.keywords = {}
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        del self.lex
+        return self.instream.__exit__(exc_type, exc_val, exc_tb)
+
+    def add_keyword(self, keyword, handler):
+        self.keywords[keyword] = handler
+
+    def get_token(self):
+        err = self.lex.error_leader()
+        self.tok = self.lex.get_token()
+        if self.tok is not None:
+            self.error_leader = err
+        return self.tok
+
+    def parse(self):
+        try:
+            self.get_token()
+            while self.tok is not None:
+                handler = self.keywords.get(self.tok)
+                if handler is not None:
+                    self.get_token()
+                    while self.tok is not None and self.tok != ';':
+                        handler(self, self.tok)
+                        self.get_token()
+                    if self.tok != ';':
+                        raise ConfigException("expecting ';', got " + ('EOF' if self.tok is None else repr(self.tok)))
+                    self.get_token()
+                else:
+                    break
+            if self.tok is not None:
+                raise ConfigException("unexpected token: %r" % self.tok)
+        except ConfigException as e:
+            raise ConfigException(self.error_leader + str(e))

@@ -36,6 +36,8 @@ def cmd_journal(config, opts):
         pw = 35
         width = dw + 2 + pw + 1 + bw + 1 + 2 + 1 + aw
     fmt = '%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-.{aw}s'.format(**locals())
+    if config.heading:
+        yield config.heading.center(width)
     yield 'JOURNAL OF TRANSACTIONS'.center(width)
     yield range_line(range).center(width)
     yield ''
@@ -100,6 +102,8 @@ def cmd_acc(config, opts):
         width = dw + 2 + pw + 2 * (mw + 1) + 1 + bw
     fmt = '%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
     if not opts['--bare']:
+        if config.heading:
+            yield config.heading.center(width)
         yield 'STATEMENT OF ACCOUNT'.center(width)
         yield range_line(range).center(width)
         yield ''
@@ -344,6 +348,8 @@ def cmd_profloss(config, opts):
     all_accounts = set(chain(*(s.accounts for s in sections)))
     f = Formatter(config, opts, all_accounts, len(balances))
     if not f.opt_bare:
+        if config.heading:
+            yield f.centre(config.heading)
         yield f.centre('PROFIT LOSS STATEMENT')
         yield f.fmt('', (b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '' for b in balances))
         yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
@@ -386,6 +392,8 @@ def cmd_bsheet(config, opts):
     all_accounts = set(chain(*(s.accounts for s in sections)))
     f = Formatter(config, opts, all_accounts, len(balances))
     if not f.opt_bare:
+        if config.heading:
+            yield f.centre(config.heading)
         yield f.centre('BALANCE SHEET')
         yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
         yield f.rule()
@@ -409,6 +417,8 @@ def cmd_balance(config, opts):
     if config.output_width() and width > config.output_width():
         aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
     fmt = ('%{bw}s ' * len(balances) + ' %.{aw}s').format(**locals())
+    if config.heading:
+        yield config.heading.center(width)
     yield 'ACCOUNT BALANCES'.center(width)
     yield ''
     line = []
