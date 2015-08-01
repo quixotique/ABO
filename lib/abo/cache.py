@@ -10,8 +10,6 @@ import os
 import os.path
 import errno
 import pickle
-import locale
-import re
 
 class Cache(object):
 
@@ -83,7 +81,7 @@ def chart_cache(config, opts=None):
         def compile_chart():
             logging.info("compile %r", config.chart_file_path)
             import abo.account
-            chart = abo.account.Chart.from_file(open_detect_encoding(config.chart_file_path))
+            chart = abo.account.Chart.from_file(config.open(config.chart_file_path))
             if chart.has_wild_account():
                 for tc in transaction_caches(chart, config, opts):
                     tc.get()
@@ -99,23 +97,5 @@ def transaction_caches(chart, config, opts=None):
         import abo.journal
         _transaction_caches = []
         for path in config.journal_file_paths:
-            _transaction_caches.append(TransactionCache(config, path, abo.journal.Journal(config, open_detect_encoding(path), chart=chart), [config.chart_file_path], force=opts and opts['--force']))
+            _transaction_caches.append(TransactionCache(config, path, abo.journal.Journal(config, config.open(path), chart=chart), [config.chart_file_path], force=opts and opts['--force']))
     return _transaction_caches
-
-_regex_encoding = re.compile(r'coding[=:]\s*([-\w.]+)', re.MULTILINE)
-
-def detect_encoding(path, line_count=10):
-    r"""Inspect the first few lines of a file, looking for a declared file
-    encoding.
-    """
-    firstlines = []
-    with open(path, 'r', encoding='ascii', errors='ignore') as f:
-        for line in f:
-            firstlines.append(line)
-            if len(firstlines) >= line_count:
-                break
-    m = _regex_encoding.search('\n'.join(firstlines))
-    return m.group(1) if m else locale.getlocale()[1] or 'ascii'
-
-def open_detect_encoding(path):
-    return open(path, 'r', encoding=detect_encoding(path), errors='strict')

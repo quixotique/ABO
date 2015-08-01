@@ -7,6 +7,8 @@
 
 import os
 import os.path
+import re
+import locale
 import glob
 import shlex
 from itertools import chain
@@ -59,6 +61,24 @@ class Config(object):
                 self.width = uint(text)
             except ValueError as e:
                 warn('ignoring invalid environment variable PYABO_WIDTH: %r' % text)
+
+    _regex_encoding = re.compile(r'coding[=:]\s*([-\w.]+)', re.MULTILINE)
+
+    def detect_encoding(self, path, line_count=10):
+        r"""Inspect the first few lines of a file, looking for a declared file
+        encoding.
+        """
+        firstlines = []
+        with open(path, 'r', encoding='ascii', errors='ignore') as f:
+            for line in f:
+                firstlines.append(line)
+                if len(firstlines) >= line_count:
+                    break
+        m = self._regex_encoding.search('\n'.join(firstlines))
+        return m.group(1) if m else locale.getlocale()[1] or 'ascii'
+
+    def open(self, path, mode='r'):
+        return open(path, mode, encoding=self.detect_encoding(path), errors='strict')
 
     def read_from(self, path):
         with Parser(path) as parser:
