@@ -52,6 +52,7 @@ class Config(object):
 
     def __init__(self):
         self.journal_file_paths = []
+        self.checkpoint_file_paths = []
         self.chart_file_path = None
         self.heading = None
         self.width = None
@@ -85,6 +86,7 @@ class Config(object):
             self.chart_file_path = os.path.join(parser.basedir, 'accounts')
             parser.add_keyword('journal', self._set_journal)
             parser.add_keyword('heading', self._set_heading)
+            parser.add_keyword('checkpoint', self._set_checkpoint)
             parser.parse()
         return self
 
@@ -95,6 +97,9 @@ class Config(object):
         if self.heading is not None:
             raise ConfigException("heading is already set")
         self.heading = word
+
+    def _set_checkpoint(self, parser, word):
+        self.checkpoint_file_paths += glob.glob(os.path.join(parser.basedir, word))
 
     def apply_options(self, opts):
         if opts['--wide']:

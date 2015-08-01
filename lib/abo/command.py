@@ -509,6 +509,39 @@ def cmd_due(config, opts):
                      config.format_money(balance),
                      '; '.join([account] + details))
 
+def cmd_check(config, opts):
+    bw = max(8, config.balance_column_width())
+    def format_entry(account, cdate, amount):
+        return (    config.format_money(amount).rjust(bw) + ' ' +
+                    ('{' + config.format_date_short(cdate, relative_to=t.date) + '}' if cdate is not None else '').ljust(10) +
+                    ' ' + account.full_name())
+    chart = get_chart(config, opts)
+    all_transactions = get_transactions(chart, config, opts)
+    for path in config.checkpoint_file_paths:
+        for t in abo.journal.Journal(config, config.open(path), chart=chart).transactions():
+            date_range = abo.balance.Range(None, t.date)
+            checkpoint = abo.balance.Balance([t], date_range=date_range, chart=chart)
+            yield 'checkpoint ' + config.format_date_short(t.date)
+            balance = abo.balance.Balance(all_transactions, date_range=date_range, chart=chart)
+            be = defaultdict(lambda: dict())
+            for e in balance.entries():
+                be[chart[e.account]][e.cdate] = e.amount
+            ce = defaultdict(lambda: dict())
+            for e in checkpoint.entries():
+                ce[chart[e.account]][e.cdate] = e.amount
+            accounts = frozenset(be) | frozenset(ce)
+            for acc in sorted(a for a in accounts if a.is_substantial()):
+                cdates = frozenset(be[acc]) | frozenset(ce[acc])
+                for cdate in sorted(cdates, key=lambda d: datetime.date.min if d is None else d):
+                    bea = be[acc]
+                    cea = ce[acc]
+                    if cdate not in bea:
+                        yield ('   ' + 'missing'.rjust(bw + 3) + ' ' + format_entry(acc, cdate, cea[cdate]))
+                    elif cdate not in cea:
+                        yield ('   ' + 'spurious'.rjust(bw + 3) + ' ' + format_entry(acc, cdate, bea[cdate]))
+                    elif bea[cdate] != cea[cdate]:
+                        yield ('   ' + config.format_money(bea[cdate]).rjust(bw) + ' != ' + format_entry(acc, cdate, cea[cdate]))
+
 def cmd_mako(config, opts):
     import sys
     import os.path

@@ -11,6 +11,7 @@ r'''Usage:
     pyabo due [-fWpqD] [--labels] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
     pyabo profloss [-efWpqDs] [--fullnames] [--labels] [--bare] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     pyabo bsheet [-efWpqDs] [--fullnames] [--labels] [--bare] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
+    pyabo check [-fqD]
     pyabo mako [-fqD] [--remove=PRED...] <template> [<args>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
