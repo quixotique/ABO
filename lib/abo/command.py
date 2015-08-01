@@ -343,7 +343,7 @@ def cmd_profloss(config, opts):
     selected_accounts = select_accounts(chart, opts)
     transactions = get_transactions(chart, config, opts)
     plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and a in selected_accounts
-    balances = [abo.balance.Balance(transactions, r, chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for r in ranges]
+    balances = [abo.balance.Balance(transactions, date_range=r, chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for r in ranges]
     make_sections(sections, balances)
     all_accounts = set(chain(*(s.accounts for s in sections)))
     f = Formatter(config, opts, all_accounts, len(balances))
@@ -384,7 +384,7 @@ def cmd_bsheet(config, opts):
         if parent is not None and parent is not a:
             amap[a] = parent
     pred = lambda a: a.atype != abo.account.AccountType.ProfitLoss and a in selected_accounts
-    balances = [abo.balance.Balance(all_transactions, r, chart=chart,
+    balances = [abo.balance.Balance(all_transactions, date_range=r, chart=chart,
                                     acc_pred=pred,
                                     acc_map=lambda a: retained if plpred(a) else amap.get(a, a))
                 for r in ranges]
@@ -408,9 +408,10 @@ def cmd_balance(config, opts):
     selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
-    balances = [abo.balance.Balance(all_transactions, r, chart=chart, acc_pred=lambda a: a in selected_accounts) for r in ranges]
+    balances = [abo.balance.Balance(all_transactions, date_range=r, chart=chart, acc_pred=lambda a: a in selected_accounts) for r in ranges]
     if opts['--journal']:
         for b in balances:
+            yield ''
             yield b.date_range.last.strftime(r'%-d/%-m/%Y') + ' balance'
             for e in sorted((e for e in b.entries() if chart[e.account].is_substantial()), key=lambda e: (chart[e.account].short_name(), e.cdate or datetime.date.min, e.amount)):
                 yield (' ' + chart[e.account].short_name()
@@ -611,7 +612,7 @@ def filter_period(chart, transactions, opts):
         except ValueError as e:
             raise InvalidArg('<period>', e)
         if range.first is not None:
-            brought_forward = abo.balance.Balance(transactions, abo.balance.Range(None, range.first - datetime.timedelta(1)), chart=chart, use_edate=opts['--effective'])
+            brought_forward = abo.balance.Balance(transactions, date_range=abo.balance.Range(None, range.first - datetime.timedelta(1)), chart=chart, use_edate=opts['--effective'])
         transactions = (t for t in transactions if (t.edate if opts['--effective'] else t.date) in range)
     else:
         range = abo.balance.Range(None, None)
