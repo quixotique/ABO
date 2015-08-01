@@ -67,8 +67,8 @@ class FileCache(Cache):
 
 class TransactionCache(FileCache):
 
-    def __init__(self, config, path, transaction_source, otherpaths=(), force=False):
-        super(TransactionCache, self).__init__(config, path, lambda: transaction_source.transactions(), otherpaths, force=force)
+    def __init__(self, config, path, transaction_iterable, otherpaths=(), force=False):
+        super(TransactionCache, self).__init__(config, path, lambda: list(transaction_iterable), otherpaths, force=force)
 
     def transactions(self):
         return self.get()
@@ -97,5 +97,13 @@ def transaction_caches(chart, config, opts=None):
         import abo.journal
         _transaction_caches = []
         for path in config.journal_file_paths:
-            _transaction_caches.append(TransactionCache(config, path, abo.journal.Journal(config, config.open(path), chart=chart), [config.chart_file_path], force=opts and opts['--force']))
+            _transaction_caches.append(
+                    TransactionCache(
+                            config,
+                            path,
+                            abo.journal.Journal(config, config.open(path), chart=chart).transactions(),
+                            [config.chart_file_path],
+                            force=opts and opts['--force']
+                        )
+                )
     return _transaction_caches

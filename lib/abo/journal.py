@@ -134,17 +134,13 @@ class Journal(object):
         self.config = config
         self.chart = chart
         self.source_file = source_file
-        self._transactions = None
 
     def transactions(self):
-        if self._transactions is None:
-            self._parse(self.source_file)
-        return self._transactions
+        return self._parse(self.source_file)
 
     _regex_filter = re.compile(r'^%filter\s+(.*)$', re.MULTILINE)
 
     def _parse(self, source_file):
-        self._transactions = []
         if isinstance(source_file, str):
             # To facilitate testing.
             import io
@@ -281,7 +277,7 @@ class Journal(object):
                 for entry in kwargs['entries']:
                     del entry['line']
                 kwargs['is_projection'] = in_projection
-                self._transactions.append(Transaction(**kwargs))
+                yield Transaction(**kwargs)
 
     _regex_ledger_due = re.compile(r'\s*{([^}]*)}\s*')
 
@@ -599,7 +595,7 @@ class Journal(object):
 __test__ = {
 'transaction':r"""
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... type transaction
 ... date 21/2/2013
 ... who Somebody
@@ -607,13 +603,13 @@ __test__ = {
 ... db food
 ... cr bank
 ... amt 10.00
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who='Somebody', what='something',
     entries=(Entry(account=':food', amount=Money.AUD(-10.00)),
              Entry(account=':bank', amount=Money.AUD(10.00))))]
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... type transaction
 ... date 22/2/2013
 ... who Somebody Else
@@ -621,14 +617,14 @@ __test__ = {
 ... db food 7
 ... db drink 3 beer
 ... cr bank 10
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 22),
     who='Somebody Else', what='another thing',
     entries=(Entry(account=':food', amount=Money.AUD(-7.00)),
              Entry(account=':drink', amount=Money.AUD(-3.00), detail='beer'),
              Entry(account=':bank', amount=Money.AUD(10.00))))]
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... type transaction
 ... date 23/2/2013
 ... who Whoever
@@ -638,7 +634,7 @@ __test__ = {
 ... cr bank
 ... cr cash 2
 ... amt 10
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 23),
     who='Whoever', what='whatever',
     entries=(Entry(account=':food', amount=Money.AUD(-7.00)),
@@ -646,7 +642,7 @@ __test__ = {
              Entry(account=':cash', amount=Money.AUD(2.00)),
              Entry(account=':bank', amount=Money.AUD(8.00))))]
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... %default type transaction
 ... %default cr cash
 ... %default db games
@@ -657,14 +653,14 @@ __test__ = {
 ... db food 7
 ... db drink beer
 ... amt 10
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 23),
     who='Whoever', what='whatever',
     entries=(Entry(account=':food', amount=Money.AUD(-7.00)),
              Entry(account=':drink', amount=Money.AUD(-3.00), detail='beer'),
              Entry(account=':cash', amount=Money.AUD(10.00))))]
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... date 23/2/2013
 ... type transaction
 ... # comment
@@ -672,11 +668,11 @@ __test__ = {
 ... #line 20 "wah"
 ... what whatever
 ... db
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 Traceback (most recent call last):
 abo.journal.ParseException: "wah", 21: empty tag 'db'
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... type transaction
 ... date 21/2/2013
 ... due 21/3/2013
@@ -685,11 +681,11 @@ abo.journal.ParseException: "wah", 21: empty tag 'db'
 ... db food
 ... cr bank
 ... amt 10.00
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 Traceback (most recent call last):
 abo.journal.ParseException: StringIO, 4: spurious 'due' tag
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... type transaction
 ... date 21/2/2013
 ... who Somebody
@@ -698,11 +694,11 @@ abo.journal.ParseException: StringIO, 4: spurious 'due' tag
 ... cr bank
 ... item food
 ... amt 10.00
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 Traceback (most recent call last):
 abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... %default due 21/3/2013
 ... type transaction
 ... date 21/2/2013
@@ -710,7 +706,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... what something
 ... db food 10
 ... cr bank
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who='Somebody', what='something',
     entries=(Entry(account=':food', amount=Money.AUD(-10.00)),
@@ -719,7 +715,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 """,
 'invoice':r"""
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... type invoice
 ... date 21/2/2013
 ... due 21/3/2013
@@ -728,7 +724,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... acc body
 ... item thing comment
 ... amt 100
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who='Somebody', what='something',
     entries=(Entry(account=':body', amount=Money.AUD(-100.00), cdate=datetime.date(2013, 3, 21)),
@@ -737,7 +733,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 """,
 'bill':r"""
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... type bill
 ... date 1/2/2013
 ... due +14
@@ -748,7 +744,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... item round .01 oops
 ... gst .11
 ... amt 1.01
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 1),
     who='Somebody', what='something',
     entries=(Entry(account=':thing', amount=Money.AUD(-0.89), detail='comment'),
@@ -759,7 +755,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 """,
 'remittance':r"""
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... type remittance
 ... date 15/2/2013
 ... who Somebody
@@ -767,7 +763,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... acc body
 ... bank cash
 ... amt 1.01
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who='Somebody', what='something',
     entries=(Entry(account=':body', amount=Money.AUD(-1.01)),
@@ -776,7 +772,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 """,
 'receipt':r"""
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... type receipt
 ... date 15/2/2013
 ... who Somebody
@@ -784,7 +780,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... acc body
 ... bank cash
 ... amt 55.65
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who='Somebody', what='something',
     entries=(Entry(account=':cash', amount=Money.AUD(-55.65)),
@@ -793,7 +789,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 """,
 'filter':r"""
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... %filter m4 --synclines
 ... define(`some', `any')
 ... type receipt
@@ -803,7 +799,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... acc body
 ... bank cash
 ... amt 55.65
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who='any body', what='any thing',
     entries=(Entry(account=':cash', amount=Money.AUD(-55.65)),
@@ -812,7 +808,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 """,
 'period':r"""
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... %period 1/7/2012 30/6/2013
 ... type transaction
 ... date 28/2
@@ -821,13 +817,13 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... db food
 ... cr bank
 ... amt 10.00
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 28),
     who='Somebody', what='something',
     entries=(Entry(account=':food', amount=Money.AUD(-10.00)),
              Entry(account=':bank', amount=Money.AUD(10.00))))]
 
->>> Journal(_testconfig, r'''
+>>> list(Journal(_testconfig, r'''
 ... %period 1/7/2012 30/6/2013
 ... type transaction
 ... date 29/2
@@ -836,7 +832,7 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... db food
 ... cr bank
 ... amt 10.00
-... ''').transactions() #doctest: +NORMALIZE_WHITESPACE
+... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 Traceback (most recent call last):
 abo.journal.ParseException: StringIO, 4: invalid date '29/2'
 
