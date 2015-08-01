@@ -133,9 +133,9 @@ class Balance(object):
     def _tally(self):
         if self._balances is None:
             self._balances = defaultdict(lambda: defaultdict(lambda: 0))
-            for account, balance in self._raw_balances.items():
-                if self.pred(account, balance.total):
-                    for cdate, amount in balance.cdate.items():
+            for account, rb in self._raw_balances.items():
+                if self.pred(account, rb.total):
+                    for cdate, amount in rb.cdate.items():
                         for acc in chain(iter_lineage(account), [None]):
                             self._balances[acc][cdate] += amount
 
