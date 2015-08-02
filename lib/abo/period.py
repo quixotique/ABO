@@ -240,6 +240,16 @@ def parse_whens(args):
     [datetime.date(2013, 3, 20)]
     >>> parse_whens(['yesterday', 'today', 'five', 'days', 'ago', 'tomorrow'])
     [datetime.date(2013, 3, 19), datetime.date(2013, 3, 20), datetime.date(2013, 3, 15), datetime.date(2013, 3, 21)]
+    >>> parse_whens(['start', 'last', 'ten', 'years'])
+    [datetime.date(2003, 1, 1)]
+    >>> parse_whens(['end', 'last', 'ten', 'years'])
+    [datetime.date(2012, 12, 31)]
+    >>> parse_whens(['start', 'last', 'ten', 'years', 'yearly'])
+    [datetime.date(2003, 1, 1), datetime.date(2004, 1, 1), datetime.date(2005, 1, 1), datetime.date(2006, 1, 1), datetime.date(2007, 1, 1), datetime.date(2008, 1, 1), datetime.date(2009, 1, 1), datetime.date(2010, 1, 1), datetime.date(2011, 1, 1), datetime.date(2012, 1, 1)]
+    >>> parse_whens(['end', 'last', 'ten', 'years', 'yearly'])
+    [datetime.date(2003, 12, 31), datetime.date(2004, 12, 31), datetime.date(2005, 12, 31), datetime.date(2006, 12, 31), datetime.date(2007, 12, 31), datetime.date(2008, 12, 31), datetime.date(2009, 12, 31), datetime.date(2010, 12, 31), datetime.date(2011, 12, 31), datetime.date(2012, 12, 31)]
+    >>> parse_whens(['end', 'last', 'three', 'fys', 'yearly'])
+    [datetime.date(2010, 6, 30), datetime.date(2011, 6, 30), datetime.date(2012, 6, 30)]
 
     """
     whens = _parse_whens(args)
