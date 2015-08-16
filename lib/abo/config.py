@@ -151,10 +151,12 @@ class Config(object):
     def output_width(self):
         if self.width is not None:
             return self.width
-        try:
-            return uint(os.environ['COLUMNS'])
-        except (ValueError, KeyError):
-            return 80
+        if sys.stdout.isatty():
+            try:
+                return uint(os.environ['COLUMNS'])
+            except (ValueError, KeyError):
+                pass
+        return 80
 
     def cache_dir_path(self):
         return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo')
