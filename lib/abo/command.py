@@ -53,7 +53,7 @@ def cmd_journal(config, opts):
     for t in transactions:
         desc = textwrap.wrap(t.description(), width=pw)
         entries = list(t.entries)
-        yield fmt % ((t.date.strftime(r'%_d-%b-%Y'), desc.pop(0)) + entry_fields(entries.pop(0)))
+        yield fmt % ((t.date.strftime(r'%_d-%b-%Y'), desc.pop(0) if desc else '') + entry_fields(entries.pop(0)))
         while entries:
             yield fmt % (('', desc.pop(0) if desc else '') + (entry_fields(entries.pop(0)) if entries else ('', '', '')))
         if opts['--wrap']:
