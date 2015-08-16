@@ -168,6 +168,11 @@ def cmd_acc(config, opts):
                         break
             if rel:
                 desc = '; '.join(s for s in [':'.join(rel), desc] if s)
+        if not desc and len(entry.transaction.entries) == 2:
+            oe = [e for e in entry.transaction.entries if e is not entry]
+            assert len(oe) == 1
+            oe = oe[0]
+            desc = chart[oe.account].bare_name()
         if opts['--control'] or (opts['--effective'] and entry.transaction.edate != entry.transaction.date):
             desc = config.format_date_short(entry.transaction.date, relative_to=date) + ' ' + desc
         desc = textwrap.wrap(desc, width=pw)
