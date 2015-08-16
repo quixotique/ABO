@@ -149,15 +149,15 @@ def cmd_acc(config, opts):
         entries.sort(key=lambda e: e.cdate or e.transaction.date)
     else:
         entries = [e for e in chain(*(t.entries for t in transactions)) if chart[e.account] in accounts]
-    for e in entries:
-        date = e.cdate if opts['--control'] and e.cdate else e.transaction.edate if opts['--effective'] else e.transaction.date
-        tally.balance += e.amount
-        if e.amount < 0:
-            tally.totdb += e.amount
-        elif e.amount > 0:
-            tally.totcr += e.amount
-        desc = e.description(with_due=not opts['--control'], config=config)
-        acc = chart[e.account]
+    for entry in entries:
+        date = entry.cdate if opts['--control'] and entry.cdate else entry.transaction.edate if opts['--effective'] else entry.transaction.date
+        tally.balance += entry.amount
+        if entry.amount < 0:
+            tally.totdb += entry.amount
+        elif entry.amount > 0:
+            tally.totcr += entry.amount
+        desc = entry.description(with_due=not opts['--control'], config=config)
+        acc = chart[entry.account]
         if acc is not common_root_account:
             rel = []
             for par in chain(reversed(list(acc.parents_not_in_common_with(common_root_account))), (acc,)):
@@ -168,13 +168,13 @@ def cmd_acc(config, opts):
                         break
             if rel:
                 desc = '; '.join(s for s in [':'.join(rel), desc] if s)
-        if opts['--control'] or (opts['--effective'] and e.transaction.edate != e.transaction.date):
-            desc = config.format_date_short(e.transaction.date, relative_to=date) + ' ' + desc
+        if opts['--control'] or (opts['--effective'] and entry.transaction.edate != entry.transaction.date):
+            desc = config.format_date_short(entry.transaction.date, relative_to=date) + ' ' + desc
         desc = textwrap.wrap(desc, width=pw)
         yield fmt % (date.strftime(r'%_d-%b-%Y'),
                 desc.pop(0) if desc else '',
-                config.format_money(-e.amount) if e.amount < 0 else '',
-                config.format_money(e.amount) if e.amount > 0 else '',
+                config.format_money(-entry.amount) if entry.amount < 0 else '',
+                config.format_money(entry.amount) if entry.amount > 0 else '',
                 config.format_money(tally.balance))
         if opts['--wrap']:
             while desc:
