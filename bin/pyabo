@@ -5,7 +5,7 @@
 r'''Usage:
     pyabo chart [-fvqD] [--select=PRED]
     pyabo index [-fqD]
-    pyabo acc [-bcefwWpqD] [--bare] [--remove=ACC...] [--width=COLUMNS] <PRED> [<period>...]
+    pyabo acc [-bcefwWpqD] [--bare] [--remove=ACC...] [--width=COLUMNS] [--title=TEXT] <PRED> [<period>...]
     pyabo journal [-fwWpqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     pyabo balance [-faWpqDsj] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     pyabo due [-fWpqD] [--labels] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
@@ -39,6 +39,7 @@ Options:
     -v --verbose            Show more information
     -r --remove=ACC         Remove account ACC
     -s --subtotals          Show subtotal lines
+       --title=TEXT         Set report title
     -j --journal            Display in journal format
     -n --depth=N            Show accounts to this depth only
        --tax                Separate tax-free and tax-deductible sections

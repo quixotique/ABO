@@ -202,8 +202,8 @@ class Account(object):
     def full_name_tuple(self):
         return (self.parent.full_name_tuple() if self.parent else ()) + (self.bare_name(),)
 
-    def full_name(self):
-        return ':' + ':'.join(self.full_name_tuple())
+    def full_name(self, separator=':', prefix=':'):
+        return prefix + separator.join(self.full_name_tuple())
 
     def bare_name(self):
         return '*' if self.wild else str(self.name or self.label)

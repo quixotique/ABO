@@ -106,6 +106,10 @@ def cmd_acc(config, opts):
             yield config.heading.center(width)
         yield 'STATEMENT OF ACCOUNT'.center(width)
         yield range_line(range).center(width)
+        if opts['--title']:
+            yield opts['--title'].center(width)
+        elif common_root_account is not None:
+            yield common_root_account.full_name(prefix='', separator=': ').center(width)
         yield ''
     yield fmt % ('Date', 'Particulars', 'Debit', 'Credit', 'Balance')
     yield fmt % ('-' * dw, '-' * pw, '-' * mw, '-' * mw, '-' * bw)
