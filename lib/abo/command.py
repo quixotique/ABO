@@ -530,7 +530,7 @@ def cmd_check(config, opts):
         for t in abo.journal.Journal(config, config.open(path), chart=chart).transactions():
             yield 'checkpoint ' + config.format_date_short(t.date)
             date_range = abo.balance.Range(None, t.date)
-            balance = abo.balance.Balance(all_transactions, date_range=date_range, chart=chart)
+            balance = abo.balance.Balance(all_transactions, date_range=date_range, chart=chart, use_edate=opts['--effective'])
             be = defaultdict(lambda: dict())
             for e in balance.entries():
                 be[chart[e.account]][e.cdate] = e.amount
