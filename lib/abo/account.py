@@ -90,6 +90,8 @@ class Account(object):
     'Baker:Charlie'
     >>> c.relative_name(b)
     'Charlie'
+    >>> b.relative_name(c)
+    ':Able:Baker'
     >>> a in c
     False
     >>> c in a
@@ -225,7 +227,10 @@ class Account(object):
         return '*' if self.wild else str(self.name or self.label)
 
     def relative_name(self, context_account):
-        return ':'.join(a.bare_name() for a in chain(reversed(list(self.parents_not_in_common_with(context_account))), (self,)))
+        if context_account in self:
+            return self.full_name()
+        else:
+            return ':'.join(a.bare_name() for a in chain(reversed(list(self.parents_not_in_common_with(context_account))), (self,)))
 
     def short_name(self):
         return min(self.all_full_names(), key=len)
