@@ -485,6 +485,6 @@ __test__ = {
     ...                  {'account':'a2', 'amount':-14.56}, \\
     ...                  {'account':'a3', 'amount':0.00}))
     Traceback (most recent call last):
-    AssertionError: zero amount
+    AssertionError: zero amount: account='a3' cdate=None detail=''
 """,
 }
