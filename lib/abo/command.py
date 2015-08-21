@@ -520,14 +520,14 @@ def cmd_due(config, opts):
 
 def cmd_check(config, opts):
     bw = max(8, config.balance_column_width())
-    def format_entry(account, cdate, amount):
-        return (    config.format_money(amount).rjust(bw) + ' ' +
-                    ('{' + config.format_date_short(cdate, relative_to=t.date) + '}' if cdate is not None else '').ljust(10) +
-                    ' ' + account.full_name())
+    def format_entry(account, cdate=None, amount=None):
+        return (    (config.format_money(amount).rjust(bw) if amount is not None else ' ' * bw) + ' '
+                  + ('{' + config.format_date_short(cdate, relative_to=t.date) + '}' if cdate is not None else '').ljust(10) + ' '
+                  + str(account))
     chart = get_chart(config, opts)
     all_transactions = get_transactions(chart, config, opts)
     for path in config.checkpoint_file_paths:
-        for t in abo.journal.Journal(config, config.open(path), chart=chart).transactions():
+        for t in abo.journal.Journal(config, config.open(path)).transactions():
             yield 'checkpoint ' + config.format_date_short(t.date)
             date_range = abo.balance.Range(None, t.date)
             balance = abo.balance.Balance(all_transactions, date_range=date_range, chart=chart, use_edate=opts['--effective'])
@@ -536,7 +536,10 @@ def cmd_check(config, opts):
                 be[chart[e.account]][e.cdate] = e.amount
             ce = defaultdict(lambda: dict())
             for e in t.entries:
-                ce[chart[e.account]][e.cdate] = e.amount
+                try:
+                    ce[chart[e.account]][e.cdate] = e.amount
+                except abo.account.AccountKeyError:
+                    yield ('   ' + 'no account'.rjust(bw + 3) + ' ' + format_entry(e.account))
             accounts = frozenset(be) | frozenset(ce)
             for acc in sorted(a for a in accounts if a.is_substantial()):
                 cdates = frozenset(be[acc]) | frozenset(ce[acc])
