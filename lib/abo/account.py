@@ -559,8 +559,8 @@ class Chart(object):
             return self._index[key]
         except KeyError as e:
             pass
-        try:
-            if ':' in key[1:]:
+        if ':' in key[1:]:
+            try:
                 parentname, childname = key.rsplit(':', 1)
                 parent = self._index[parentname]
                 wild = self._wild.get(parent)
@@ -568,8 +568,8 @@ class Chart(object):
                     child = parent.make_child(name=childname, atype=wild.atype, tags=wild.tags)
                     self._add_account(child)
                     return child
-        except KeyError as e:
-            pass
+            except KeyError as e:
+                pass
         raise AccountKeyError(key)
 
     def get(self, key, default=None):
