@@ -65,39 +65,39 @@
 >>> [t for t in j.transactions() if not t.is_projection] #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 3, 16),
     who='Somebody', what='something',
-    entries=(Entry(account=':account1', amount=Money.AUD(-21.90), detail='a debit'),
-             Entry(account=':account2', amount=Money.AUD(-0.10), detail='another debit'),
-             Entry(account=':account three', amount=Money.AUD(22.00), detail='a credit'))),
+    entries=(Entry(account='account1', amount=Money.AUD(-21.90), detail='a debit'),
+             Entry(account='account2', amount=Money.AUD(-0.10), detail='another debit'),
+             Entry(account='account three', amount=Money.AUD(22.00), detail='a credit'))),
  Transaction(date=datetime.date(2013, 3, 17),
     who='Some body', what='Invoice text',
-    entries=(Entry(account=':account1', amount=Money.AUD(-100.00)),
-             Entry(account=':income', amount=Money.AUD(100.00), detail='at last'))),
+    entries=(Entry(account='account1', amount=Money.AUD(-100.00)),
+             Entry(account='income', amount=Money.AUD(100.00), detail='at last'))),
  Transaction(date=datetime.date(2013, 3, 18),
     who='Another body',
-    entries=(Entry(account=':expense', amount=Money.AUD(-73.06)),
-             Entry(account=':gst', amount=Money.AUD(-8.12)),
-             Entry(account=':account two', amount=Money.AUD(81.18)))),
+    entries=(Entry(account='expense', amount=Money.AUD(-73.06)),
+             Entry(account='gst', amount=Money.AUD(-8.12)),
+             Entry(account='account two', amount=Money.AUD(81.18)))),
  Transaction(date=datetime.date(2013, 4, 17),
     who='Some body', what='Receipt text',
-    entries=(Entry(account=':cash', amount=Money.AUD(-55.65)),
-             Entry(account=':account1', amount=Money.AUD(55.65)))),
+    entries=(Entry(account='cash', amount=Money.AUD(-55.65)),
+             Entry(account='account1', amount=Money.AUD(55.65)))),
  Transaction(date=datetime.date(2013, 4, 18),
     edate=datetime.date(2012, 6, 30),
     who='Some body', what='Remittance text',
-    entries=(Entry(account=':account2', amount=Money.AUD(-81.11)),
-             Entry(account=':cash', amount=Money.AUD(81.11)))),
+    entries=(Entry(account='account2', amount=Money.AUD(-81.11)),
+             Entry(account='cash', amount=Money.AUD(81.11)))),
  Transaction(date=datetime.date(2013, 5, 7),
     edate=datetime.date(2013, 1, 1),
     what='Modern text',
-    entries=(Entry(account=':account two', amount=Money.AUD(-60.00), cdate=datetime.date(2013, 5, 31), detail='another comment'),
-             Entry(account=':account three', amount=Money.AUD(14.94), cdate=datetime.date(2013, 5, 22)),
-             Entry(account=':account one', amount=Money.AUD(45.06), detail='comment')))]
+    entries=(Entry(account='account two', amount=Money.AUD(-60.00), cdate=datetime.date(2013, 5, 31), detail='another comment'),
+             Entry(account='account three', amount=Money.AUD(14.94), cdate=datetime.date(2013, 5, 22)),
+             Entry(account='account one', amount=Money.AUD(45.06), detail='comment')))]
 >>> [t for t in j.transactions() if t.is_projection] #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 4, 18),
     who='Another body',
-    entries=(Entry(account=':expense', amount=Money.AUD(-89.80)),
-             Entry(account=':gst', amount=Money.AUD(-9.17)),
-             Entry(account=':account2', amount=Money.AUD(98.97))))]
+    entries=(Entry(account='expense', amount=Money.AUD(-89.80)),
+             Entry(account='gst', amount=Money.AUD(-9.17)),
+             Entry(account='account2', amount=Money.AUD(98.97))))]
 
 """
 
@@ -310,12 +310,15 @@ class Journal(object):
                 if noamt:
                     raise ParseException(line, 'missing amount')
                 noamt = entry
-            try:
-                entry['account'] = self.chart[acc] if self.chart else abo.account.Account(name=acc)
-            except (ValueError, KeyError) as e:
-                raise ParseException(line, e)
-            if not entry['account'].is_substantial():
-                raise ParseException(line, 'insubstantial account %r' % str(entry['account']))
+            if self.chart:
+                try:
+                    entry['account'] = self.chart[acc]
+                except (ValueError, KeyError) as e:
+                    raise ParseException(line, e)
+                if not entry['account'].is_substantial():
+                    raise ParseException(line, 'insubstantial account %r' % str(entry['account']))
+            else:
+                entry['account'] = acc
             entries.append(entry)
         if noamt:
             total = sum(entry['amount'] for entry in entries if 'amount' in entry)
@@ -413,9 +416,7 @@ class Journal(object):
             raise ParseException(amt, 'zero amount not allowed: %s' % amount)
         entries = []
         acc = tagline('acc', optional=True)
-        account = self._parse_account_label(acc)
-        if not account.is_substantial():
-            raise ParseException(acc, 'insubstantial account %r' % account.label)
+        account = self._parse_account_label(acc.text)
         total = 0
         gst = tagline('gst', optional=True)
         gst_amount = self._parse_money(gst) if gst else None
@@ -460,13 +461,9 @@ class Journal(object):
     def _parse_remittance_receipt(self, firstline, kwargs, tagline, sign):
         amount = self._parse_money(tagline('amt'))
         acc = tagline('acc')
-        account = self._parse_account_label(acc)
-        if not account.is_substantial():
-            raise ParseException(acc, 'insubstantial account %r' % account.label)
+        account = self._parse_account_label(acc.text)
         bank = tagline('bank')
-        bank_account = self._parse_account_label(bank)
-        if not bank_account.is_substantial():
-            raise ParseException(acc, 'insubstantial account %r' % bank_account.label)
+        bank_account = self._parse_account_label(bank.text)
         entries = []
         entries.append({'line': acc, 'account': account, 'amount': amount * sign})
         entries.append({'line': bank, 'account': bank_account, 'amount': amount * -sign})
@@ -519,7 +516,7 @@ class Journal(object):
             except KeyError as e:
                 raise ParseException(line, e)
         try:
-            return abo.account.Account(label='gst')
+            return 'gst'
         except ValueError as e:
             raise ParseException(line, e)
 
@@ -535,15 +532,21 @@ class Journal(object):
             except KeyError as e:
                 raise ParseException(line, e)
         try:
-            return abo.account.Account(label='gst')
+            return 'gst'
         except ValueError as e:
             raise ParseException(line, e)
 
-    def _parse_account_label(self, line):
-        try:
-            return self.chart[str(line.text)] if self.chart else abo.account.Account(label=str(line.text))
-        except (ValueError, KeyError) as e:
-            raise ParseException(line, e)
+    def _parse_account_label(self, text):
+        if self.chart:
+            try:
+                account = self.chart[str(text)]
+            except (ValueError, KeyError) as e:
+                raise ParseException(text, e)
+            if not account.is_substantial():
+                raise ParseException(text, 'insubstantial account %r' % account.label)
+            return account
+        else:
+            return str(text)
 
     def _parse_money(self, line):
         try:
@@ -555,12 +558,7 @@ class Journal(object):
         entry = {'line': line}
         word, text = self._popword(str(line.text))
         assert word, "line.text=%r word=%r" % (line.text, word,)
-        try:
-            entry['account'] = self.chart[word] if self.chart else abo.account.Account(label=word)
-        except (KeyError, ValueError) as e:
-            raise ParseException(line, e)
-        if not entry['account'].is_substantial():
-            raise ParseException(line, 'insubstantial account %r' % str(entry['account']))
+        entry['account'] = self._parse_account_label(word)
         money = None
         word, detail = self._popword(text)
         if word and self.appears_money(word):
@@ -606,8 +604,8 @@ __test__ = {
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who='Somebody', what='something',
-    entries=(Entry(account=':food', amount=Money.AUD(-10.00)),
-             Entry(account=':bank', amount=Money.AUD(10.00))))]
+    entries=(Entry(account='food', amount=Money.AUD(-10.00)),
+             Entry(account='bank', amount=Money.AUD(10.00))))]
 
 >>> list(Journal(_testconfig, r'''
 ... type transaction
@@ -620,9 +618,9 @@ __test__ = {
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 22),
     who='Somebody Else', what='another thing',
-    entries=(Entry(account=':food', amount=Money.AUD(-7.00)),
-             Entry(account=':drink', amount=Money.AUD(-3.00), detail='beer'),
-             Entry(account=':bank', amount=Money.AUD(10.00))))]
+    entries=(Entry(account='food', amount=Money.AUD(-7.00)),
+             Entry(account='drink', amount=Money.AUD(-3.00), detail='beer'),
+             Entry(account='bank', amount=Money.AUD(10.00))))]
 
 >>> list(Journal(_testconfig, r'''
 ... type transaction
@@ -637,10 +635,10 @@ __test__ = {
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 23),
     who='Whoever', what='whatever',
-    entries=(Entry(account=':food', amount=Money.AUD(-7.00)),
-             Entry(account=':drink', amount=Money.AUD(-3.00), detail='beer'),
-             Entry(account=':cash', amount=Money.AUD(2.00)),
-             Entry(account=':bank', amount=Money.AUD(8.00))))]
+    entries=(Entry(account='food', amount=Money.AUD(-7.00)),
+             Entry(account='drink', amount=Money.AUD(-3.00), detail='beer'),
+             Entry(account='cash', amount=Money.AUD(2.00)),
+             Entry(account='bank', amount=Money.AUD(8.00))))]
 
 >>> list(Journal(_testconfig, r'''
 ... %default type transaction
@@ -656,9 +654,9 @@ __test__ = {
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 23),
     who='Whoever', what='whatever',
-    entries=(Entry(account=':food', amount=Money.AUD(-7.00)),
-             Entry(account=':drink', amount=Money.AUD(-3.00), detail='beer'),
-             Entry(account=':cash', amount=Money.AUD(10.00))))]
+    entries=(Entry(account='food', amount=Money.AUD(-7.00)),
+             Entry(account='drink', amount=Money.AUD(-3.00), detail='beer'),
+             Entry(account='cash', amount=Money.AUD(10.00))))]
 
 >>> list(Journal(_testconfig, r'''
 ... date 23/2/2013
@@ -709,8 +707,8 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who='Somebody', what='something',
-    entries=(Entry(account=':food', amount=Money.AUD(-10.00)),
-             Entry(account=':bank', amount=Money.AUD(10.00))))]
+    entries=(Entry(account='food', amount=Money.AUD(-10.00)),
+             Entry(account='bank', amount=Money.AUD(10.00))))]
 
 """,
 'invoice':r"""
@@ -727,8 +725,8 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
     who='Somebody', what='something',
-    entries=(Entry(account=':body', amount=Money.AUD(-100.00), cdate=datetime.date(2013, 3, 21)),
-             Entry(account=':thing', amount=Money.AUD(100.00), detail='comment')))]
+    entries=(Entry(account='body', amount=Money.AUD(-100.00), cdate=datetime.date(2013, 3, 21)),
+             Entry(account='thing', amount=Money.AUD(100.00), detail='comment')))]
 
 """,
 'bill':r"""
@@ -747,10 +745,10 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 1),
     who='Somebody', what='something',
-    entries=(Entry(account=':thing', amount=Money.AUD(-0.89), detail='comment'),
-             Entry(account=':gst', amount=Money.AUD(-0.11)),
-             Entry(account=':round', amount=Money.AUD(-0.01), detail='oops'),
-             Entry(account=':body', amount=Money.AUD(1.01), cdate=datetime.date(2013, 2, 15))))]
+    entries=(Entry(account='thing', amount=Money.AUD(-0.89), detail='comment'),
+             Entry(account='gst', amount=Money.AUD(-0.11)),
+             Entry(account='round', amount=Money.AUD(-0.01), detail='oops'),
+             Entry(account='body', amount=Money.AUD(1.01), cdate=datetime.date(2013, 2, 15))))]
 
 """,
 'remittance':r"""
@@ -766,8 +764,8 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who='Somebody', what='something',
-    entries=(Entry(account=':body', amount=Money.AUD(-1.01)),
-             Entry(account=':cash', amount=Money.AUD(1.01))))]
+    entries=(Entry(account='body', amount=Money.AUD(-1.01)),
+             Entry(account='cash', amount=Money.AUD(1.01))))]
 
 """,
 'receipt':r"""
@@ -783,8 +781,8 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who='Somebody', what='something',
-    entries=(Entry(account=':cash', amount=Money.AUD(-55.65)),
-             Entry(account=':body', amount=Money.AUD(55.65))))]
+    entries=(Entry(account='cash', amount=Money.AUD(-55.65)),
+             Entry(account='body', amount=Money.AUD(55.65))))]
 
 """,
 'filter':r"""
@@ -802,8 +800,8 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 15),
     who='any body', what='any thing',
-    entries=(Entry(account=':cash', amount=Money.AUD(-55.65)),
-             Entry(account=':body', amount=Money.AUD(55.65))))]
+    entries=(Entry(account='cash', amount=Money.AUD(-55.65)),
+             Entry(account='body', amount=Money.AUD(55.65))))]
 
 """,
 'period':r"""
@@ -820,8 +818,8 @@ abo.journal.ParseException: StringIO, 8: spurious 'item' tag
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 28),
     who='Somebody', what='something',
-    entries=(Entry(account=':food', amount=Money.AUD(-10.00)),
-             Entry(account=':bank', amount=Money.AUD(10.00))))]
+    entries=(Entry(account='food', amount=Money.AUD(-10.00)),
+             Entry(account='bank', amount=Money.AUD(10.00))))]
 
 >>> list(Journal(_testconfig, r'''
 ... %period 1/7/2012 30/6/2013
