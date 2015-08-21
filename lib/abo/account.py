@@ -57,23 +57,39 @@ class Account(object):
     r"""Account objects are related hierarchically with any number of root
     Accounts.
 
-    >>> a = Account(label='a')
-    >>> b = Account(label='b', parent=a, tags=['x'])
-    >>> c = Account(label='c', parent=b, tags=['y'])
+    >>> a = Account(label='a', name='Able')
+    >>> b = Account(label='b', name='Baker', parent=a, tags=['x'])
+    >>> c = Account(label='c', name='Charlie', parent=b, tags=['y'])
     >>> d = Account(label='d', parent=a, atype=AccountType.ProfitLoss)
     >>> e = Account(label='e', tags=['a', 'b'])
     >>> c
-    Account(label='c', parent=Account(label='b', parent=Account(label='a'), tags=('x',)), tags=('x', 'y'))
+    Account(label='c', name='Charlie', parent=Account(label='b', name='Baker', parent=Account(label='a', name='Able'), tags=('x',)), tags=('x', 'y'))
     >>> c.bare_name()
-    'c'
+    'Charlie'
     >>> c.full_name()
-    ':a:b:c'
+    ':Able:Baker:Charlie'
+    >>> for name in c.all_full_names(): print(name)
+    c
+    b:c
+    a:b:c
+    :a:b:c
+    :Able:b:c
+    a:Baker:c
+    :a:Baker:c
+    :Able:Baker:c
+    b:Charlie
+    a:b:Charlie
+    :a:b:Charlie
+    :Able:b:Charlie
+    a:Baker:Charlie
+    :a:Baker:Charlie
+    :Able:Baker:Charlie
     >>> d
-    Account(label='d', parent=Account(label='a'), atype=AccountType.ProfitLoss)
+    Account(label='d', parent=Account(label='a', name='Able'), atype=AccountType.ProfitLoss)
     >>> c.relative_name(a)
-    'b:c'
+    'Baker:Charlie'
     >>> c.relative_name(b)
-    'c'
+    'Charlie'
     >>> a in c
     False
     >>> c in a
@@ -106,7 +122,7 @@ class Account(object):
     >>> import pickle
     >>> import abo.account
     >>> pickle.loads(pickle.dumps(d, 2))
-    Account(label='d', parent=Account(label='a'), atype=AccountType.ProfitLoss)
+    Account(label='d', parent=Account(label='a', name='Able'), atype=AccountType.ProfitLoss)
     >>> pickle.loads(pickle.dumps(d, 2)) == d
     True
 
@@ -242,15 +258,21 @@ class Account(object):
     def loan_parent(self):
         return None if not self.is_loan() else self if self.parent is None or not self.parent.is_loan() else self.parent.loan_parent()
 
-    def all_full_names(self):
+    def all_bare_names(self):
         if self.label:
             yield self.label
         if self.name:
+            yield self.name
+
+    def all_full_names(self):
+        if self.label:
+            yield self.label
+        for name in self.all_bare_names():
             if self.parent:
                 for pname in self.parent.all_full_names():
-                    yield pname + ':' + self.name
+                    yield pname + ':' + name
             else:
-                yield ':' + self.name
+                yield ':' + name
 
     def make_child(self, name=None, label=None, atype=None, tags=()):
         return type(self)(name=name, label=label, atype=self.atype, tags=tags, parent=self)
