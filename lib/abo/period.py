@@ -195,6 +195,33 @@ def parse_whens(args):
      datetime.date(2012, 12, 31)]
     >>> parse_whens(['end', 'last', 'three', 'fys', 'yearly']) #doctest: +NORMALIZE_WHITESPACE
     [datetime.date(2010, 6, 30), datetime.date(2011, 6, 30), datetime.date(2012, 6, 30)]
+    >>> parse_whens(['2nd', 'friday', 'in', 'this', 'fy', 'fortnightly']) #doctest: +NORMALIZE_WHITESPACE
+    [datetime.date(2012, 7, 13),
+     datetime.date(2012, 7, 27),
+     datetime.date(2012, 8, 10),
+     datetime.date(2012, 8, 24),
+     datetime.date(2012, 9, 7),
+     datetime.date(2012, 9, 21),
+     datetime.date(2012, 10, 5),
+     datetime.date(2012, 10, 19),
+     datetime.date(2012, 11, 2),
+     datetime.date(2012, 11, 16),
+     datetime.date(2012, 11, 30),
+     datetime.date(2012, 12, 14),
+     datetime.date(2012, 12, 28),
+     datetime.date(2013, 1, 11),
+     datetime.date(2013, 1, 25),
+     datetime.date(2013, 2, 8),
+     datetime.date(2013, 2, 22),
+     datetime.date(2013, 3, 8),
+     datetime.date(2013, 3, 22),
+     datetime.date(2013, 4, 5),
+     datetime.date(2013, 4, 19),
+     datetime.date(2013, 5, 3),
+     datetime.date(2013, 5, 17),
+     datetime.date(2013, 5, 31),
+     datetime.date(2013, 6, 14),
+     datetime.date(2013, 6, 28)]
     """
     whens = _parse_whens(args)
     if args:
@@ -224,6 +251,17 @@ def parse_when(args):
     datetime.date(2013, 3, 31)
     >>> parse_when(['start', 'of', 'this', 'month'])
     datetime.date(2013, 3, 1)
+    >>> parse_when(['first', 'wednesday', 'this', 'month'])
+    datetime.date(2013, 3, 6)
+    >>> parse_when(['4th', 'wednesday', 'this', 'month'])
+    datetime.date(2013, 3, 27)
+    >>> parse_when(['fifth', 'wednesday', 'this', 'month'])
+    Traceback (most recent call last):
+    ValueError: no fifth wednesday in period from 1/3/2013 to 31/3/2013
+    >>> parse_when(['50th', 'sunday', 'in', 'this', 'year'])
+    datetime.date(2013, 12, 15)
+    >>> parse_when(['last', 'sunday', 'this', 'year'])
+    datetime.date(2013, 12, 29)
     """
     whens = _parse_whens(args)
     if args:
@@ -370,7 +408,44 @@ def _parse_whens(args):
             periods = _parse_periods(args)
             whens += (period[1] if startend == 'end' else period[0] for period in periods)
         else:
-            whens.append(parse_date(args))
+            try:
+                ordinal = ''
+                which = 1
+                if args[0] != 'last':
+                    which = parse_ordinal(args[0])
+                    ordinal = args.pop(0)
+            except (IndexError, ValueError):
+                whens.append(parse_date(args))
+            else:
+                last = ''
+                if args and args[0] == 'last':
+                    last = args.pop(0)
+                if not args:
+                    raise ValueError('missing day name after ' + ' '.join(repr(w) for w in [ordinal, last] if w))
+                weekday = parse_weekday_name(args[0])
+                weekday_name = args.pop(0)
+                of = ''
+                if args and args[0] in ('in', 'of'):
+                    of = args.pop(0)
+                if not args:
+                    raise ValueError('missing period after ' + ' '.join(repr(w) for w in [ordinal, last, weekday_name, of] if w))
+                periods = _parse_periods(args)
+                for start, end in periods:
+                    if last:
+                        day = end - timedelta((start.weekday() - weekday + 7) % 7) - timedelta(7) * (which - 1)
+                        if day < start:
+                            raise ValueError('no %s in period from %s to %s' % (
+                                ' '.join(w for w in [ordinal, last, weekday_name] if w),
+                                start.strftime('%-d/%-m/%Y'),
+                                end.strftime('%-d/%-m/%Y')))
+                    else:
+                        day = start + timedelta((weekday + 7 - start.weekday()) % 7) + timedelta(7) * (which - 1)
+                        if day > end:
+                            raise ValueError('no %s in period from %s to %s' % (
+                                ' '.join(w for w in [ordinal, weekday_name] if w),
+                                start.strftime('%-d/%-m/%Y'),
+                                end.strftime('%-d/%-m/%Y')))
+                    whens.append(day)
     return whens
 
 def parse_fromto(args):
@@ -581,6 +656,32 @@ def advance_date_unit(start, unit, amount):
     else:
         raise ValueError("unrecognised unit %r" % (unit,))
 
+def parse_weekday_name(word):
+    r'''
+    >>> parse_weekday_name('monday')
+    0
+    >>> parse_weekday_name('friday')
+    4
+    >>> parse_weekday_name('Sun')
+    6
+    >>> parse_weekday_name('tues')
+    1
+    >>> parse_weekday_name('tuesd')
+    Traceback (most recent call last):
+    ValueError: unrecognised day 'tuesd'
+    '''
+    try:
+        return {'mon': 0, 'monday': 0,
+                'tue': 1, 'tues': 1, 'tuesday': 1,
+                'wed': 2, 'wednesday': 2,
+                'thu': 3, 'thurs': 3, 'thursday': 3,
+                'fri': 4, 'friday': 4,
+                'sat': 5, 'saturday': 5,
+                'sun': 6, 'sunday': 6}[word.lower()]
+    except KeyError:
+        pass
+    raise ValueError("unrecognised day %r" % (word,))
+
 def parse_monthname(s):
     try:
         return datetime.strptime(s, '%B').month
@@ -610,6 +711,37 @@ def parse_amount(word):
                     'eleven': 11, 'twelve': 12}[word]
         except KeyError:
             raise ValueError("unrecognised amount %r" % (word,))
+
+def parse_ordinal(word):
+    r'''
+    >>> parse_ordinal('1st')
+    1
+    >>> parse_ordinal('101st')
+    101
+    >>> parse_ordinal('eleventh')
+    11
+    >>> parse_ordinal('0th')
+    Traceback (most recent call last):
+    ValueError: unrecognised ordinal '0th'
+    >>> parse_ordinal('50th')
+    50
+    '''
+    if (    ((   word.endswith('1st') or word.endswith('2nd') or word.endswith('3rd')
+              or word.endswith('4th') or word.endswith('5th') or word.endswith('6th')
+              or word.endswith('7th') or word.endswith('8th') or word.endswith('9th')
+              or word.endswith('0th')) and word[:-2].isdigit())
+         or word in ('11th', '12th', '13th')):
+        amount = int(word[:-2])
+        if amount:
+            return amount
+    else:
+        try:
+            return {'first': 1, 'second': 2, 'third': 3, 'fourth':4, 'fifth':5,
+                    'sixth': 6, 'seventh': 7, 'eighth': 8, 'ninth': 9, 'tenth': 10,
+                    'eleventh': 11, 'twelfth': 12}[word]
+        except KeyError:
+            pass
+    raise ValueError("unrecognised ordinal %r" % (word,))
 
 def advance_date(start, months=0, quarters=0, years=0):
     y = start.year + years
