@@ -46,6 +46,17 @@ def parse_periods(args):
     >>> parse_periods(['last', 'fy'])
     [(datetime.date(2011, 7, 1), datetime.date(2012, 6, 30))]
 
+    >>> parse_periods(['fys', '2005-2010'])
+    [(datetime.date(2004, 7, 1), datetime.date(2010, 6, 30))]
+
+    >>> parse_periods(['fys', '2005-2010', 'yearly']) #doctest: +NORMALIZE_WHITESPACE
+    [(datetime.date(2004, 7, 1), datetime.date(2005, 6, 30)),
+     (datetime.date(2005, 7, 1), datetime.date(2006, 6, 30)),
+     (datetime.date(2006, 7, 1), datetime.date(2007, 6, 30)),
+     (datetime.date(2007, 7, 1), datetime.date(2008, 6, 30)),
+     (datetime.date(2008, 7, 1), datetime.date(2009, 6, 30)),
+     (datetime.date(2009, 7, 1), datetime.date(2010, 6, 30))]
+
     >>> parse_periods(['next', 'month'])
     [(datetime.date(2013, 4, 1), datetime.date(2013, 4, 30))]
 
@@ -394,6 +405,15 @@ def _parse_period(args):
         if unit[0] == 'q':
             start, end = quarter_of_fy_starting(start, int(unit[1]))
         return start, end
+    elif args[0] == 'fys':
+        args.pop(0)
+        if not args:
+            raise ValueError("missing argument after 'fys'")
+        first, last = parse_range(args[0], parse_year)
+        if first >= last:
+            raise ValueError("invalid range %r", args[0])
+        args.pop(0)
+        return fy_ending_in(first)[0], fy_ending_in(last)[1]
     else:
         return parse_fromto(args)
 
@@ -711,6 +731,13 @@ def parse_amount(word):
                     'eleven': 11, 'twelve': 12}[word]
         except KeyError:
             raise ValueError("unrecognised amount %r" % (word,))
+
+def parse_range(word, parser):
+    try:
+        first, second = word.split('-', 1)
+    except ValueError:
+        raise ValueError("not a range %r" % (word,))
+    return parser(first), parser(second)
 
 def parse_ordinal(word):
     r'''
