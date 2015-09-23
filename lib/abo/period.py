@@ -25,6 +25,15 @@ def parse_periods(args):
     >>> parse_periods(['from', '1/3/2012', 'to', '16/3/2013'])
     [(datetime.date(2012, 3, 1), datetime.date(2013, 3, 16))]
 
+    >>> parse_periods(['to', 'end', 'this', 'year'])
+    [(None, datetime.date(2013, 12, 31))]
+
+    >>> parse_periods(['year', '2011'])
+    [(datetime.date(2011, 1, 1), datetime.date(2011, 12, 31))]
+
+    >>> parse_periods(['2014'])
+    [(datetime.date(2014, 1, 1), datetime.date(2014, 12, 31))]
+
     >>> parse_periods(['from', 'end', 'last', 'year', 'to', 'start', 'next', 'year'])
     [(datetime.date(2012, 12, 31), datetime.date(2014, 1, 1))]
 
@@ -59,6 +68,18 @@ def parse_periods(args):
 
     >>> parse_periods(['next', 'month'])
     [(datetime.date(2013, 4, 1), datetime.date(2013, 4, 30))]
+
+    >>> parse_periods(['next', 'feb'])
+    [(datetime.date(2014, 2, 1), datetime.date(2014, 2, 28))]
+
+    >>> parse_periods(['jan'])
+    [(datetime.date(2013, 1, 1), datetime.date(2013, 1, 31))]
+
+    >>> parse_periods(['nov'])
+    [(datetime.date(2013, 11, 1), datetime.date(2013, 11, 30))]
+
+    >>> parse_periods(['apr', '2010'])
+    [(datetime.date(2010, 4, 1), datetime.date(2010, 4, 30))]
 
     >>> parse_periods(['this', 'week'])
     [(datetime.date(2013, 3, 18), datetime.date(2013, 3, 24))]
@@ -254,6 +275,8 @@ def parse_when(args):
     datetime.date(2012, 1, 1)
     >>> parse_when(['end', 'this', 'fy'])
     datetime.date(2013, 6, 30)
+    >>> parse_when(['end', 'this', 'year'])
+    datetime.date(2013, 12, 31)
     >>> parse_when(['eofy'])
     datetime.date(2013, 6, 30)
     >>> parse_when(['eofy', '2010'])
@@ -414,7 +437,39 @@ def _parse_period(args):
             raise ValueError("invalid range %r", args[0])
         args.pop(0)
         return fy_ending_in(first)[0], fy_ending_in(last)[1]
+    elif args[0] in ('y', 'year'):
+        unit = args.pop(0)
+        if not args:
+            raise ValueError("missing argument after %r" % unit)
+        year = parse_year(args[0])
+        args.pop(0)
+        start = date(year, 1, 1)
+        end = date(year, 12, 31)
+        return start, end
     else:
+        try:
+            year = parse_year(args[0])
+            args.pop(0)
+            start = date(year, 1, 1)
+            end = date(year, 12, 31)
+            return start, end
+        except ValueError:
+            pass
+        try:
+            month = parse_monthname(args[0])
+            args.pop(0)
+            year = _today().year
+            if args:
+                try:
+                    year = parse_year(args[0])
+                    args.pop(0)
+                except ValueError:
+                    pass
+            start = date(year, month, 1)
+            end = advance_date(start, months=1) - timedelta(1)
+            return start, end
+        except ValueError:
+            pass
         return parse_fromto(args)
 
 def _parse_whens(args):

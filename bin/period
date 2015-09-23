@@ -35,7 +35,7 @@ def main():
 	print
 
 def format_date(d):
-	return d.strftime('%-d/%-m/%Y')
+	return d.strftime('%-d/%-m/%Y') if d is not None else '.'
 
 if __name__ == '__main__':
 	main()
