@@ -279,7 +279,7 @@ class Transaction(abo.base.Base):
                 e = Entry(self, **e)
                 ents.append(e)
             bal += e.amount
-        assert bal == 0, 'entries sum to zero'
+        assert bal == 0, 'entries sum to %s, should be zero' % bal
         self.entries = tuple(sorted(ents, key=lambda e: (e.amount, e.account, e.detail)))
 
     def __repr__(self):

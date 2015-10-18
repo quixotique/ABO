@@ -111,6 +111,7 @@ if __name__ == "__main__":
     abo.journal._testconfig = abo.config.Config()
     doctest.testmod(abo.journal)
 
+import sys
 import logging
 import os
 import re
@@ -121,12 +122,12 @@ import copy
 from abo.transaction import Transaction
 import abo.account
 import abo.text
-from abo.text import LineError
+import abo.text
 from abo.types import struct
 
-class ParseException(LineError):
+class ParseException(abo.text.LineError):
     def __init__(self, source, message):
-        LineError.__init__(self, str(message), line=source)
+        abo.text.LineError.__init__(self, str(message), line=source)
 
 class Journal(object):
 
@@ -274,10 +275,17 @@ class Journal(object):
             elif ledger_date:
                 kwargs = self._parse_ledger_block(ledger_date, ledger_what, ledger_lines)
             if kwargs:
+                line = firstline or ledger_lines[0]
+                if len(kwargs['entries']) < 2:
+                    raise ParseException(line, 'too few entries')
                 for entry in kwargs['entries']:
                     del entry['line']
                 kwargs['is_projection'] = in_projection
-                yield Transaction(**kwargs)
+                try:
+                    yield Transaction(**kwargs)
+                except:
+                    abo.text.raise_with_context(line)
+                    raise
 
     _regex_ledger_due = re.compile(r'\s*{([^}]*)}\s*')
 
