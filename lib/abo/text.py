@@ -158,17 +158,24 @@ class numbered_line(str):
 class LineError(ValueError):
 
     def __init__(self, msg, line=None):
-        super(LineError, self).__init__(self.where(line, suffix=': ') + msg)
+        super(LineError, self).__init__(context_prefix(line) + msg)
         self.line = line
 
-    @classmethod
-    def where(cls, line, suffix=''):
-        r = []
-        if hasattr(line, 'name'):
-            r.append(str(line.name))
-        if hasattr(line, 'line_number'):
-            r.append(str(line.line_number))
-        return ', '.join(r) + (suffix if r else '')
+def context_prefix(line, suffix=': '):
+    r = []
+    if hasattr(line, 'name'):
+        r.append(str(line.name))
+    if hasattr(line, 'line_number'):
+        r.append(str(line.line_number))
+    return ', '.join(r) + (suffix if r else '')
+
+def raise_with_context(line):
+    import sys
+    exc = sys.exc_info()[1]
+    tb = sys.exc_info()[2]
+    if isinstance(exc, AssertionError):
+        raise type(exc)(context_prefix(line) + str(exc)).with_traceback(tb) from None
+    raise
 
 def line_blocks(lines):
     r"""Return an iterator over blocks of lines, where a block is a contiguous
