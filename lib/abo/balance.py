@@ -116,6 +116,9 @@ class Balance(object):
         self.pred = lambda a, m: True
         self._balances = None
 
+    def __repr__(self):
+        return 'Balance(%r)' % self.date_range
+
     def clone(self):
         copy = type(self)([])
         copy.date_range = self.date_range
@@ -175,6 +178,9 @@ class Range(object):
         self.first = first
         self.last = last
         assert self.first is None or self.last is None or self.first <= self.last
+
+    def __repr__(self):
+        return 'Range(%r, %r)' % (self.first, self.last)
 
     def __contains__(self, item):
         if self.first is not None and item < self.first:

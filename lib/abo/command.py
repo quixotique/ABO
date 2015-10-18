@@ -422,10 +422,13 @@ def cmd_balance(config, opts):
         for b in balances:
             yield ''
             yield b.date_range.last.strftime(r'%-d/%-m/%Y') + ' balance'
+            balance_check = 0
             for e in sorted((e for e in b.entries() if chart[e.account].is_substantial()), key=lambda e: (chart[e.account].short_name(), e.cdate or datetime.date.min, e.amount)):
+                balance_check += e.amount
                 yield (' ' + chart[e.account].short_name()
                            + '  ' + config.format_money(e.amount, symbol=False, thousands=False)
                            + (e.cdate.strftime(r' ; {%-d/%-m/%Y}') if e.cdate is not None else ''))
+            assert balance_check == 0, 'balance_check = %s' % balance_check
     else:
         display_accounts = sorted(filter_display_accounts(chain(*(b.accounts for b in balances)), opts))
         logging.debug('display_accounts = %r' % display_accounts)
@@ -445,10 +448,16 @@ def cmd_balance(config, opts):
         line.append('Account')
         yield fmt % tuple(line)
         yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
+        balance_check = defaultdict(lambda: 0)
         for account in display_accounts:
-            bals = tuple(b.balance(account) for b in balances)
-            if opts['--all'] or list(filter(bool, bals)):
-                yield fmt % (tuple(config.format_money(bal) for bal in bals) + (str(account),))
+            amts = [b.balance(account) for b in balances]
+            if opts['--all'] or list(filter(bool, amts)):
+                yield fmt % (tuple(config.format_money(bal) for bal in amts) + (str(account),))
+                for b, amt in zip(balances, amts):
+                    balance_check[b] += amt
+        for b in balances:
+            assert balance_check[b] == 0, 'balance_check[%r] = %s' % (b, balance_check[b])
+
         yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
 
 def cmd_due(config, opts):
