@@ -14,27 +14,37 @@ def main():
     result = Result()
     for path in sys.argv[1:]:
         result += process(path)
+    all_labels = set(result.totals.labels)
+    for report in result.reports.values():
+        all_labels |= set(report.labels)
     wds = 's' if result.working_days != 1 else ''
     dps = 's' if result.days_present != 1 else ''
-    print fmt % ('', '------', '')
-    print fmt % ('TOTAL', Duration.format(result.totals.minutes), '')
+    print pfmt % ('', '------')
+    print pfmt % ('TOTAL', Duration.format(result.totals.minutes))
     if result.working_days:
-        print fmt % ('AVERAGE', Duration.format(result.totals.minutes / result.working_days), ' per day over %u working day%s' % (result.working_days, wds))
+        print pfmt % ('AVERAGE', Duration.format(result.totals.minutes / result.working_days)) + ' per day over %u working day%s' % (result.working_days, wds)
     if result.days_present:
-        print fmt % ('AVERAGE', Duration.format(result.totals.minutes / result.days_present), ' per day over %u day%s present' % (result.days_present, dps))
-    print fmt % ('', '------', '')
-    for label, minutes in sorted(result.totals.labels.iteritems()):
-        if minutes:
-            print fmt % ('TASK', Duration.format(minutes), ' = ' + label)
-    for rlabel in result.reports:
-        print fmt % ('', '------', '')
-        total = sum(result.reports[rlabel].labels.itervalues())
-        print fmt % ('TOTAL ' + rlabel, Duration.format(total), '')
-        for label, minutes in sorted(result.reports[rlabel].labels.iteritems()):
-            if minutes:
-                print fmt % ('REPORT ' + rlabel, Duration.format(minutes), ' = ' + label)
+        print pfmt % ('AVERAGE', Duration.format(result.totals.minutes / result.days_present)) + ' per day over %u day%s present' % (result.days_present, dps)
+    w = str(max(map(len, all_labels)))
+    fmt = '%-' + w + '.' + w + 's  %8.8s' + ' %8.8s' * len(result.reports)
+    print
+    print fmt % (('', '') + tuple(result.reports))
+    print fmt % (('', '--------') + ('--------',) * len(result.reports))
+    def format_duration_or_none(minutes):
+        return Duration.format(minutes) if minutes is not None else '-'
+    total = 0
+    rtotal = [0] * len(result.reports)
+    for label in sorted(all_labels):
+        minutes = result.totals.labels.get(label)
+        rminutes = [v.labels.get(label) for v in result.reports.values()]
+        total += minutes
+        rtotal = [t + (m or 0) for t, m in zip(rtotal, rminutes)]
+        if [m for m in [minutes] + rminutes if m]:
+            print fmt % ((label, format_duration_or_none(minutes)) + tuple(format_duration_or_none(m) for m in rminutes))
+    print fmt % (('', '--------') + ('--------',) * len(result.reports))
+    print fmt % (('TOTAL', Duration.format(total)) + tuple(Duration.format(t) for t in rtotal))
 
-fmt = '%-16.16s  %6s%s'
+pfmt = '%-16.16s  %6s'
 
 def process(path):
     # First pass to discover all the labels to exclude.
@@ -67,18 +77,17 @@ def process(path):
                     notes.append(' - public holiday')
                 elif day.is_weekend:
                     notes.append(' - weekend')
-                print fmt % (
+                print pfmt % (
                         day.date.strftime('%a %_d %b %Y'),
-                        Duration.format(day.totals.minutes) if day.totals.minutes else 'no hours',
-                        ''.join(notes)
-                    )
+                        Duration.format(day.totals.minutes) if day.totals.minutes else 'no hours'
+                    ) + ''.join(notes)
                 result.add_day(day)
                 continue
             raise ParseError('malformed line', line=cursor.current())
         exclude = result.totals.slice(excluded_labels)
         for label, minutes in exclude.labels.iteritems():
             if minutes:
-                print fmt % ('EXCLUDE', '-' + Duration.format(minutes), ' = ' + label)
+                print pfmt % ('EXCLUDE', '-' + Duration.format(minutes)) + ' = ' + label
         result.totals -= exclude
         return result
     except ParseError, e:
