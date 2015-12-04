@@ -48,22 +48,31 @@ while [ $# -ne 0 ]; do
       line_length=28.2c
       options+=(-P-pa4)
       options+=(-P-l)
+      shift
       ;;
    -f+([0-9]))
       font_size="${1#-f}"
+      shift
       ;;
    -f*)
       fatal "malformed option: $1"
       ;;
-   --) shift; break;;
-   *) options+=("$1");;
+   -*)
+      options+=("$1")
+      shift
+      ;;
+   --)
+      shift
+      break
+      ;;
+   *)
+      break
+      ;;
    esac
-   shift
 done
 vertical_space=$((font_size + 1))
 
 {
-
    cat <<EOF
 .fp 1 CR
 .fp 2 CI
