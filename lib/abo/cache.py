@@ -83,8 +83,12 @@ def chart_cache(config, opts=None):
             import abo.account
             chart = abo.account.Chart.from_file(config.open(config.chart_file_path))
             if chart.has_wild_account():
+                # Iterate over all accounts named in all transactions, in order to
+                # instantiate all wild accounts.
                 for tc in transaction_caches(chart, config, opts):
-                    tc.get()
+                    for t in tc.transactions():
+                        for e in t.entries:
+                            chart[e.account]
             return chart
         _chart_cache = FileCache(config, config.chart_file_path, compile_chart, config.journal_file_paths, force=opts and opts['--force'])
     return _chart_cache
