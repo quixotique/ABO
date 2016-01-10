@@ -460,52 +460,60 @@ def cmd_balance(config, opts):
 
         yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
 
-def cmd_due(config, opts):
-    chart = get_chart(config, opts)
-    selected_accounts = select_accounts(chart, opts)
-    when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
-    transactions = (t for t in get_transactions(chart, config, opts))
-    accounts = defaultdict(lambda: [])
+def compute_due_accounts(chart, transactions, selected_accounts=None):
     due_accounts = set()
+    accounts = defaultdict(lambda: [])
     for t in transactions:
         for e in t.entries:
             account = chart[e.account]
-            if account in selected_accounts:
+            if not selected_accounts or account in selected_accounts:
                 if account.is_accrual():
                     account = account.accrual_parent()
                     due_accounts.add(account)
                 elif e.cdate:
                     due_accounts.add(account)
                 accounts[account].append(e)
+    return dict((account, entries) for account, entries in accounts.items() if account in due_accounts)
+
+def compute_dues(due_accounts, when):
     due_all = []
-    for account, entries in accounts.items():
-        if account in due_accounts:
-            entries.sort(key=lambda e: e.cdate or e.transaction.date)
-            due = defaultdict(lambda: struct(account=account, entries=[]))
-            for e in entries:
-                date = e.cdate or when #e.transaction.date
-                amount = e.amount
-                while amount and due:
-                    earliest = sorted(due)[0]
-                    if sign(due[earliest].entries[0].amount) == sign(amount):
+    for account, entries in due_accounts.items():
+        entries.sort(key=lambda e: e.cdate or e.transaction.date)
+        due = defaultdict(lambda: struct(account=account, entries=[]))
+        for e in entries:
+            date = e.cdate or when #e.transaction.date
+            amount = e.amount
+            while amount and due:
+                earliest = sorted(due)[0]
+                if sign(due[earliest].entries[0].amount) == sign(amount):
+                    break
+                while abs(amount) >= abs(due[earliest].entries[0].amount):
+                    amount += due[earliest].entries.pop(0).amount
+                    if not due[earliest].entries:
+                        del due[earliest]
                         break
-                    while abs(amount) >= abs(due[earliest].entries[0].amount):
-                        amount += due[earliest].entries.pop(0).amount
-                        if not due[earliest].entries:
-                            del due[earliest]
-                            break
-                    if amount and earliest in due:
-                        e1 = due[earliest].entries[0]
-                        assert abs(amount) < abs(e1.amount)
-                        due[earliest].entries[0] = e1.replace(amount= e1.amount + amount)._attach(e1.transaction)
-                        amount = 0
-                if amount:
-                    due[date].entries.append(e.replace(amount= amount)._attach(e.transaction))
-            due_all += list(due.items())
+                if amount and earliest in due:
+                    e1 = due[earliest].entries[0]
+                    assert abs(amount) < abs(e1.amount)
+                    due[earliest].entries[0] = e1.replace(amount= e1.amount + amount)._attach(e1.transaction)
+                    amount = 0
+            if amount:
+                due[date].entries.append(e.replace(amount= amount)._attach(e.transaction))
+        due_all += list(due.items())
     due_all.sort(key=lambda a: (a[0], sum(e.amount for e in a[1].entries)))
+    return due_all
+
+def cmd_due(config, opts):
+    chart = get_chart(config, opts)
+    selected_accounts = select_accounts(chart, opts)
+    when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
+    transactions = (t for t in get_transactions(chart, config, opts))
+    due_accounts = compute_due_accounts(chart, transactions, selected_accounts)
     bw = config.money_column_width()
     fmt = '%s %s %{bw}s  %s'.format(**locals())
-    for date, due in due_all:
+    for date, due in compute_dues(due_accounts, when):
+        if opts['--over'] and date >= datetime.date.today():
+            continue
         for e in due.entries:
             assert chart[e.account] in due.account, 'e.account=%r account=%r' % (chart[e.account], due.account)
         balance = sum(e.amount for e in due.entries)
@@ -526,6 +534,56 @@ def cmd_due(config, opts):
                      '*' if date < when else '=' if date == when else ' ',
                      config.format_money(balance),
                      '; '.join([account] + details))
+
+def cmd_table(config, opts):
+    chart = get_chart(config, opts)
+    selected_accounts = select_accounts(chart, opts)
+    when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
+    transactions = (t for t in get_transactions(chart, config, opts))
+    due_accounts = compute_due_accounts(chart, transactions, selected_accounts)
+    # Accumulate due amounts into the table
+    slot_headings = ['1+ year',    '6+ months',    '3+ months',    '2+ months',    '1+ month',    '< 1 month', 'future']
+    slot_whens =    ['1 year ago', '6 months ago', '3 months ago', '2 months ago', '1 month ago', 'today']
+    slot_dates = [abo.period.parse_when(when.split()) for when in slot_whens]
+    table = defaultdict(lambda: [0] * len(slot_headings))
+    totals = [0] * len(slot_headings)
+    usedcols = [False] * len(slot_headings)
+    accounts = []
+    accountset = set()
+    for date, due in compute_dues(due_accounts, when):
+        if opts['--over'] and date >= datetime.date.today():
+            continue
+        slot = next((i for i, sdate in enumerate(slot_dates) if date <= sdate), len(slot_dates))
+        for e in due.entries:
+            assert chart[e.account] in due.account, 'e.account=%r account=%r' % (chart[e.account], due.account)
+            table[due.account][slot] += e.amount
+            totals[slot] += e.amount
+            usedcols[slot] = True
+        if due.account not in accountset:
+            accounts.append(due.account)
+            accountset.add(due.account)
+    # Remove empty columns
+    slot = 0
+    for used in usedcols:
+        if not used:
+            del slot_headings[slot]
+            for account, tablerow in table.items():
+                del tablerow[slot]
+            del totals[slot]
+        else:
+            slot += 1
+    # Print the table
+    bw = config.money_column_width()
+    fmt = ('%{bw}s ' * len(slot_headings) + ' %s').format(**locals())
+    if not opts['--bare']:
+        yield fmt % (tuple(slot_headings) + ('',))
+        yield fmt % (('-' * bw,) * len(slot_headings) + ('',))
+    for account in accounts:
+        name = account.label if opts['--labels'] and account.label else str(account)
+        yield fmt % (tuple(config.format_money(amt) if amt else '-  ' for amt in table[account]) + (name,))
+    if not opts['--bare']:
+        yield fmt % (('-' * bw,) * len(slot_headings) + ('',))
+        yield fmt % (tuple(config.format_money(amt) if amt else '-  ' for amt in totals) + ('',))
 
 def cmd_check(config, opts):
     bw = max(8, config.balance_column_width())
