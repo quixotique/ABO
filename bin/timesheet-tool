@@ -343,12 +343,11 @@ class Block(object):
             if firstline is None:
                 firstline = cursor.current()
             bl = BlockLine.parse(cursor.current(), tasklabel=block.tasklabel, wildlabel=block.wildlabel)
-            if bl.tasklabel:
-                block.tasklabel = bl.tasklabel
+            block.tasklabel = bl.tasklabel
             if bl.wildlabel:
                 if block.wildlabel and bl.wildlabel != block.wildlabel:
                     raise ParseError('conflicting labels for [*]', line=firstline)
-                block.wildlabel = bl.wildlabel
+            block.wildlabel = bl.wildlabel
             block.totals += bl.totals
             for label in bl.reports:
                 block.reports[label] += bl.reports[label]
@@ -442,6 +441,8 @@ class BlockLine(object):
                     rminutes = None
                 rminutes = (rminutes or 0) + r.minutes
                 bl.totals.add(r.minutes, label=label)
+                bl.tasklabel = None
+                bl.wildlabel = None
                 lastpos = r.end
                 r = Range.parse(line, lastpos)
         return bl
