@@ -270,7 +270,7 @@ class API_Invoice(API_Movement):
                                     description= 'Invoice ' + ref)
         self.ref = ref
         self.account = api_account
-        self._entries = tuple(entries)
+        self._entries = tuple(sorted(entries, key=lambda e: (e.cdate or datetime.date.min, e.transaction.description(), e.detail, e.amount)))
         invref = 'inv:' + ref
         for e in self._entries:
             assert self._api._chart[e.account] in self.account._account
@@ -375,3 +375,4 @@ class API_Entry(API_Movement):
         self.transaction = trans
         self.account = self._api.account(entry.account)
         self.invoice_ref = API_Invoice._extract_ref(entry)
+        self.due_date = entry.cdate
