@@ -626,8 +626,10 @@ def cmd_mako(config, opts):
     sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'mako'))
     import mako
     from mako.template import Template
+    from mako.lookup import TemplateLookup
+    lookup = TemplateLookup(directories= ['.', '/'] + opts['--template-dir'])
     import abo.api
-    output = Template(filename=os.path.abspath(opts['<template>'])).render_unicode(
+    output = Template(filename=os.path.abspath(opts['<template>']), lookup=lookup).render_unicode(
             *opts['<args>'],
             abo= abo.api.API(config, opts),
             m= abo.api.API.money_format_factory(),

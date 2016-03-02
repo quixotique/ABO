@@ -13,7 +13,7 @@ r'''Usage:
     pyabo chart [-fvqD] [--select=PRED]
     pyabo index [-fqD]
     pyabo check [-efqD]
-    pyabo mako [-fqD] [--remove=PRED...] <template> [<args>...]
+    pyabo mako [-fqD] [--remove=PRED...] [--template-dir=DIR...] <template> [<args>...]
     pyabo compa <command> <word> <preword>
     pyabo -h | --help
     pyabo --version
