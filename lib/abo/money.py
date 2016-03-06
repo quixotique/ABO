@@ -420,7 +420,7 @@ class Money(object):
         if currency is None:
             currency, number = Currency.extract_currency(text)
             if currency is None:
-                raise ValueError('invalid literal for %r.from_text(currency=None): %r' % (type(self).__name__, text,))
+                raise ValueError('invalid literal for %s.from_text(currency=None): %r' % (cls.__name__, text,))
         else:
             number = text
         return currency.money(currency.parse_amount(number))
