@@ -1,0 +1,260 @@
+.de !t		\" top-of-page trap
+'sp |1.5c
+.wh -2c !b
+.ns
+.+C \" multi-column support
+.+T \" tbl heading support
+..
+.de !b		\" bottom-of-page trap
+.mk !
+.-C \" multi-column support
+.mk .
+.if \\n.>=\\n! \{\
+.	wh -2c
+'	sp |\\n(.pu-1.2c
+.	if \\n(p? .tl ''- \\n% -''
+'	bp
+.\}
+..
+.wh 0 !t
+.em !e
+.de !e
+.$C \" multi-column support
+..
+.\"	.FAX
+.de Fax
+.ds FX "\\$*
+..
+.\"	.ACN
+.de ACN
+.ds CN "\\$*
+..
+.\"
+.\"	._end
+.\"
+.de _end
+.if \\n(d.>0 \{\
+.	it 0 ~b
+.	in 0
+.	ta 5m +3n
+.	nr ^ .6v
+.	if !''\\*(CN' \{\
+.		sp \\n^u
+.		nr ^ 0
+A.C.N.	\\*(CN
+.		br
+.	\}
+.	if !''\\*(FX' \{\
+.		sp \\n^u
+.		nr ^ 0
+Fax	\\*(FX
+.		br
+.	\}
+.	ds CN "
+.	ds FX "
+.	di
+.	if \\n(d.=1 \{\
+.		nr s^ \\n(dn
+.		if \\n(dl>\\n(BW .tm Warning: Supplier address too wide
+.	\}
+.	if \\n(d.=2 \{\
+.		nr c^ \\n(dn
+.		if \\n(dl>\\n(BW .tm Warning: Customer address too wide
+.	\}
+.	nr d. 0
+.\}
+..
+.de ~b
+.br
+.ti 0
+.it 1 ~b
+..
+.\"
+.\"	.Supplier
+.\"
+.de Supplier
+._end
+.fi
+.ad l
+.ll \\n(BWu
+.in 3n
+.ti 0
+.di S'
+.nr d. 1
+.it 1 ~b
+..
+.\"
+.\"	.Customer
+.\"
+.de Customer
+._end
+.fi
+.ad l
+.ll \\n(BWu
+.in 3n
+.ti 0
+.di C'
+.nr d. 2
+.it 1 ~b
+..
+.de ATTN
+._end
+.ds AT "\\$*
+..
+.de Ref
+._end
+.ds RE "\\$*
+..
+.de Date
+._end
+.ds DA "\\$*
+..
+.de Who
+._end
+.ds WH "\\$*
+..
+.de left
+\h'-\w@\\$1@u'\\$1\c
+..
+.de right
+\h'\\$2-\w@\\$1@u'\\$1\c
+..
+.de Start
+._end
+.ll \\n(LLu
+.in 0
+.ps +4
+.ft 3
+.ce 1
+R  E  C  E  I  P  T
+.ft
+.ps
+.sp 2c
+.nr ^ \\n(s^+0.4v
+.nr > \\n(BWu+2n
+SUPPLIER
+.br
+.mk a
+.sp -.6v
+.nf
+\h'|0'\D'l \\n>u 0'\D'l 0 \\n^u'\D'l -\\n>u 0'\D'l 0 -\\n^u'
+.br
+.in 1n
+.S'
+.br
+.in 0
+.rt \\nau
+.in \\n>u+\w'\s-2Receipt reference: \s0'u+1m
+.fi
+.if !''\\*(WH' \{\
+.	ps -2
+.	left "Issued by: "
+.	ps +2
+.	ft 3
+\\*(WH
+.	ft
+.	br
+.\}
+.if !''\\*(DA' \{\
+.	ps -2
+.	left "Date of issue: "
+.	ps +2
+.	ft 3
+\\*(DA
+.	ft
+.	br
+.\}
+.if !''\\*(RE' \{\
+.	ps -2
+.	left "Receipt reference: "
+.	ps +2
+.	ft 3
+\\*(RE
+.	ft
+.	br
+.\}
+.sp |\\n(.hu
+.sp 2c
+.in 0
+.if !''\\*(AT' \{\
+.	ft 3
+.	ce 1
+ATTENTION: \\*(AT
+.	ft
+.	sp 2
+.\}
+.mk _start
+.nr _startk \\n(.k
+..
+.de Total
+.ds TO \\$1
+.nr text 0
+.mk _here
+.if (\\n[_start]=\\n[_here])&(\\n(.k=\\n[_startk]) .nr text 1
+.if \\n[text] The amount of
+.as_words "\\*(TO"
+(\c
+.as_currency "\\*(TO"
+)
+.mk _total
+.nr _totalk \\n(.k
+..
+.de End
+.nr text 0
+.mk _here
+.if (\\n[_total]=\\n[_here])&(\\n(.k=\\n[_totalk]) .nr text 1
+.if \\n[text] was received from
+.br
+.nr ^ \\n(c^+0.4v
+.po +(\\n(LLu-\\n>u)/2u
+.nf
+\h'|-1n'\D'l \\n>u 0'\D'l 0 \\n^u'\D'l -\\n>u 0'\D'l 0 -\\n^u'
+.br
+.C'
+.sp
+.po -(\\n(LLu-\\n(BWu-2n)/2u
+.fi
+..
+.de Account
+..
+.\"
+.\"	.as_currency amount
+.\"	.as_words amount
+.\"	Macros for rendering an amount as words and with suitable currency
+.\"	symbols.  Can be redefined by the caller as needed.
+.\"
+.de as_currency
+AU$\f3\\$1\fP\\c
+..
+.de as_words
+.pso number \\\\$\\$1
+..
+.\"
+.\"	.Sg [lr]
+.\"	Start signature block, at left or right of page.
+.de Sg
+.sp 2
+.in 0
+.if '\\$1'r' \{\
+.	if \\n(S'=0 .nr S' 5c
+.	if '\\$1'r' .in \\n(.lu-\\n(S'u\}
+.if \\n%=1 .nr p? 0
+.nf
+..
+.mso tmac.chars
+.mso tmac.text
+.mso tmac.list
+.mso tmac.col
+.\"
+.\"	Initialise page
+.\"
+.pn 1
+.mk p
+.if \np .bp
+.nr p? 1
+.po 2.5c
+.nr LL 17c
+.nr BW 7c
+.S 12
+.fi
+.ad l

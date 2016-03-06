@@ -1,0 +1,217 @@
+.\" tmac.letter
+.\" Gtroff macros for setting paper correspondence.
+.\"
+.\" Written by Andrew Bettison
+.\" Copyright 1996 Andrew Bettison
+.\" All rights reserved
+.\"
+.\"
+.\"	Identify macro package.
+.\"
+.ds MACROS letter
+.\"
+.\"	Top and bottom margins, and page numbering.
+.\"
+.de !t		\" top-of-page trap
+.ev 1
+.S
+.ft 1
+.ie !''\\*(h"' \{\
+'	sp |\\n(HMu
+.	tl \\*(h"
+'	sp |\\n(TMu+1v
+.\}
+.el 'sp |\\n(TMu
+.ev
+.+b \\n(BM
+'ns
+..
+.de +b		\" set bottom-of-page trap
+.ch !b
+.ie \\n(pl .nr =b \\n(pl
+.el .nr =b \\n(.p-\\$1
+.wh \\n(=bu !b
+..
+.de !b		\" bottom-of-page trap
+.mk !
+.-C \" multi-column support
+.mk .
+.if \\n.>=\\n! \{\
+.	ch !b
+.	ev 1
+.	S
+.	ft 1
+'	sp |\\n(.pu-\\n(FMu
+.	ie ''\\*(f"' .if \\n(p? .tl ''- \\n% -''
+.	el .tl \\*f"
+.	ev
+.	nr p? 1
+.	nr pl 0
+'	bp
+.\}
+'bp
+..
+.\"
+.wh 0 !t
+.\"
+.\"	Macros for setting general text and lists.
+.\"
+.mso tmac.chars
+.mso tmac.text
+.mso tmac.list
+.mso tmac.col
+.\"
+.\"	.Rs
+.\"	.Re
+.\"	Right justify text block, at least 5 cm from right margin.
+.\"	First use determines indent for right-hand signature block.
+.\"
+.de Rs
+.nr i' \\n(.i
+.in 0
+.nf
+.di R'
+..
+.de Re
+.di
+.\".nr n' \\n(dnu
+.\".if \\n(n'u>10v .nr n' 10v
+.\".ne \\n(n'u
+.nr I' \\n(dlu
+.if \\n(I'<5c .nr I' 5c
+.in \\n(.lu-\\n(I'u
+.if \\n(S'=0 .nr S' \\n(I'
+.nf
+.R'
+.fi
+.in \\n(i'u
+..
+.\"
+.\"	.Ad [label]
+.\"	.Ae
+.\"	Start (and end) non-filled address block, with optional label
+.\"	and indent to accommodate label.
+.de Ad
+.sp 2
+.nf
+.IN 0
+.IL "\\$1"
+..
+.de Ae
+.IN 0
+.fi
+..
+.de ATTN
+.br
+.B \s-1ATTN:\s0  \\$*
+.br
+..
+.\"
+.\"	.Sa
+.\"	Start salutation.
+.de Sa
+.sp \\n(SMu
+.mk s'
+.if \\n(s'u<\\n(XMu .sp |\\n(XMu
+.IN 0
+.fi
+..
+.\"
+.\"	.RE
+.\"	Lines until next .P are Re: lines.
+.de RE
+.sp
+.ps -1
+.ft 3
+.nr r? 1
+.ad c
+Re:
+..
+.\"
+.\"	.P
+.\"	Start new paragraph.
+.de P
+.if \\n(r? \{\
+.	br
+.	ft 1
+.	ps +1
+.	ad l
+.	nr r? 0 \}
+.sp \\n(Psv/100u
+.ne 2
+.ti \\n(P>u
+..
+.\"
+.\"	No table of contents for letters.
+.\"
+.de TC+
+..
+.\"
+.\"	.Sg [lr]
+.\"	Start signature block, at left or right of page.
+.de Sg
+.+b 1c
+.sp 2
+.in 0
+.if '\\$1'r' \{\
+.	if \\n(S'=0 .nr S' 5c
+.	if '\\$1'r' .in \\n(.lu-\\n(S'u\}
+.if \\n%=1 .nr p? 0
+.nf
+..
+.\"
+.\"	Set up page size from command-line option and set margins.
+.\"
+.mso tmac.pagesize
+.\"
+.\"
+.de PO
+._PO \\$1
+..
+.de LL
+._LL \\$1
+.lt \\n(INu+\\n(LLu
+.ev 1
+.ll \\n(LLu
+.lt \\n(INu+\\n(LLu
+.ev
+..
+.if t \{\
+.	nr TM 1.5c
+.	nr HM .8c
+.	nr BM 2.5c
+.	nr FM 1.5c
+.	nr IM 2c
+.	nr SM 3v
+.	nr XM 7c
+.	po 3c
+.	LL \n(.lu-5.5c
+.\}
+.if n \{\
+.	nr TM 3v
+.	nr HM 1v
+.	nr BM 3v
+.	nr FM 2v
+.	nr IM 6v
+.	nr SM 3v
+.	nr XM 10v
+.	if \nL=0 .nr L 66
+.	if \nW=0 .nr W 80
+.	if \nO=0 .nr O 6m
+.	pl \nL
+.	LL \nW
+.	PO \nOu
+.	LL \n(.lu-12m
+.\}
+.S 12
+.nr P> 0
+'fi
+'ad l
+.\"
+.\"	Initialise page.
+.\"
+.pn 1
+.nr pl 0
+.mk p
+.if \np 'bp
+.nr p? 1

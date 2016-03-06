@@ -1,0 +1,158 @@
+.mso tmac.text
+.mso tmac.list
+.de !t		\" top-of-page trap
+.ev 2
+.ps 14
+.sp |.8c
+\h'|-.8c'\D'l |\\n(.lu+.8c 0'\D'l 0 |\\n(.pu-2c'\D'l |0-.8c 0'
+.sp |.8c
+\h'|-.8c'\D'l 0 |\\n(.pu-2c'
+.br
+.ps
+.ev
+'sp |1.5c
+.wh -2c !b
+'ns
+..
+.de !b		\" bottom-of-page trap
+.wh -2c
+.ev 2
+'sp |\\n(.pu-1.2c
+.if \\n(p? .tl ''COMPANY MINUTE - PAGE \\n%''
+.ev
+'bp
+..
+.wh 0 !t
+.\"
+.\"	.Rs
+.\"	.Re
+.\"	Right justify text block, at least 5 cm from right margin.
+.\"	First use determines indent for right-hand signature block.
+.\"
+.de Rs
+.nr i' \\n(.i
+.in 0
+.nf
+.di R'
+..
+.de Re
+.di
+.\".nr n' \\n(dnu
+.\".if \\n(n'u>10v .nr n' 10v
+.\".ne \\n(n'u
+.nr I' \\n(dlu
+.if \\n(I'<5c .nr I' 5c
+.in \\n(.lu-\\n(I'u
+.if \\n(S'=0 .nr S' \\n(I'
+.nf
+.R'
+.fi
+.in \\n(i'u
+..
+.\"	.Os
+.\"	[text]
+.\"	.Oe
+.\"	Out-dented text block
+.\"
+.de Os
+.po 2c
+.ll 3.5c
+.fi
+..
+.de Oe
+.br
+.po \\n(POu
+.ll \\n(LLu
+.sp -1
+..
+.de Who
+.br
+.ft 1
+.Os
+MINUTES OF a meeting of the
+.Oe
+.nf
+..
+.de Of
+.br
+.Os
+of
+.Oe
+.nf
+..
+.de Date
+.br
+.Os
+held on
+.Oe
+.nf
+..
+.de At
+.br
+.Os
+at
+.Oe
+.nf
+..
+.de Present
+.P
+.Os
+PRESENT
+.Oe
+.nf
+..
+.de Confirmed
+.P
+.ne 1c+2v
+.Os
+CONFIRMED
+.Oe
+.fi
+As a correct record by the Chairman.
+.sp 1c
+.ad r
+\l'2i.'
+.br
+.ad
+..
+.\"	.H [text]
+.\"	Heading
+.\"
+.de H
+.sp
+.ne 3
+.ft 1
+.Os
+\\&\\$1
+.Oe
+.fi
+..
+.\"
+.\"	.P
+.\"	Start new paragraph.
+.de P
+.sp \\n(Psv/100u
+.in 0
+.ne 2
+..
+.\"
+.\"	Initialise page
+.\"
+.pn 1
+.mk p
+.if \np .bp
+.nr p? 1
+.nr PO 6.8c
+.nr LL 12.4c
+.nr Ps 80
+.po \n(POu
+.ll \n(LLu
+.lt \n(LLu
+.ev 2
+.S 10
+.ll \n(LLu
+.lt \n(LLu
+.ev
+.S 12
+.fi
+.ad l

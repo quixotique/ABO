@@ -1,0 +1,210 @@
+.\" tmac.label
+.\"
+.\"	Mailout label generation macros.
+.\"	Copyright 1996 Andrew Bettison, all rights reserved.
+.\"
+.\"
+.\" Macro package for scaling text to fit inside fixed space.
+.\"
+.mso tmac.fit
+.\"
+.\" Special sequences.
+.\"
+.ds {{ \\\\kx\\v'-.2m'\\s-4
+.ds }} \\s0\\v'.2m'\\\\ky\\D'l |\\\\nxu 0'\\h'|\\\\nyu'
+.ds { \\?\\*({{\\?
+.ds } \\?\\*(}}\\?
+.\"
+.\"	.Ls [mark]
+.\"	Start label with mark in top right corner.
+.\"
+.de Ls
+.ds M*
+.ds m*
+.ie \\n(IN .ds M* \\$*
+.el .ds m* \\$*
+.di n"
+.nf
+.in 0
+..
+.de Po
+.if \\nr>=\\nR \{\
+.	nr r 0
+.	nr c +1
+.\}
+.if \\nc>=\\nC \{\
+.	nr c 0
+.	bp
+.\}
+.nr ep 0
+.if ((\\nr+1)=\\nR)&((\\nc+1)=\\nC) .nr ep 1
+.sp |\\n(TMu+(\\nru*\\n(RHu)+\\n(MVu
+.po (\\ncu*\\n(CWu)+\\n(MLu
+.in 0
+..
+.de Attn
+.while \\n(.$ \{\
+\\&\\$1
+.br
+.	shift
+.\}
+..
+.\"
+.\"	.Le
+.\"	End label.
+.\"
+.de Le
+.di
+.nr LW \\n(CW-\\n(ML-\\n(MR-\\n(IN
+.nr LH \\n(RH-(2*\\n(MV)-\\n(TP
+.Fit n" "\\*(m*" \\n(LW \\n(MM \\n(LH \\n(PS \\n(VS \\*(WR
+.ie \\nM \{\
+.	L_
+.	while !\\n(ep .L_
+.\}
+.el .L_
+..
+.\"
+.\"	.Lr
+.\"	Repeat last label.
+.\"
+.de Lr
+.L_
+..
+.de L_		\" advance position and throw label
+.Po
+.nf
+.if \\n(IN \{\
+.	mk a
+.	ft TR
+.	ps 8
+.	vs 9
+If undeliverable, return to
+\\&\\*A
+.	br
+.	if !''\\*(M*' \{\
+.		rt \\nau
+\\&\h'\\n(CWu-\\n(MLu-\\n(MRu-\\n(MMu-\w@\\*(M*@u'\\*(M*
+.		br
+.	\}
+.	ft
+.	ps
+.	vs
+.	sp |\\nau+\\n(TPu
+.\}
+.po +\\n(INu
+.ie \\n(ok .F"
+.el \{\
+.	nr a \\nc+1
+.	nr b \\nr+1
+.	\" extract first line of label
+.	di j
+.	ds l "\\*(n"
+.	di
+.	tm page \\n%, column \\na, row \\nb: label too long: \\*l
+.	if \\n(BL \{\
+.		ps 10
+.		vs 12
+LABEL REGION OVERFLOW
+.		nr ok 1
+.	\}
+.\}
+.po -\\n(INu
+.if \\n(ok .nr r +1
+..
+.\"
+.\"	Initialisation.
+.\"
+.nr c 0
+.nr r 0
+.\"
+.\"	Page setup.
+.\"	Any of these can be altered before the first .Ls.
+.\"
+.pl 100c
+.nr MM .5c			\" mark inset margin
+.nr BL 1			\" display bad labels
+.nr IN 0			\" disable return address
+.nr TP 0
+.ds WR 3n			\" line wrap indent
+.if \nN=0 \{\
+.	\"
+.	\"	N=0 [default]
+.	\"	Small labels: 10 rows, 3 columns, with edges
+.	\"
+.	nr LI 4			\" text lines per label
+.	nr C 3			\" # of columns
+.	nr CW 7c		\" label width
+.	nr R 10		\" # of rows
+.	nr RH 1i+.01c		\" label height
+.	nr TM 2.1c		\" page top margin
+.	nr MV .3c		\" label vertical margin (top and bottom)
+.	nr ML .5c		\" label left margin
+.	nr MR .5c		\" label right margin
+.\}
+.if \nN=1 \{\
+.	\"
+.	\"	N=1
+.	\"	Large labels: 8 rows, 2 columns, no edges
+.	\"
+.	nr LI 6			\" text lines per label
+.	nr C 2			\" # of columns
+.	nr CW 10.5c		\" label width
+.	nr R 8			\" # of rows
+.	nr RH 29.5c/8		\" label height
+.	nr TM .2c		\" page top margin
+.	nr MV .3c		\" label vertical margin (top and bottom)
+.	nr ML .8c		\" label left margin
+.	nr MR .5c		\" label right margin
+.	if !''\*A' \{\
+.		nr IN 2c	\" address region indent
+.		nr TP .8c	\" address region spacing from top of label
+.	\}
+.	\" address region font
+.	fp 1 HR
+.	fp 2 HI
+.	fp 3 HB
+.	fp 4 HBI
+.\}
+.if \nN=2 \{\
+.	\"
+.	\"	N=2
+.	\"	Small labels: 11 rows, 3 columns, no edges
+.	\"
+.	nr LI 4			\" text lines per label
+.	nr C 3			\" # of columns
+.	nr CW 7c		\" label width
+.	nr R 11			\" # of rows
+.	nr RH 2.5c+.01c		\" label height
+.	nr TM 1c		\" page top margin
+.	nr MV .28c		\" label vertical margin (top and bottom)
+.	nr ML .8c		\" label left margin
+.	nr MR .3c		\" label right margin
+.\}
+.if \nN=3 \{\
+.	\"
+.	\"	N=3
+.	\"	Small labels: 8 rows, 3 columns, narrow edges top & bottom
+.	\"
+.	nr LI 6			\" text lines per label
+.	nr C 3			\" # of columns
+.	nr CW 7.0c		\" label width
+.	nr R 8			\" # of rows
+.	nr RH 3.6c		\" label height
+.	nr TM .443c		\" page top margin
+.	nr MV .28c		\" label vertical margin (top and bottom)
+.	nr ML .5c		\" label left margin
+.	nr MR .5c		\" label right margin
+.\}
+.ie \nL .nr LI \nL
+.el .if \nV:\nS \{\
+.	nr LI 0
+.	S \nS \nV
+.\}
+.if \n(LI \{\
+.	nr VS (\n(RH-(2*\n(MV)-1)/\n(LI
+.	nr PS 0
+.\}
+.if (\n(PS=0)&\n(VS .nr PS \n(VS-2p
+.if \n(PS&(\n(VS=0) .nr VS \n(PS+2p
+.ft 1

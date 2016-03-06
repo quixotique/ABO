@@ -1,0 +1,37 @@
+.\" tmac.chars
+.\" Gtroff special character definitions.
+.\"
+.\" Written by Andrew Bettison
+.\" Copyright 1996 Andrew Bettison
+.\" All rights reserved
+.\"
+.\"	Producer-right symbol (copyright in sound recordings)
+.\"	P in a circle
+.\"
+.if t .ds PR \h'.06m'\v'-.32m'\s'\En[.s]*13u/10u'\D'c.65m*10u/13u'\s0\v'.2m'\h'-.47m'\f(TR\s'\En[.s]*57u/100u'\zP\s0\fP\v'.12m'\h'.53m'
+.if n .ds PR (P)
+.\"
+.\"	Sequence for producing underlined superscripts (used for
+.\"	flat number in Swedish addresses, for example)
+.\"
+.if t .ds { \\kx\\v'-.2m'\\s-4
+.if t .ds } \\s0\\v'.2m'\\ky\\D'l |\\nxu 0'\\h'|\\nyu'
+.if n .ds { #
+.if n .ds }
+.\"
+.\"	Euro currency symbol ('C' with '=' superimposed)
+.\"
+.if n .char \(Eu \o'C='
+.\".if t .char \(Eu \f(HR\s-3\v'-1.3p'\kx\h'1p'=\v'1.3p'\h'|\nxu'\s0\s-2C\s0
+.if t .char \(Eu \h'1n'\v'-1n'\h'.2n'\D'a -.4n .4n .4n .4n'\h'-.2n'\v'-.25n'\D'l -.9n 0'\v'-.3n'\D'l .9n 0'\h'.2n'\v'.75n'
+.\"
+.\"	Information symbol.
+.\"	i in a square
+.\"
+.if t .ds [i \v'-.02m'\M[black]\D'P .65m 0 0 -.65m -.65m 0 0 .65m'\v'-.1m'\h'.12m'\f(CB\s'\En[.s]*57u/100u'\m[white]\zi\m[]\s0\fP\v'.12m'\h'.53m'
+.if n .ds [i [i]
+.\"
+.\"	On/off symbol.
+.\"
+.if t .ds onoff \s'\En[.s]*2u'\v'-.325n'\D'c .7n'\h'-.35n'\v'.18n'\D'l 0 -.36n'\v'.18n+.325n'\h'.35n'\s0
+.if n .ds onoff \o'|O'

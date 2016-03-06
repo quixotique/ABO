@@ -1,0 +1,153 @@
+.mso tmac.letter
+.de Language
+.ds _faxlang \\$1
+..
+.de Faxhead			\" generate fax header
+.sS _faxpv
+.sp 1c
+.DS B
+.ft HB
+.S 10
+.sp .5
+.ce 1
+.ie '\\*[_faxlang]'es' F A C S I M I L E \0 H O J A \0 P R I M E R A
+.el F A C S I M I L E \0 C O V E R \0 S H E E T
+.sp .1
+.__
+.IN 3c
+.nr f? 1
+.S 14
+.nf
+..
+.de EndFaxhead
+\0
+.IN 0
+.DE
+.nr f? 0
+.rS _faxpv
+.fi
+..
+.\"
+.\"	Ends title/author/date block.
+.\"	Invoked at first text macro (typically .P).
+.\"
+.de T-
+.if \\n(f? .EndFaxhead
+..
+.de _tag
+.ft HB
+.ps 10
+\h'-\w@\\$1@u'\\$1\c
+.ps 14
+.ft 1
+..
+.de ATTN
+.sp
+.ie '\\*[_faxlang]'es' ._tag "Atención de:\0"
+.el ._tag "\s-1ATTN\s0:\0"
+\\$*
+.br
+..
+.de To
+.sp
+.ie '\\*[_faxlang]'es' ._tag "A:\0"
+.el ._tag "To:\0"
+\\$*
+.br
+..
+.de Ph
+.ie '\\*[_faxlang]'es' ._tag "Tlf.:\0"
+.el ._tag "Ph:\0"
+\\$*
+.br
+..
+.de Fax
+._tag "Fax:\0"
+\\$*
+.br
+..
+.de PhFax
+.ie '\\*[_faxlang]'es' ._tag "Tlf. y fax:\0"
+.el ._tag "Ph & fax:\0"
+\\$*
+.br
+..
+.de From
+.sp
+.ie '\\*[_faxlang]'es' ._tag "De:\0"
+.el ._tag "From:\0"
+\\$*
+.br
+..
+.de Subject
+.sp
+.ie '\\*[_faxlang]'es' ._tag "Asunto:\0"
+.el ._tag "Subject:\0"
+\\$*
+.br
+..
+.de Date
+.sp
+.ie '\\*[_faxlang]'es' ._tag "Fecha:\0"
+.el ._tag "Date:\0"
+\\$*
+.br
+..
+.de Pages
+.sp
+.ie '\\*[_faxlang]'es' ._tag "Nº de páginas:\0"
+.el ._tag "Pages:\0"
+\\$*\0\\c
+.ft HR
+.ps 10
+.ie '\\*[_faxlang]'es' (ésta incluida)
+.el (including this one)
+.br
+.ft
+..
+.\"
+.\"	.Sg [lr]
+.\"	Start signature block, at left or right of page.
+.de Sg
+.+b 1c
+.sp 2
+.in 0
+.if '\\$1'r' \{\
+.	if \\n(S'=0 .nr S' 5c
+.	if '\\$1'r' .in \\n(.lu-\\n(S'u\}
+.if \\n%=1 .nr p? 0
+.nf
+..
+.\"
+.\"	Set margins.
+.\"
+.if t \{\
+.	nr TM 2c
+.	nr HM .8c
+.	nr BM 2c
+.	nr FM 1c
+.	PO 2c
+.	LL \n[paperwidth]u-4c
+.\}
+.if n \{\
+.	nr TM 5v
+.	nr HM 3v
+.	nr BM 5v
+.	nr FM 3v
+.	PO 4n
+.	LL \n[paperwidth]u-8n
+.	if \nL=0 .nr L 66
+.	pl \nL
+.\}
+.\"
+.\"	Initialise page.
+.\"
+.if \nS=0 .nr S 12
+.S \nS
+'fi
+'ad l
+.pn 1
+.ds f" ''- \En% -''
+.nr p? 1
+.mk p
+.if \np .bp

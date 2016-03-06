@@ -1,0 +1,29 @@
+.\" tmac.font
+.\" Gtroff macros for selecting font sets.
+.\"
+.\" Written by Andrew Bettison
+.\" Copyright 2004 Andrew Bettison
+.\" All rights reserved
+.\"
+.\"
+.\"	.FF [X]
+.\"	Set font family to X [default as set by .F macro].
+.de FF
+.ds ,f \\$1
+.if ''\\*(,f' .ds ,f \\*[Fdefault]
+.fp 1 \\*(,fR
+.fp 2 \\*(,fI
+.fp 3 \\*(,fB
+.fp 4 \\*(,fBI
+..
+.\"
+.\"	.F X
+.\"	Set default font family to X.
+.de F
+.ds Fdefault \\$1
+.FF
+..
+.\"
+.\"	Default default font family.
+.\"
+.F T

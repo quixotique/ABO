@@ -1,0 +1,243 @@
+.\"	GENERIC LIST MACROS
+.\"	Suitable for use within a variety of macro packages.
+.\"
+.\"	.TL [space [indent [pre [post]]]]
+.\"	Start variable-tag list without line breaks after over-long tags.
+.\"
+.\"	.VL [space [indent [pre [post]]]]
+.\"	Start variable-tag list with line breaks after over-long tags.
+.\"
+.\"	.BL [space [indent [pre [post]]]]
+.\"	Start bullet-tagged list.
+.\"
+.\"	.AL [fmt [space [indent [pre [post]]]]]
+.\"	Start auto-numbered list.
+.\"	fmt is one of 1 1. 1) (1) [1] i i. i) (i) a a. a) (a) A A. A) (A)
+.\"
+.\"	.ML mark [space [indent [pre [post]]]]
+.\"	Start marked, indented list.
+.\"
+.\"	.LE
+.\"	End list.
+.\"
+.\"	.LI [tag]
+.\"	Start list item.
+.\"	Sets register Li equal to the list item number in a .AL list.
+.\"
+.\"
+'\"	)A: stack push for list macros
+'\"	prepends each parameter to front of stack string
+.de )A
+.ds ]i "\\n(:i \\*(]i
+.ds ]1 "\\&\\*(:1 \\*(]1
+.ds ]2 "\\&\\*(:2 \\*(]2
+.ds ]m "\\n(:m \\*(]m
+.ds ]v "\\*(:v \\*(]v
+.ds ]f "\\n(:f \\*(]f
+.ds ]n "\\n(:n \\*(]n
+.ds ]s "\\*(:s \\*(]s
+..
+'\"	)B: list status stack pop of 1 level
+.de )B
+.)C nr :i ]i \\*(]i
+.)C ds :1 ]1 \\*(]1
+.)C ds :2 ]2 \\*(]2
+.)C nr :m ]m \\*(]m
+.)C ds :v ]v \\*(]v
+.)C ds :f ]f \\*(]f
+.)C nr :n ]n \\*(]n
+.)C ds :s ]s \\*(]s
+..
+'\"	)C: stack shift operation, called from .)B
+'\"	.)C command current-name stack-name stack-args...
+.de )C
+.\\$1 \\$2 \\$4
+.ds \\$3 "\\$5 \\$6 \\$7 \\$8 \\$9
+..
+.de dS			\" like ds, but only takes first word of string
+.ds \\$1 \\$2
+..
+.nr Ll 0 \" current list level
+.\"
+.de TL
+._L ___TL___ "\\$1" "\\$2 6n" \\$3 \\$4
+..
+.de VL
+._L ___VL___ "\\$1" "\\$2 6n" \\$3 \\$4
+..
+.de BL
+.if t ._L \(bu "\\$1" "\\$2 3n"
+.if n ._L - "\\$1" "\\$2 3n"
+..
+.de AL
+.ds v "\\$1
+.if ''\\*v' .ds v 1.
+.ie '\\*v'1' \{\
+.	ds l
+.	ds m 1
+.	ds r
+.\}
+.el .ie '\\*v'1.' \{\
+.	ds l
+.	ds m 1
+.	ds r .
+.\}
+.el .ie '\\*v'1)' \{\
+.	ds l
+.	ds m 1
+.	ds r )
+.\}
+.el .ie '\\*v'(1)' \{\
+.	ds l (
+.	ds m 1
+.	ds r )
+.\}
+.el .ie '\\*v'[1]' \{\
+.	ds l [
+.	ds m 1
+.	ds r ]
+.\}
+.el .ie '\\*v'i' \{\
+.	ds l
+.	ds m i
+.	ds r
+.\}
+.el .ie '\\*v'i.' \{\
+.	ds l
+.	ds m i
+.	ds r .
+.\}
+.el .ie '\\*v'i)' \{\
+.	ds l
+.	ds m i
+.	ds r )
+.\}
+.el .ie '\\*v'(i)' \{\
+.	ds l (
+.	ds m i
+.	ds r )
+.\}
+.el .ie '\\*v'a' \{\
+.	ds l
+.	ds m a
+.	ds r
+.\}
+.el .ie '\\*v'a.' \{\
+.	ds l
+.	ds m a
+.	ds r .
+.\}
+.el .ie '\\*v'a)' \{\
+.	ds l
+.	ds m a
+.	ds r )
+.\}
+.el .ie '\\*v'(a)' \{\
+.	ds l (
+.	ds m a
+.	ds r )
+.\}
+.el .ie '\\*v'A' \{\
+.	ds l
+.	ds m A
+.	ds r
+.\}
+.el .ie '\\*v'A.' \{\
+.	ds l
+.	ds m A
+.	ds r .
+.\}
+.el .ie '\\*v'A)' \{\
+.	ds l
+.	ds m A
+.	ds r )
+.\}
+.el .if '\\*v'(A)' \{\
+.	ds l (
+.	ds m A
+.	ds r )
+.\}
+.ie !''\\$3' .nr w (n;\\$3)
+.el .nr w 5n+\w'\\$4\\$5'u
+._L # "\\$2" \\nwu "\\$4\\*l" "\\*r\\$5" "\\*m"
+..
+.de ML
+._L "\\$1" "\\$2" "\\$3 \\w'\\$1'u+2n"
+..
+.de _L			\" start general list
+.T- \" end title-block processing
+.ie \\n(Ll>=5 .tm _L: too many nested lists
+.el \{\
+.	br
+.	if \\n(Ll>0 .)A
+.	nr Ll +1
+.	nr :m \\n(IN
+.	nr :i \\$3
+.	dS :v \\$1
+.	dS :1 \\$4
+.	dS :2 \\$5
+.	dS :f \\$6
+.	nr :n 1
+.	ie ''\\$2' .dS :s 0
+.	el .dS :s \\$2
+.	nr IN +\\n(:iu
+.	in \\n(INu
+.	ti \\n(INu
+.\}
+..
+.de LE			\" list end
+.ie \\n(Ll<=0 .tm LE: no current list
+.el \{\
+.	br
+.	nr IN \\n(:m
+.	in \\n(INu
+.	ti \\n(INu
+.	nr Ll -1
+.	)B
+.\}
+..
+.de LI			\" list item
+.ie \\n(Ll=0 .tm LI \\$1: no list active
+.el \{\
+.	ie '\\*(:s'P' .P
+.	el .sp \\*(:s
+.	ds m "\\*(:v
+.	ie '\\*m'___TL___' .ds m "\\$*
+.	el .ie '\\*m'___VL___' .ds m "\\$*
+.	el .if '\\*m'#' \{\
+.		if !''\\$1' .nr :n \\$1
+.		nr Li \\n(:n
+.		af :n \\*(:f
+.		ds m "\\n(:n
+.		af :n 1
+.		nr :n +1
+.	\}
+.	ds m "\\*(:1\\*m\\*(:2\0
+.	in \\n(INu
+.	nr w \\w@\\*m@
+.	nr s 0
+.	if \\nw<\\n(:i .nr s \\n(:i-\\nw
+.	ie '\\*(:v'___TL___' \{\
+.		ie \\nw<\\n(:i \\h'-\\n(:iu'\\&\\*m\\h'|0'\\c
+.		el \\h'-\\n(:iu'\\&\\*m\\c
+.	\}
+.	el \{\
+\\h'-\\n(:iu'\\&\\*m\\h'|0'\\c
+.		if '\\*(:v'___VL___' .if \\nw>\\n(:i .br
+.	\}
+.\}
+..
+.\"
+.\"	.LP
+.\"	Start list-level paragraph.
+.\"
+.de LP
+.in \\n(INu-\\n(:iu
+.P
+..
+.de LC			\" clear all list levels
+.T- \" end title-block processing
+.nr Ll 0
+.in 0
+.ti 0
+..

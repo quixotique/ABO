@@ -1,0 +1,112 @@
+.\" tmac.label
+.\"
+.\"	Mailout label generation macros.
+.\"	(Special version for Sydney Men's Festival mailouts.)
+.\"
+.\"	Copyright 1996 Andrew Bettison, all rights reserved.
+.\"
+.mso tmac.pagesize
+.mso tmac.text
+.mso tmac.fit
+.\"
+.\"	.Ls [mark]
+.\"	Start label with mark in top right corner.
+.\"
+.de Ls
+.ds m" \\$*
+.Po
+.nf
+.di n"
+..
+.de Po
+.if \\nr>=\\nR \{\
+.	nr r 0
+.	nr c +1
+.\}
+.if \\nc>=\\nC \{\
+.	nr c 0
+.	bp
+.\}
+.sp |\\n(TMu+(\\nru*\\n(RHu)+\\n(MVu
+.po (\\ncu*\\n(CWu)+\\n(MLu
+.in 0
+..
+.de Attn
+.while \\n(.$ \{\
+\\&\\$1
+.br
+.	shift
+.\}
+..
+.\"
+.\"	.Le
+.\"	End label.
+.\"
+.de Le
+.di
+.nr LW \\n(CW-\\n(ML-\\n(MR-\\n(IN
+.nr LH \\n(RH-(2*\\n(MV)-\\n(TP
+.Fit n" "" \\n(LW 0 \\n(LH \\n(PS \\n(VS
+.nf
+.mk a
+.ft TR
+.ps 8
+.vs 9
+If undeliverable, return to
+PO Box 689, Rozelle NSW 2039
+.br
+.rt \\nau
+\\&\h'\\n(CWu-\\n(MLu-\\n(MRu-\\n(MMu-\w@\\*(m"@u'\\*(m"
+.br
+.ft
+.ps
+.vs
+.sp |\\nau+\\n(TPu
+.po +\\n(INu
+.ie \\n(ok .F"
+.el \{\
+.	nr a \\nc+1
+.	nr b \\nr+1
+.	\" extract first line of label
+.	di j
+.	ds l "\\*(n"
+.	di
+.	tm page \\n%, column \\na, row \\nb: label too long: \\*l
+.	if \\n(BL \{\
+.		ps 10
+.		vs 12
+LABEL REGION OVERFLOW
+.		nr ok 1
+.	\}
+.\}
+.if \\n(ok .nr r +1
+.po -\\n(INu
+..
+.\"
+.\"	Initialisation.
+.\"
+.nr c 0
+.nr r 0
+.\"
+.\"	Default values.
+.\"	These can be altered before the first .Ls.
+.\"
+.S 12 13
+.nr C 2			\" # of columns
+.nr CW 10.5c		\" label width
+.nr R 8			\" # of rows
+.nr RH 29.5c/8		\" label height
+.nr TM .2c		\" page top margin
+.nr MV .3c		\" label vertical margin (top and bottom)
+.nr ML .8c		\" label left margin
+.nr MR .8c		\" label right margin
+.nr MM .5c		\" mark right margin indent
+.nr IN 2c		\" address region indent
+.nr TP .8c		\" address region spacing from top of label
+.nr BL 1
+.\" address region font
+.fp 1 HR
+.fp 2 HI
+.fp 3 HB
+.fp 4 HBI
+.ft 1

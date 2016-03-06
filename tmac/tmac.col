@@ -1,0 +1,234 @@
+.\" tmac.col
+.\" Gtroff macros for setting text in multiple columns.
+.\"
+.\" Written by Andrew Bettison
+.\" Copyright 1996 Andrew Bettison
+.\" All rights reserved
+.\"
+.\"
+.\"	.NC [B] number [gutter]
+.\"	Start setting text in 'number' columns with 'gutter' space
+.\"	between (default 3m).  If first arg is B, balance the columns
+.\"	on the final page.
+.\"
+.\"	Uses the current page offset plus indent given in the IN register
+.\"	as the left edge of the left column, and divides the the line
+.\"	length minus IN into the requested number of columns.
+.\"
+.de NC
+.T- \" end of title block
+.if \\n(#C<2 .nr =c 0
+.if '\\$1'B' \{\
+.	if \\n(#C<2 .nr =c 1
+.	shift
+.\}
+.ie \\$1>1 \{\
+.	ie \\n(#C<2 \{\
+.		br
+.		nr #C \\$1
+.		nr GW 3m
+.		if !''\\$2' .nr GW \\$2
+.		nr CW (\\n(.l-\\n(IN+\\n(GW)/\\n(#C-\\n(GW
+.		nr <c \\n(.o
+.		nr *c \\n(.l
+.		nr >c \\n(IN
+.		nr IN 0
+.		in \\n(INu
+.		nr c# 0
+.		mk ^c
+.		~c
+.		if \\n(=c \{\
+.			ie \\n(.t<(2147483646-1v) .nr ,c \\n(.t+1v
+.			el .nr ,c 0
+.			rn ne :ne
+.			rn ;ne ne
+.			rn vpt :vpt
+.			rn ;vpt vpt
+.			di "c
+.			ns
+.			nr %c 0
+.			if \\n(,c .dt \\n(,cu !c
+.		\}
+.	\}
+.	el .tm NC -- already in \\n(#C column mode
+.\}
+.el \{\
+.	ie \\n(#C>1 \{\
+.		rs
+.		br
+.		if \\n(=c \{\
+.			br
+.			di
+.			rn ne ;ne
+.			rn :ne ne
+.			rn vpt ;vpt
+.			rn :vpt vpt
+.			nr =c 0
+.			nr _c \\n(^c+((\\n(.d-\\n(^c+\\n(dn+(\\n(.V*(\\n(#C-1))/\\n(#C)
+.			ie '\\n(.z'' .wh \\n(_cu _c
+.			el .dt \\n(_cu _c
+.			ev c
+.			nf
+.			in 0
+.			rn ne c-ne
+.			rn c_ne ne
+.			"c
+.			rn ne c_ne
+.			rn c-ne ne
+.			ev
+.			ie '\\n(.z'' .wh \\n(_cu
+.			el .dt
+.		\}
+.		nr #C 0
+.		nr p. \\n(<cu
+.		po \\n(p.u
+.		ll \\n(*cu
+.		nr IN \\n(>c
+.		in \\n(INu
+.		\" space to text high water mark or next trap
+.		\" whichever is closer
+.		rs
+.		ie (\\n(.h-\\n(.d)<\\n(.t .if \\n(.d<\\n(.h .sp |\\n(.hu
+.		el .sp \\n(.tu-1u
+.	\}
+.	el .tm NC -- already in single column mode
+.\}
+..
+.\"
+.\"	.BC
+.\"	Break to top of next column, or to next page if
+.\"	in last column.  Can do odd things in balanced columns.
+.\"
+.de BC
+.if \\n(#C>1 \{\
+.	br
+.	ie \\n(=c \{\
+\\!.sp \\\\n(.tu
+.		!c
+.	\}
+.	el .ie ''\\n(.z' .sp \\n(.tu
+.	el ._c
+.\}
+..
+.\" Utility macros.
+.\"
+.\" For dealing with keep-togethers inside balanced columns on the
+.\" final page -- where the balancing is actually done.
+.\" If a keep-together is requested, it must either be accommodated
+.\" at the end of this column or the top of the next, depending on
+.\" whether most of it falls before or after the balancing trap at _c.
+.\" This macro pushes the _c trap down the page to allow for the extra
+.\" space needed because the keep is not split up line by line, then
+.\" traps to the next column if the keep is better off there.
+.de c_ne
+.if \\$1>=\\n(.t \{\
+.	nr i \\$1-\\n(.t
+.	ie '\\n(.z'' .wh \\n(_cu
+.	el .dt
+.	ie (\\n(_c+\\ni)<(\\n(.d+\\n(.t) \{\
+.		nr _c +\\ni+1
+.		ie '\\n(.z'' .wh \\n(_cu _c
+.		el .dt \\n(_cu _c
+.		if \\ni>=(\\$1/2) .sp \\n(.tu
+.	\}
+.	el \{
+.		ie '\\n(.z'' .wh \\n(_cu _c
+.		el .dt \\n(_cu _c
+.	\}
+.\}
+.c-ne \\$1
+..
+.\" Balanced column processing.  This is a trap set inside the "c diversion.
+.\" This macro counts full columns, which are taken to be ,c units in length.
+.\" It terminates, outputs, and re-starts the diversion when the page is full.
+.de !c
+.nr %c +1
+.if \\n(%c=\\n(#C \{\
+.	di
+.	rn ne ;ne
+.	rn :ne ne
+.	rn vpt ;vpt
+.	rn :vpt vpt
+.	ev c
+'	nf
+'	in 0
+.	"c
+.	ev
+.	nr %c 0
+.	nr ,c \\n(.t+1v
+.	rn ne :ne
+.	rn ;ne ne
+.	rn vpt :vpt
+.	rn ;vpt vpt
+.	di "c
+.\".	ns
+.\}
+.if \\n(,c \{\
+.	nr a \\n(.d+\\n(,c
+.	dt \\nau !c
+.\}
+..
+.\" macro for delaying a .ne until a diversion is replayed
+.de ;ne
+\\!.ne \\$1
+.nr $1 \\$1
+.if \\n($1>=\\n(.t \{\
+.	ch !c
+.	!c
+.\}
+..
+.\" macro for delaying a .vpt until a diversion is replayed
+.\" Some code turns off vertical position traps when they want to
+.\" output a line, space back, then output another so that the first
+.\" line doesn't spring a trap and separate the two.
+.de ;vpt
+\\!.vpt \\$1
+.:vpt \\$1
+..
+.\" End-of-document macro for balanced column processing.  This macro is
+.\" called at the end of the document, as arranged by the main macro
+.\" package.  If balanced column processing is in force, it terminates
+.\" multi-column mode, forcing the final columns to be balanced on the
+.\" last page.
+.de $C
+.if (\\n(#C>1)&(\\n(=c) .NC 0
+..
+.\" Top of column processing.  This macro is called at the top of every
+.\" column during output.  It basically sets up the page offset and line
+.\" length for the column and goes into no-space mode so that tops of
+.\" columns align.
+.de ~c
+.nr p. \\n(c#*(\\n(CW+\\n(GW)+\\n(<c+\\n(>c
+.po \\n(p.u
+.ll \\n(CWu
+.ns
+..
+.\" End of column processing.  This macro is called at the bottom of
+.\" every column, either by a trap (the page-footer trap or final-page
+.\" column-balancing trap) or the BC macro.  It decides whether to
+.\" zip up to the next column on the page, otherwise it leaves breaking
+.\" onto the next page up to the invoker (who can test for \\n(c# == 0).
+.de _c
+.nr c# +1
+.ie \\n(c#=\\n(#C \{\
+.	nr c# 0
+.	nr p. \\n(<c
+'	po \\n(p.u
+.\}
+.el \{\
+'	rs
+'	sp |\\n(^cu
+.	~c
+.\}
+..
+.\"	Invoked by top-of-page trap in main package.
+.de +C
+.if \\n(#C>1 \{\
+.	mk ^c
+.	~c
+.\}
+..
+.\"	Invoked by bottom-of-page trap in main package.
+.de -C
+.if \\n(#C>1 ._c
+..

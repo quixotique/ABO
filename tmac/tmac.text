@@ -1,0 +1,572 @@
+.\" tmac.text
+.\" Gtroff macros for setting general text.  Intended for use inside
+.\" a tailored macro package that supplies headers, footers, page layout,
+.\" etc.
+.\"
+.\" Written by Andrew Bettison
+.\" Copyright 1996 Andrew Bettison
+.\" All rights reserved
+.\"
+.\"
+.\"	.S [ps [vs]]
+.\"	Set point size to 'ps', vertical spacing to n*1.2, then adjust by 'vs'.
+.\"	If no args, use last value(s) given to .S.
+.de S
+.ps \\n(PSu
+.if !''\\$1' \{\
+.	ps \\$1
+.	nr PS 1m
+.	nr VS 1.2m
+.\}
+.vs \\n(VSu
+.if !''\\$2' \{\
+.	vs \\$2
+.	nr VS \\n(.v
+.\}
+..
+.\"	.sS stringname
+.\"	.rS stringname
+.\"	Save/restore current point size and vertical spacing in string
+.\"	with given name.
+.de sS
+.ds \\$1 "\\n(.s \\n(.v
+..
+.de rS
+.)rS ds _r "" \\*[\\$1]
+.ps \\*(_rz
+.)rS ds _r \\*[\\$1]
+.vs \\*(_ru
+..
+.de )rS
+.\\$1 \\$2 \\$4
+..
+.\"
+.\"	.IN [indent]
+.\"	Set indent - argument exactly as to .in
+.de IN
+'in \\n(INu
+.if !''\\$1' \{\
+'	in \\$1
+.	nr IN \\n(.i
+.	lt \\n(LLu+\\n(INu
+.	ev eTP
+.	lt \\n(LLu+\\n(INu
+.	ev
+.\}
+..
+.\"
+.\"	.IL label
+.\"	Set indent using a label + 1m
+.\"
+.de IL
+.nr w \\w@\\$1@
+.if \\nw \{\
+.	nr w +1m
+.	IN +\\nwu
+.	ti -\\nwu
+\\&\\$1\\h'|\\nwu'\\c
+.\}
+..
+.\"
+.\"	.R [itext] [rtext] ...
+.\"	Set text in roman (normal) font.
+.de R
+.nr ,f \\n(.f
+.ft 1
+.if \\n(.$ \{\
+\\&\\$*
+.	ft \\n(,f
+.\}
+..
+.\"
+.\"	.I [itext] [itext] ...
+.\"	Set text in italic font.
+.de I
+.nr ,f \\n(.f
+.ft 2
+.if \\n(.$ \{\
+\\&\\$*
+.	ft \\n(,f
+.\}
+..
+.\"
+.\"	.I. [itext] [rtext] ...
+.\"	.IC [itext] [rtext] ...
+.\"	Join text in alternating italic and current font.
+.de I.
+.IC \\$@
+..
+.de IC
+.nr ,f \\n(.f
+.while \\n(.$ \{\
+\\f2\\,\\$1\\f\\n(,f\\$2\\c
+.	shift 2
+.\}
+ 
+.ft \\n(,f
+..
+.\"
+.\"	.B [btext] [btext] ...
+.\"	Set text in bold font.
+.de B
+.nr ,f \\n(.f
+.ft 3
+.if \\n(.$ \{\
+\\&\\$*
+.	ft \\n(,f
+.\}
+..
+.\"
+.\"	.B. [itext] [rtext] ...
+.\"	Set text in alternating bold and current font.
+.de B.
+.nr ,f \\n(.f
+.while \\n(.$ \{\
+\\f3\\$1\\f\\n(,f\\$2\\c
+.	shift 2
+.\}
+ 
+.ft \\n(,f
+..
+.\"
+.\"	.BI [bitext] [bitext] ...
+.\"	Set text in bold italic font.
+.de BI
+.nr ,f \\n(.f
+.ft 4
+.if \\n(.$ \{\
+\\&\\$*\\c
+.	ft \\n(,f
+ 
+.\}
+..
+.\"
+.\"	.BI. [itext] [rtext] ...
+.\"	Set text in alternating bold italic and current font.
+.de BI.
+.nr ,f \\n(.f
+.while \\n(.$ \{\
+\\f4\\$1\\f\\n(,f\\$2\\c
+.	shift 2
+.\}
+ 
+.ft \\n(,f
+..
+.\"
+.\"	.T [ttext] [ttext] ...
+.\"	Set text in typewriter font.
+.de T
+.nr ,f \\n(.f
+.ft CR
+.if \\n(.$ \{\
+\\&\\$*
+.	ft \\n(,f
+.\}
+..
+.\"
+.\"	.T. [ttext] [rtext] ...
+.\"	.TC [ttext] [rtext] ...
+.\"	Set text in alternating typewriter and current font.
+.de T.
+.TC \\$@
+..
+.de TC
+.nr ,f \\n(.f
+.while \\n(.$ \{\
+\\f(CR\\$1\\f\\n(,f\\$2\\c
+.	shift 2
+.\}
+ 
+.ft \\n(,f
+..
+.\"
+.\"	.TB [itext] [itext] ...
+.\"	Set text in typewriter bold font.
+.de TB
+.nr ,f \\n(.f
+.ft CB
+.if \\n(.$ \{\
+\\&\\$*\\c
+.	ft \\n(,f
+ 
+.\}
+..
+.\"
+.\"	.TBC [ttext] [rtext] ...
+.\"	Set text in alternating typewriter bold and current font.
+.de TBC
+.nr ,f \\n(.f
+.while \\n(.$ \{\
+\\f(CB\\$1\\f\\n(,f\\$2\\c
+.	shift 2
+.\}
+ 
+.ft \\n(,f
+..
+.\"
+.\"	.UC [text] ...
+.\"	Set text in uppercase.
+.de UC
+.	tr aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZàÀáÁâÂãÃäÄåÅæÆçÇèÈéÉêÊëËìÌíÍîÎïÏğĞñÑòÒóÓôÔõÕöÖøØùÙúÚûÛıİüÜ
+\\&\\$*
+.	tr aabbccddeeffgghhiijjkkllmmnnooppqqrrssttuuvvwwxxyyzzààááââããääååææççèèééêêëëììííîîïïğğññòòóóôôõõööøøùùúúûûııüü
+..
+.\"
+.\"	.RJ text ...
+.\"	Right justify text in remaining space on current line, or
+.\"	on next line if no room.
+.\"
+.de RJ
+.ds " "\\$*
+.vpt 0
+.sp -1
+.vpt 1
+.if (\\n(.l-\\n(.i-\\n(.n)<(\\w'\\*"'+1n) .sp
+.rj 1
+\\&\\*"
+.br
+..
+.\"
+.\"	.Ts [width]
+.\"	.Te
+.\"	Start and end typewriter-font screen display.
+.\"
+.de Ts
+.br
+.nr w \\$1 80
+.T
+.nf
+.ps 1
+.nr p 1p*(\\n(.l-\\n(.i)/\\nw
+.ps \\npu/\\w'a'u
+.vs \\n(.s+1
+.nr t 8*\\nw
+.ta \\ntu +\\ntu +\\ntu +\\ntu +\\ntu +\\ntu +\\ntu +\\ntu +\\ntu +\\ntu +\\ntu
+..
+.de Te
+.br
+.fi
+.R
+.S
+..
+.\"
+.\"	.DS [ I|C|R|B|b| indent [ width ] ] ...
+.\"	.DE
+.\"	Start and end keep-together (display).
+.\"		I = fixed indent
+.\"		C = centred
+.\"		R = right justified
+.\"		B = boxed
+.\"		b = near boxed
+.\"
+.de DS
+.ie \\n(d? .tm illegal nested DS request
+.el \{\
+.	br
+.	T- \" end title-block processing
+.	nr d> \\n(IN
+.	nr d- \\n(.l
+.	nr d1 0
+.	nr d2 0
+.	nr d4 0
+.	while \\n(.$ \{\
+.		ie 'I'\\$1' .nr IN +3m
+.		el .ie 'C'\\$1' .nr d1 1
+.		el .ie 'R'\\$1' .nr d1 2
+.		el .ie 'B'\\$1' .nr d2 1
+.		el .ie 'b'\\$1' .nr d2 2
+.		el .ie ''\\$1' .nr IN 0
+.		el \{\
+.			.nr IN (m;\\$1)
+.			if \\$2 \{\
+.				ll \\$2
+.				shift
+.			\}
+.		\}
+.		shift
+.	\}
+.	in \\n(INu
+.	nr d3 \\n(.i
+.	nr d4 \\n(.l
+.	\".tm d1=\\n(d1 d2=\\n(d2 d3=\\n(d3 d4=\\n(d4
+.	di d"
+.	\" preserve effect of .po so multi columns work inside display
+.	rn po DS-po
+.	rn DS_po po
+.	nr d? 1
+.\}
+..
+.de DS_po
+.if !\\n(d? .tm warning - display not active
+\\!.po \\$*
+..
+.de DE
+.ie \\n(d? \{\
+.	rn po DS_po
+.	rn DS-po po
+.	sp |\\n(.hu
+.	di
+.	nr d_ \\n(dn
+.	nr d| \\n(dl
+.	ll \\n(d-u
+.	nr Dw \\n(d|
+.	if (\\n(d2=1)&(\\n(Dw<\\n(d4) .nr Dw \\n(d4
+.	ne \\n(d_u
+.	ie \\n(d1=1 .in (\\n(.lu-\\n(Dwu)/2u
+.	el .ie \\n(d1=2 .in \\n(.lu-\\n(Dwu
+.	el .in 0
+.	nf
+.	d"
+.	if \\n(d2 \{\
+.		nr w \\n(Dw
+\h'|\\n(d3u-.5n'\v'-1'\L'-\\n(dnu'\l'\\nwu-\\n(d3u+1n\(ul'\L'\\n(dnu'\l'|\\n(d3u-.5n\(ul'\v'1'
+.	\}
+.	fi
+.	nr IN \\n(d>
+.	in \\n(INu
+.	nr d? 0
+.\}
+.el .tm DE without matching DS
+..
+.\"
+.\"	.__ [wid]
+.\"	Draw horizontal line with given width or the width of the current line
+.\"	or display
+.\"
+.de __
+.sp -1
+.ie \\n(.$ \{\
+.nr _l \\$1
+\h'|\\n(INu'\l'\\n(_lu\(ul'
+.\}
+.el .ie \\n(d? \{\
+\\!.sp -1
+\\!\v'1'\h'|\\\\n(d3u-.5n'\l'\\\\n(Dwu-\\\\n(d3u+1n\(ul'
+\\!.br
+.	sp
+.\}
+.el \{\
+\h'|\\n(INu'\v'-1'\l'\\n(LLu\(ul'
+.\}
+.br
+..
+.\"
+.\"	.TS [ H ] [ I | indent ]
+.\"	.TH
+.\"	.TE
+.\"	Start and end table.
+.\"
+.de TS
+.T- \" end title-block processing
+.nf
+.nr t> \\n(.i
+.if 'H'\\$1' \{\
+.	shift
+.	nr T* 1
+.	di T"
+.	nf
+.\}
+.ie 'I'\\$1' .in +3m
+.el .if !''\\$1' .in \\$1
+.rn ne TS_ne
+.rn TS.ne ne
+..
+.de TS.ne
+.ie !''\\n(.z' \\!.TS_ne \\$*
+.el .TS_ne \\$*
+..
+.de TH
+.di
+.nf
+.nr i \\n(.i
+.in 0
+.T"
+.in \\niu
+..
+.de TE
+.rn ne TS.ne
+.rn TS_ne ne
+.in \\n(t>u
+.fi
+.nr T* 0
+..
+.\" invoked in page header
+.de +T
+.if \\n(T* \{\
+.	nr i \\n(.i
+.	in 0
+.	nf
+.	T"
+.	in \\niu
+.\}
+..
+.\"
+.\"	.PS height width
+.\"	.PE
+.\"	Start and end picture.
+.\"
+.de PS
+.nr p^ \\$1i
+.nr p< \\$2i
+..
+.de PE
+\0
+..
+.\"
+.\"	.CS [indent [pointsize] ]
+.\"	.CE
+.\"	Start and end a block of non-filled, constant-width text.
+.\"
+.de CS
+.T- \" end title-block processing
+.nr 'f \\n(.f
+.nr 'i \\n(.i
+.nr 's \\n(.s
+.nr 'v \\n(.v
+.nr 'u \\n(.u
+.if t .ft CR
+.ie !'\\$2'' \{\
+.	ps \\$2
+.	vs \\$2+2
+.\}
+.el \{\
+.	ps 9
+.	vs 11
+.\}
+.in \\$1 0
+.nf
+..
+.de CE
+.br
+.if \\n('u .fi
+.ft \\n('f
+.vs \\n('vu
+.ps \\n('s
+.in \\n('iu
+..
+.\"
+.\"	.H "heading" ...
+.\"	New (unnumbered) heading.
+.\"
+.de H
+.T- \" end title-block processing
+.sp
+.in \\n(INu
+.ne 4
+.ft 3
+\\&\\$*
+.br
+.ft 1
+.nr Hl 0
+.TC+ "" "\\$*" \\n%
+..
+.\"
+.\"	.SH "heading" ...
+.\"	New (unnumbered) sub-heading.
+.\"
+.de SH
+.P
+.in \\n(INu
+.ne 3
+.ft 2
+\\&\\$*
+.br
+.ft 1
+..
+.\"
+.\"	.NH level "number" "heading" ...
+.\"	New numbered heading.
+.\"
+.de NH
+.T- \" end title-block processing
+.nr Hl \\$1
+.ds n "\\$2
+.shift 2
+.sp
+.ne 4
+.ft 3
+.in \\n(INu+\\w@\\*n@u+1.5n
+.ti \\n(INu
+\\&\\*n\\h'1.5n'\\$*
+.br
+.ft 1
+.TC+ "\\*n" "\\$*" \\n%
+.in \\n(INu
+..
+.\"
+.\"	.H1 "heading" ...
+.\"	.H2 "heading" ...
+.\"	.H3 "heading" ...
+.\"	New first/second/third-level (numbered) heading.
+.\"
+.de H1
+.nr H2 0 1
+.nr H3 0 1
+.NH 1 \\n+(H1. \\$@
+..
+.de H2
+.nr H3 0 1
+.NH 2 \\n(H1.\\n+(H2. \\$@
+..
+.de H3
+.NH 3 \\n(H1.\\n(H2.\\n+(H3. \\$@
+..
+.nr H1 0 1
+.nr H2 0 1
+.nr H3 0 1
+.\"
+.\"	.P
+.\"	New paragraph.
+.\"
+.nr p 1 1
+.de P
+.T- \" end title-block processing
+.br \" force out partially-collected line
+.sp \\n(Psv/100u
+.ne \\n(Pnu
+..
+.nr Ps 60
+.nr Pn 2v
+.\"
+.\"	.IS [inset]
+.\"	.IW [width]
+.\"	.IE
+.\"	Inset start and end.
+.\"
+.de IS
+.T- \" end title-block processing
+.ie \\n(=I .tm IS - cannot nest insets
+.el \{\
+.	nr =I \\$1i
+.	br
+.	nr IN +\\n(=I
+.	in \\n(INu
+.	ll -\\n(=Iu
+.\}
+..
+.de IW
+.T- \" end title-block processing
+.ie \\n(=I .tm IW - cannot nest insets
+.el \{\
+.	nr w \\$1i
+.	ie (\\n(.l-\\n(IN)<\\nw .tm IW -- too wide
+.	el \{\
+.		nr =I (\\n(.l-\\n(IN-\\nw)/2
+.		br
+.		nr IN +\\n(=I
+.		in \\n(INu
+.		ll -\\n(=Iu
+.	\}
+.\}
+..
+.de IE
+.ie \\n(=I \{\
+.	br
+.	ie \\n(IN>\\n(=I .nr IN -\\n(=I
+.	el .nr IN 0
+.	in \\n(INu
+.	ll +\\n(=Iu
+.	nr =I 0
+.\}
+.el .tm IE - no prior .IS
+..

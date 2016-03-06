@@ -1,0 +1,420 @@
+.\" tmac.article
+.\" Gtroff macros for setting articles.
+.\"
+.\" Written by Andrew Bettison
+.\" Copyright 1996 Andrew Bettison
+.\" All rights reserved
+.\"
+.\"
+.\"	Identify macro package.
+.\"
+.ds MACROS article
+.\"
+.\"	Cancel effects of any previously-loaded macros.
+.\"
+.wh 0
+.ch !b
+.\"
+.\"	Top and bottom margins, and page numbering.
+.\"
+.de !t		\" top-of-page trap
+'sp 0
+.TP \" user-defined top-of-page macro
+.ev eTP
+.ft 1
+.S \\nS
+.rs
+.ie !''\\*(h"' \{\
+'	sp |\\n(HMu
+.	tl \\*(h"
+'	sp |\\n(TMu
+.\}
+.el \{\
+'	sp |\\n(TMu
+.\}
+.Header \" user-defined page header macro
+.ev
+.@b
+.ns
+.+C \" multi-column support
+.+T \" tbl heading support
+..
+.de @b		\" (re)set bottom of page trap
+.if \\n(=b .wh \\n(=bu
+.ie ''\\*(f"' .nr =b \\n(.p-\\n(FM
+.el .nr =b \\n(.p-\\n(BM
+.wh \\n(=bu !b
+..
+.de !b		\" bottom-of-page trap
+.mk !
+.-C \" multi-column support
+.mk .
+.if \\n.>=\\n! \{\
+.	ch !b
+.	ev eTP
+.	nr !b-o \\n(.o
+.	po \\n(POu
+.	ft 1
+.	S \\nS
+.	vpt 0
+.	rs
+'	sp |\\n(.pu-\\n(FMu
+.	if \\n(p? .if !''\\*(f"' .tl \\*(f"
+.	vpt 1
+.	ev
+.	po \\n[!b-o]u
+.	nr p? 1
+'	sp |(\\n(.pu-\\n(BMu)
+.	BP \" user-defined bottom-of-page macro
+'	bp
+.	ns
+.\}
+..
+.wh 0 !t
+.\"
+.\"	End of document.
+.\"
+.em !e
+.de !e
+.$C \" multi-column support
+..
+.\"
+.\"	Page headers and footers.
+.\"
+.de PH
+.ds h" \\$*
+..
+.de PF
+.ds f" \\$*
+.@b
+..
+.de PL
+.pl \\$1
+.@b
+..
+.\"
+.\"
+.\"	Macros for setting font, text, lists, and multi-column layout.
+.\"
+.mso tmac.font
+.mso tmac.chars
+.mso tmac.text
+.mso tmac.list
+.mso tmac.col
+.\"
+.\"	Style.
+.\"
+.ds s* formal
+.de Style
+.ds s* "
+.nr cd? 0
+.if '\\$1'plain' .ds s* plain
+.if '\\$1'formal' .ds s* formal
+.if '\\$1'manual' \{\
+.	ds s* manual
+.	nr cd? 1
+.\}
+.if '\\$1'cover' \{\
+.	ds s* formal
+.	nr cd? 1
+.\}
+.if ''\\*(s*' .tm Style - unsupported format "\\$1"
+.if \\n[cd?] \{
+.	\" Divert front matter to coversheet
+.	di TI"
+.\}
+..
+.\"
+.\"	.Cover
+.\"	Throw coversheet.  Should be invoked at very end of document.
+.\"
+.de Cover
+.ds h"
+.br
+'bp
+.ds f"
+.nr p? 0
+.rs
+.sp 2c
+.nf
+.in 0
+.TI"
+.fi
+..
+.\"
+.\"	.Contents [max-level]
+.\"	Table of contents.  Only works at end of document.
+.\"
+.de Contents
+.nr Mh \\$1 1
+.nf
+.ta \\n(.luR
+._TC
+.fi
+..
+.\"
+.\"	.TC+ "number" "text" page
+.\"	Add item to table of contents.
+.\"
+.de TC+
+.ie \\n(Hl=0 \{\
+.	nr hi 0
+.	nr i 0
+.\}
+.el \{\
+.	nr hi (2n*(\\n(Hl-1))+(2n*(\\n(Hl*(\\n(Hl-1)/2))
+.	nr i 2n+(\\n(Hl*2n)
+.\}
+.mc
+.da _TC
+.ev eTC
+\!.if \\n(Hl<=\\\\n(Mh \{\
+.	nf
+.	nr ,i \\n(.i
+.	in \\n(hiu
+.	ft 1
+.	ie !''\\$1' \{\
+.		nr s 1.5n
+.		if (\\w@\\$1@+\\ns)<\\ni .nr s \\ni-\\w@\\$1@
+\\&\\$1\h'\\nsu'\\$2\h'2n'\\a\h'2n'\\$3
+.	\}
+.	el .ie !''\\$3' \{\
+\\&\\$2\h'2n'\\a\h'2n'\\$3
+.	\}
+.	el \{\
+\\&\\$2
+.	\}
+.	br
+.	fi
+\!.\}
+.ev
+.di
+..
+.\"
+.\"	.TI
+.\"	Title.
+.\"
+.de TI
+.nr t? 1
+.S \\nS
+.fi
+.nr f? 0
+.if '\\*(s*'formal' \{\
+.	B
+.	S +1
+.	nr c? 1
+.	ce 1000
+.\}
+.if '\\*(s*'manual' \{\
+.	FF BM
+.	B
+.	S +3
+.	nr f? 1
+.	nf
+.\}
+.if '\\*(s*'plain' \{\
+.	B
+.	fi
+.	it 1 ~j
+.\}
+..
+.\"
+.\"	.AU
+.\"	Author.
+.\"
+.de AU
+.if \\n(t? .it 1
+.FF
+.S \\nS
+.if '\\*(s*'formal' \{\
+.	if \\n(t? .sp 1
+.	I
+.	nr c? 1
+.	ce 1000
+.\}
+.if '\\*(s*'manual' \{\
+.	S +4
+.	if \\n(t? .sp 2c
+.	R
+.	nr f? 1
+.	nf
+.\}
+.if '\\*(s*'plain' \{\
+.	I
+.	it 1 ~j
+.\}
+.nr t? 2
+..
+.\"
+.\"	.DA
+.\"	Date.
+.\"
+.de DA
+.if \\n(t? .it 1
+.FF
+.S \\nS
+.if '\\*(s*'formal' \{\
+.	if \\n(t? .sp 1
+.	R
+.	nr c? 1
+.	ce 1000
+.\}
+.if '\\*(s*'manual' \{\
+.	S +3
+.	if \\n(t? .sp
+.	R
+.	nr f? 1
+.	nf
+.\}
+.if '\\*(s*'plain' \{\
+.	R
+.\}
+.nr t? 3
+..
+.\" input-line trap macro to join lines with a bullet
+.de ~j
+\(bu
+.it 1 ~j
+..
+.\"
+.\"	.AB
+.\"	.AE
+.\"	Begin and end abstract.
+.\"
+.de AB
+.FF
+.S \\nS
+.fi
+.nr f? 0
+.if '\\*(s*'formal' \{\
+.	IS 5n
+.	I
+.	nr =AI 1
+.\}
+.if '\\*(s*'manual' \{\
+.	sp 2c
+.\}
+.if '\\*(s*'plain' \{\
+.	IS 5n
+.	I
+.	nr =AI 1
+.\}
+.nr =A 1
+.nr t? 4
+..
+.de AE
+.br
+.ie \\n(=A \{\
+.	if \\n[=AI] \{\
+.		R
+.		IE
+.		sp 2c
+.		ne 2c
+.	\}
+.	nr =A 0
+.	nr =AI 0
+.\}
+.el .tm AE - no prior .AB
+..
+.\"
+.\"	Ends title/author/date block.
+.\"	Invoked at first text macro (typically .P).
+.\"
+.de T-
+.if 0=\\n(=A \{\
+.	if \\n(c? .ce 0
+.	nr c? 0
+.	if \\n(t? \{\
+.		it 1
+.		br
+.		S \\nS
+.		R
+.		FF
+.		if '\\*(s*'formal' .sp \\n(IMu
+.		if '\\*(s*'plain' .sp 2
+.	\}
+.	nr t? 0
+.	if \\n(f? .fi
+.	nr f? 0
+.	if \\n[cd?] \{\
+.		\" Close coversheet diversion
+.		br
+.		di
+.		nr cd? 0
+.	\}
+.\}
+..
+.\"
+.\"	Set up physical page size from command-line option.
+.\"
+.mso tmac.pagesize
+.\"
+.\"	.PO [+-]n
+.\"	Set page offset (left margin).
+.\"
+.de PO
+._PO \\$1
+..
+.\"
+.\"	.LL [+-]n
+.\"	Set line length.
+.\"
+.de LL
+._LL \\$1
+.lt \\n(INu+\\n(LLu
+.ev eTP
+.ll \\n(LLu
+.lt \\n(INu+\\n(LLu
+.ev
+.ev eTC
+.ll \\n(LLu
+.lt \\n(INu+\\n(LLu
+.ev
+..
+.\"
+.\"	.RM n
+.\"	Set right margin.
+.\"
+.de RM
+._RM "\\$1"
+.LL
+..
+.\"
+.\"	Set margins.
+.\"
+.if t \{\
+.	nr TM 1.2c
+.	nr HM .8c
+.	nr BM 2.5c
+.	nr FM 1.5c
+.	nr IM 2c
+.	PO 2.5c
+.	RM 2.5c
+.\}
+.if n \{\
+.	nr TM 3v
+.	nr HM 1v
+.	nr BM 3v
+.	nr FM 2v
+.	nr IM 6v
+.	PO 4n
+.	RM 4n
+.	if \nL=0 .nr L 66
+.	pl \nL
+.\}
+.\"
+.\"	Initialise page.
+.\"
+.FF
+.if \nS=0 .nr S 12
+.S \nS
+.ev eTC
+.S \nS
+.ev
+'fi
+'ad l
+.pn 1
+.ds f" ''- \En% -''
+.nr p? 1
+.mk p
+.if \np .bp

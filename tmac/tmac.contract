@@ -1,0 +1,237 @@
+.\" tmac.contract
+.\" Gtroff macros for setting contracts.
+.\"
+.\" Written by Andrew Bettison
+.\" Copyright 2001 Andrew Bettison
+.\" All rights reserved
+.\"
+.\"
+.\"	Identify macro package.
+.\"
+.ds MACROS contract
+.\"
+.\"	Cancel effects of any previously-loaded macros.
+.\"
+.wh 0
+.ch !b
+.ds ti-head "
+.\"
+.\"
+.de !t		\" top-of-page trap
+'	sp |\\n(HMu
+.	ev 1
+'	if !'\\*[ti-rev]'' \{\
+'		tl '\\*[ti-head]''Rev. \\*[ti-rev], \\*[ti-date]'
+.		ft 2
+'		tl '\\*[ti-proj]'''
+.		ft 1
+'		sp -1
+.		ps -2
+.		vs -2
+'		ti-parties
+.		vs +2
+.		ps +2
+'	\}
+.	ev
+'	sp \\n(TMu
+.	wh -\\n(BMu !b
+'	ns
+..
+.de !b		\" bottom-of-page trap
+.	wh -\\n(BMu
+'	sp |\\n(.pu-\\n(FMu
+.	if \\n(p? .tl 'PRIVATE AND CONFIDENTIAL''Page \\n%'
+'	bp
+..
+.wh 0 !t
+.\"
+.\"	.Title text of title ...
+.\"	.Project text of project name ...
+.\"	.Revision rev
+.\"	.Date date ...
+.\"
+.de Title
+.	ds ti-head "\\$*
+.	sS ti-save
+.	ps +4
+.	fi
+.	B "\\*[ti-head]"
+.	br
+.	rS ti-save
+.	sp .5
+..
+.de Project
+.	ds ti-proj "\\$*
+.	br
+Project\h'|\\n(DMu'\\c
+.	BI "\\*[ti-proj]"
+.	br
+..
+.de Revision
+.	ds ti-rev \\$1
+.	br
+Revision\h'|\\n(DMu'\\c
+.	B "\\*[ti-rev]"
+.	br
+..
+.de Date
+.	ds ti-date \\$*
+.	br
+Date\h'|\\n(DMu'\\c
+.	B "\\*[ti-date]"
+.	br
+..
+.\"
+.\"	Ends title block.
+.\"	Invoked at first text macro (typically .P).
+.\"
+.de T-
+..
+.\"
+.\"	.Party "Full Name"
+.\"	.Ref "name"
+.\"	.Sig "name of signatory" ["title of signatory"]
+.\"	.Address "address"
+.\"	.ACN "number"
+.\"	.ABN "number"
+.\"
+.de ti-parties
+..
+.de ti-sigs
+..
+.de Party
+.	ds ti-party "\\$*
+.	am ti-parties
+.		tl '''\\&\\$*'
+\\..
+.	ie (\\n(.ku+1n)>\\n(DMu .br
+.	el \\h'\\n(DMu-\\n(.ku'\\c
+.	ft 3
+\\&\\$*
+.	ft
+..
+.de Ref
+'	in \\n(DMu
+'	ti \\n(.iu
+(called "\\$*" in this contract)
+.	IN
+..
+.de Sig
+.	am ti-sigs
+.		ne 2c+3v
+.		rs
+.		sp 2c
+Signed \\\\kx\l'9c'\h'4n'Date \l'3c'
+.		br
+.		in \\\\nxu
+\\\\&\\$1
+.		br
+for \\*[ti-party]
+.		br
+.		if \\n(.$>1 \\{\\
+\\\\&\\$2
+.			br
+.		\\}
+.		IN
+\\..
+..
+.de Address
+.	br
+.	in \\n(DMu
+.	ti \\n(.iu
+of \\$*
+.	br
+.	IN
+..
+.de ACN
+.	br
+.	in \\n(DMu
+.	ti \\n(.iu
+\s-2A.C.N.\s0 \\$*
+.	br
+.	IN
+..
+.de ABN
+.	br
+.	in \\n(DMu
+.	ti \\n(.iu
+\s-2A.B.N.\s0 \\$*
+.	br
+.	IN
+..
+.\"
+.\"	.TC+
+.\"	No table-of-contents handling in contracts.
+.\"
+.de TC+
+..
+.\"
+.\"	.Term "heading"
+.\"
+.de Term
+.P
+\\&\\$*.
+..
+.\"
+.\"	.Signatures
+.\"
+.de Signatures
+.	ti-sigs
+..
+.mso tmac.chars
+.mso tmac.text
+.mso tmac.list
+.\"
+.\"	Set up physical page size from command-line option.
+.\"
+.mso tmac.pagesize
+.\"
+.\"
+.de PO
+._PO \\$1
+..
+.de LL
+._LL \\$1
+.lt \\n(INu+\\n(LLu
+.ev 1
+.ll \\n(LLu
+.lt \\n(INu+\\n(LLu
+.ev
+..
+.\"
+.\"	Set margins.
+.\"
+.if t \{\
+.	nr TM 1.2c
+.	nr HM .8c
+.	nr BM 2.2c
+.	nr FM 1.5c
+.	LL -5c
+.	nr DM \n(.l/5
+.	PO 2.5c
+.\}
+.if n \{\
+.	nr TM 3v
+.	nr HM 1v
+.	nr BM 3v
+.	nr FM 2v
+.	LL -8n
+.	nr DM \n(.l/5
+.	PO 4n
+.	if \nL=0 .nr L 66
+.	pl \nL
+.\}
+.\"
+.\"	Initialise page.
+.\"
+.if \nS=0 .nr S 12
+.S \nS
+.ev 1
+.S \nS
+.ev
+'fi
+'ad b
+.pn 1
+.nr p? 1
+.mk p
+.if \np .bp

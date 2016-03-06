@@ -1,0 +1,205 @@
+.mso tmac.pagesize
+.mso tmac.text
+.S 12
+.if \nS .S \nS
+.if t \{\
+.	po 1.5c
+.	nr LL 18c
+.	nr TM 1.2c
+.	nr BM 2c
+.\}
+.if n \{\
+.	po 0
+.	nr LL 80m
+.	nr TM 3v
+.	nr BM 4v
+.\}
+.lt \n(LLu
+.nr C1 \w'00-Www-0000'
+.nr G1 2m
+.nr CN \w'000000.00'
+.nr GN 1m
+.nr C2 \n(LL-\n(C1-\n(G1-(3*\n(CN)-(3*\n(GN)
+.\"
+.\"
+.wh 0 !t
+.de !t		\" top-of-page trap
+'sp |\\n(TMu
+.nf
+."h
+.wh -\\n(BMu !b
+'ns
+..
+.de !b		\" bottom-of-page trap
+.wh -\\n(BMu
+'bp
+..
+.\"
+.\"
+.\"
+.\"
+.\"
+.\"
+.\"
+.de Statement
+.ds format "\\$1
+..
+.de Account
+.ds account "\\$1
+..
+.de Title
+.ds title "\\$*
+..
+.de From
+.ds from "\\$*
+..
+.de To
+.ds to "\\$*
+..
+.de Line
+.if \\n[started]=0 \{\
+.	di "h
+.	fi
+.	ll \\n(LLu
+.	in \\n(C1u+\n(G1u
+.	ad l
+.   	if \\n[headroom] \{\
+.	ft HB
+HEADROOM ENGINEERING PTY LIMITED \0 \s-2ABN 76 071 090 545\s0
+.	br
+.	ft HR
+.	ps -3
+50 Clifton St, Maylands SA 5069 \0 headroom@zip.com.au
+.	ps +3
+.	sp
+.	\}
+\!.	mk
+\!.	in 0
+\!.	ll \\n(C1u
+\!.	ft 1
+\!.	rj 1
+\!P\s-2AGE\s0 \\\\n%
+\!.	rt
+.	in \\n(C1u+\n(G1u
+.	ll \\n(LLu
+.	ft 3
+STATEMENT
+.	if !''\\*[from]' FROM \\*[from]
+.	if !''\\*[to]' TO \\*[to]
+.	br
+Account 
+.	ie !''\\*[title]' \\*[title]
+.	el `\\*[account]'
+.	br
+.	ft 1
+.	sp 2
+.	in 0
+.	ie '\\*[format]'external' .formatline D\s-2ATE\s0 P\s-2ARTICULARS\s0 I\s-2NVOICED\s0 R\s-2ECEIVED\s0 B\s-2ALANCE\s0
+.	el .formatline D\s-2ATE\s0 P\s-2ARTICULARS\s0 D\s-2EBIT\s0 C\s-2REDIT\s0 B\s-2ALANCE\s0
+.	sp
+.	ruleline
+.	br
+.	di
+.	di "f
+.	ruleline
+.	sp .3
+\!.	nr n \\\\n%+1
+\!.	formatline "" "Continued on page \\\\nn"
+.	sp \\n(.hu
+.	di
+.	mk p
+.	if \\np .bp 1
+.	nr started 1
+.\}
+.setline \\$@
+..
+.de Endline
+.ds c "Totals for period
+.if !''\\$1' .ds c Total \\$1
+.di "e
+.ruleline
+.sp .6
+.formatline "" "\\*c" "\\$2" "\\$3"
+.sp
+.ie '\\*[format]'external' .formatline "" "Balance \\$5" "" "" "\\f3\\$4\\f1"
+.el .formatline "" "Balance" "" "" "\\f3\\$4\\f1"
+.sp
+.br
+.di
+.ne \\n(dnu
+.nf
+."e
+.wh -\\n(BMu
+..
+.de Overdue
+.ft 3
+.formatline "" "Overdue" "" "" "\\$1"
+.ft 1
+..
+.de Control
+.formatline "" "Control balance" "" "" "\\$1"
+..
+.de setline
+.di "l
+\\!.vpt 0
+.formatline \\$@
+\\!.vpt 1
+.sp \\n(.hu
+.di
+.nf
+.if \\n(dn>=\\n(.t \{\
+.	mk
+.	vpt 0
+.	"f
+.	rt
+.	vpt 1
+.	sp \\n(.tu
+.\}
+."l
+..
+.de ruleline
+.if n \{\
+.	formatline \\\\l'\\\\n(.lu-\\\\n(.iu\\&=' \\\\l'\\\\n(.lu-\\\\n(.iu\\&=' \\\\l'\\\\n(.lu-\\\\n(.iu\\&=' \\\\l'\\\\n(.lu-\\\\n(.iu\\&=' \\\\l'\\\\n(.lu-\\\\n(.iu\\&='
+.	sp
+.\}
+.if t \{\
+.	formatline \\\\v'-1v+2p'\\\\l'\\\\n(.lu-\\\\n(.iu\\&\(ul' \\\\v'-1v+2p'\\\\l'\\\\n(.lu-\\\\n(.iu\\&\(ul' \\\\v'-1v+2p'\\\\l'\\\\n(.lu-\\\\n(.iu\\&\(ul' \\\\v'-1v+2p'\\\\l'\\\\n(.lu-\\\\n(.iu\\&\(ul' \\\\v'-1v+2p'\\\\l'\\\\n(.lu-\\\\n(.iu\\&\(ul'
+.	sp 4p
+.\}
+..
+.de formatline
+.fi
+.mk
+.ad r
+.in 0
+.ll \\n(C1u
+\\&\\$1
+.br
+.rt
+.ad l
+.nr w 
+.in \\n(C1u+\\n(G1u
+.ll \\n(.iu+\\n(C2u
+\\&\\$2
+.br
+.rt
+.ad r
+.tr -\-
+.in \\n(LLu-(3u*\\n(CNu)-(2u*\\n(GNu)
+.ll \\n(.iu+\\n(CNu
+\\&\\$3
+.br
+.rt
+.in \\n(LLu-(2u*\\n(CNu)-\\n(GNu
+.ll \\n(.iu+\\n(CNu
+\\&\\$4
+.br
+.rt
+.in \\n(LLu-\\n(CNu
+.ll \\n(.iu+\\n(CNu
+\\&\\$5
+.br
+.tr --
+.rt
+.in 0
+..

@@ -1,0 +1,96 @@
+.\" tmac.pagesize
+.\" Gtroff macros for determining page size from a single (command-line)
+.\" parameter.
+.\"
+.\" Written by Andrew Bettison
+.\" Copyright 1998 Andrew Bettison
+.\" All rights reserved
+.\"
+.\"	Input: string register PAPERSIZE
+.\"		a4 (a4p), a4l, a5 (=a5p), a5l
+.\"		ff (ffp), ffl  -- filofax
+.\"	Output:	page length set using .pl
+.\"		page width set to entire paper width using .ll and .lt
+.\"		page offset set to zero with .po 0
+.\"
+.\"
+.\" Default page size
+.\"
+.if '\*[PAPERSIZE]'' .ds PAPERSIZE a4
+.\"
+.\" For troff
+.\"
+.if t \{\
+.	po 0
+.	if '\*[PAPERSIZE]'a4' .ds PAPERSIZE a4p
+.	if '\*[PAPERSIZE]'a5' .ds PAPERSIZE a5p
+.	if '\*[PAPERSIZE]'ff' .ds PAPERSIZE ffp
+.	ie '\*[PAPERSIZE]'a4p' \{\
+.		nr paperheight 29.7c
+.		nr paperwidth 21c
+.	\}
+.	el .ie '\*[PAPERSIZE]'a4l' \{\
+.		nr paperheight 21c
+.		nr paperwidth 29.7c
+.	\}
+.	el .ie '\*[PAPERSIZE]'a5p' \{\
+.		nr paperheight 21c
+.		nr paperwidth 29.7c/2u
+.	\}
+.	el .ie '\*[PAPERSIZE]'a5l' \{\
+.		nr paperheight 29.7c/2u
+.		nr paperwidth 21c
+.	\}
+.	el .ie '\*[PAPERSIZE]'ffp' \{\
+.		nr paperheight 17.1c
+.		nr paperwidth 9.5c
+.	\}
+.	el .ie '\*[PAPERSIZE]'ffl' \{\
+.		nr paperheight 9.5c
+.		nr paperwidth 17.1c
+.	\}
+.	el .ab Unknown paper size '\*[PAPERSIZE]'
+.\}
+.\"
+.\" For nroff
+.\"
+.if n \{\
+.	po 0
+.	if '\*[PAPERSIZE]'a4' .ds PAPERSIZE a4p
+.	ie '\*[PAPERSIZE]'a4p' \{\
+.		nr paperheight 66v
+.		nr paperwidth 80n
+.	\}
+.	el .ie '\*[PAPERSIZE]'a4l' \{\
+.		nr paperheight 42v
+.		nr paperwidth 132n
+.	\}
+.	el .ab Unknown paper size '\*[PAPERSIZE]'
+.\}
+.\"
+.\" Initialise common variables
+.\"
+.pl \n[paperheight]u
+.ll \n[paperwidth]u
+.lt \n[paperwidth]u
+.nr PO \n(.o
+.nr LL \n(.l
+.\"
+.\" Useful macro internals
+.\"
+.de _PO
+.po \\n(POu
+.po \\$1
+._LL \\n(LLu+\\n(PO-\\n(.ou
+.nr PO \\n(.o
+..
+.de _LL
+.ll \\n(LLu
+.ll \\$1
+.nr LL \\n(.l
+..
+.de _RM
+.ll \\n[paperwidth]u-\\n(POu
+.ll -\\$1
+.nr LL \\n(.l
+..

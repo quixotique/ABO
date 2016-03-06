@@ -1,0 +1,77 @@
+.\"
+.\"	.Fit D M LL MM LH PS VS [IN]
+.\"
+.\"	Fit text from diversion D (mark M) inside a region with line
+.\"	length LL, mark margin MM, and maximum height LH, starting at
+.\"	point size PS (in units) vertical spacing VS (in units) and
+.\"	reducing until a fit is achieved.  Wrapped lines are indented
+.\"	by IN [default 3n].
+.\"
+.\"	If successful, return ok=1 and fitted text in diversion F";
+.\"	otherwise ok=0.
+.\"
+.de Fit
+.asciify \\$1
+.nr ok 0
+.nr p \\$6
+.nr v \\$7
+.while (\\n(ok=0)&(\\nv>\\np) \{\
+.	_F \\$1 "\\$2" \\$3 \\$4 \\$5 \\np \\nv \\$8
+.	nr v -1p
+.\}
+.nr p -1
+.while (\\n(ok=0)&(\\np>=8p) \{\
+.	_F \\$1 "\\$2" \\$3 \\$4 \\$5 \\np \\nv \\$8
+.	nr p -1p
+.	nr v -1p
+.\}
+..
+.de _F
+.\" turn off line-break warnings
+.nr owarn \\n[.warn]
+.if (\\n[.warn]/4)%2 .warn \\n[.warn]-4
+.di F"
+.ps \\$6u
+.vs \\$7u
+.ta (n;\\$8)
+.fi
+.nr fit-ll \\$3
+.if !''\\$2' \{\
+.	nr w \\$3-\\$4
+.	ll \\nwu
+.	ad r
+.	in 0
+\&\s-2\\$2\s+2
+.	sp -1
+.	ll \\nwu-\\n[.n]u-1m
+.\"	dt 1v ~t
+.\}
+.el \{
+.	ll \\n[fit-ll]u
+.\}
+.na
+.ps \\$6u
+.in (n;\\$8)
+.ti 0
+.it 1 ~b
+\\c
+.\\$1
+.br
+.it
+.nr "h \\n(.h
+.di
+.in 0
+.warn \\n[owarn]
+.nr ok \\n("h<=\\$5
+..
+.de ~b
+'ll \\n[fit-ll]u
+.if !\\n[.int] \{
+.	sp -1
+.	ti 0
+.\}
+.it 1 ~b
+..
+.de ~t
+'ll \\n[fit-ll]u
+..

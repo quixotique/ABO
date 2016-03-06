@@ -1,0 +1,90 @@
+.mso tmac.invoice
+.ds header "T\0A\0X\0\0\0I\0N\0V\0O\0I\0C\0E
+.ds total
+.ds total-nogst
+.ds total-gst
+.nr taxinvoice 1
+.nr _in_total 0
+.\"
+.\"			Total
+.\"
+.de Total
+.	_enditem
+.	nr _in_total 1
+.	ds total "\\$1
+..
+.\"
+.\"			GST
+.\"
+.de GST
+.	ds gst "\\$1
+..
+.\"
+.\"			PriceGST
+.\"
+.de PriceGST
+.	ds price-gst "\\$1
+..
+.\"
+.\"			TotalGST
+.\"
+.de TotalGST
+.	ds total-gst "\\$1
+..
+.de End
+.	_enditem
+.	_checktotals
+.	if ''\\*[total]' .pso echo -n '.ds total "'; echo '2k 0.00 \\*[total-price] p' | sed -e 's/,//g' | dc
+.	if ''\\*[gst]' .pso echo -n '.ds gst "'; echo '2k 0.00 \\*[total-price-gst] p' | sed -e 's/,//g' | dc
+.	_totline "TOTALS:  \\\\*[currency_symbol] " "\\*[total]" "\\*[gst]"
+.	if ''\\*[total-gst]' .pso echo -n '.ds total-gst "'; echo '2k \\*[total] \\*[gst] +p' | sed -e 's/,//g' | dc
+.	sp -.5
+.	in \\n(IWu
+\D'l (\\n(AWu+1n) 0'\h'-(\\n(AWu+1n)'
+.	_totline "TOTAL INCLUDING GST:  \\\\*[currency_symbol] " "\f3\\*[total-gst]\fP"
+.	_end
+..
+.\"
+.\"			_item_header
+.\"
+.de _item_header
+.	nr AW 12n
+.	nr IW \\n(LL-\\n(AW-1n-\\n(AW
+.	nr IW2 \\n(LL-\\n(AW
+.	_hdrline "ITEM" "PRICE (\\\\*[currency_symbol])" "GST (\\\\*[currency_symbol])"
+..
+.\"
+.\"			_itemcols
+.\"
+.de _itemcols
+.	ie ''\\*[price]' \{\
+.		ie ''\\*[price-gst]' .tm .Item missing .Price or .PriceGST
+.		el \{\
+.			if ''\\*[gst]' .pso echo -n '.ds gst "'; echo '2k \\*[price-gst] 1.1/ p' | sed -e 's/,//g' | dc
+.			pso echo -n '.ds price "'; echo '2k \\*[price-gst] \\*[gst] -p' | sed -e 's/,//g' | dc
+.		\}
+.	\}
+.	el \{\
+.		ie !''\\*[price-gst]' .if ''\\*[gst]' .pso echo -n '.ds gst "'; echo '2k \\*[price-gst] \\*[price] -p' | sed -e 's/,//g' | dc
+.		el .if ''\\*[gst]' .pso echo -n '.ds gst "'; echo '2k \\*[price] .1 *p' | sed -e 's/,//g' | dc
+.	\}
+.	ds total-price "\\*[total-price] \\*[price] +
+.	ds total-price-gst "\\*[total-price-gst] \\*[gst] +
+.	_itemline "\\*[price]" "\\*[gst]"
+.	ds gst
+.	ds price
+.	ds price-gst
+..
+.\"
+.\"			_checkaddr
+.\"
+.de _checkaddr
+.	nr hasacn 0
+.	nr hasabn 0
+.	if !''\\*[.ACN]' .nr hasacn 1
+.	if !''\\*[.ABN]' .nr hasabn 1
+.	if \\n[taxinvoice] \{\
+.		if \\n[hasabn]=0 .tm Warning: \\$1 missing ABN
+.		if \\n[hasacn] .tm Warning: \\$1 has ACN - not used for tax invoices
+.	\}
+..
