@@ -1,5 +1,43 @@
+.\" tmac.invoice
+.\" Groff macros for typesetting invoices.
+.\" Copyright 1996-2016 Andrew Bettison
 .\"
+.\" Structure of an invoice document:
 .\"
+.\"     .mso tmac.invoice
+.\"     .Customer [<caption>]
+.\"     .ta 4m +3n                          \" optional
+.\"     <customer name>
+.\"     <customer address 1>
+.\"     <customer address 2 etc.>
+.\"     .Field ABN 88 888 888 888           \" optional
+.\"     .Email customer@somewhere.com.au    \" optional
+.\"     .Mobile 0400 444 444                \" optional
+.\"     .Phone 08 8888 8888                 \" optional
+.\"     .Fax 08 8888 8888                   \" optional
+.\"     ...
+.\"     .Supplier [<caption>]
+.\"     .ta 4m +3n                          \" optional
+.\"     <supplier name>
+.\"     <supplier address 1>
+.\"     <supplier address 2 etc.>
+.\"     .Field ABN 88 888 888 888           \" optional
+.\"     .Email supplier@somewhere.com.au    \" optional
+.\"     .Mobile 0400 444 444                \" optional
+.\"     .Phone 08 8888 8888                 \" optional
+.\"     .Fax 08 8888 8888                   \" optional
+.\"     .Invoice|.Statement [<header>]
+.\"     .Centre "Invoice reference number" <ref>
+.\"     .Centre "Issued on" <date>
+.\"     .Item <price> [+|-]
+.\"     .Height n                           \" optional
+.\"     text
+.\"     .Item <price> [+|-]
+.\"     text
+.\"     .EndItem                            \" optional
+.\"     .sp .5                              \" optional
+.\"     .Total <total> [+|-] [<caption>]    \" optional
+.\"     .Signature
 .\"
 .de !t		\" top-of-page trap
 '	sp |1.2c
@@ -13,458 +51,421 @@
 '	bp
 ..
 .wh 0 !t
-.de Invoice
-.       ds _header "\\*[invoice_header]
-.       ds _date_label "\\*[invoice_date_label]
-.       ds _description_header "\\*[invoice_description_header]
-.       ds _amount_header "\\*[invoice_amount_header]
-.       ds _item_point_size "\\*[invoice_description_point_size]
-.       ds _total_label "\\*[invoice_total_label]
-..
-.de Statement
-.       ds _header "\\*[statement_header]
-.       ds _date_label "\\*[statement_date_label]
-.       ds _description_header "\\*[statement_description_header]
-.       ds _amount_header "\\*[statement_amount_header]
-.       ds _item_point_size "\\*[statement_description_point_size]
-.       ds _total_label "\\*[statement_total_label]
-..
 .\"
-.\"			.Phone
+.\"                 end-of-input trap
 .\"
-.de Phone
-.	ds .PHONE "\\$*
+.de _end_input
+.   _end
+.   _emit
+.   if \\n%=1 .nr p? 0
+.   br
+.   _restore
+..
+.em _end_input
+.de _restore
+.   in 0
+.   ll \\n(LLu
+.   lt \\n(LLu
+.   fi
+.   ad l
 ..
 .\"
-.\"			.Mobile
+.\"                 .left "text"
+.\"                 .right "text" <width>
 .\"
-.de Mobile
-.	ds .MOBILE "\\$*
-..
-.\"
-.\"			.FAX
-.\"
-.de Fax
-.	ds .FAX "\\$*
-..
-.\"
-.\"			.Email
-.\"
-.de Email
-.       nr .EMAIL +1
-.	am .EMAIL end
-\\$*
-.           br
-.       end
-..
-.\"
-.\"			.ACN
-.\"
-.de ACN
-.	ds .ACN "\\$*
-..
-.\"
-.\"			.ABN
-.\"
-.de ABN
-.	ds .ABN "\\$*
-..
-.\"
-.\"			._end_address
-.\"
-.de _end_address
-.	if \\n(d.>0 \{\
-.		_checkaddr "\\*[addrid]"
-.		it 0 ~b
-.		in 0
-.		ta 4m +3n
-.		nr ^ .6v
-.		if !''\\*[.ABN]' \{\
-.			sp \\n^u
-.			nr ^ 0
-\s-1A.B.N.\s0	\\*[.ABN]
-.			br
-.		\}
-.		if !''\\*[.ACN]' \{\
-.			sp \\n^u
-.			nr ^ 0
-\s-1A.C.N.\s0	\\*[.ACN]
-.			br
-.		\}
-.		if !''\\*[.PHONE]' \{\
-.			sp \\n^u
-.			nr ^ 0
-\s-1Phone\s0	\\*[.PHONE]
-.			br
-.		\}
-.		if !''\\*[.MOBILE]' \{\
-.			sp \\n^u
-.			nr ^ 0
-\s-1Mobile\s0	\\*[.MOBILE]
-.			br
-.		\}
-.		if !''\\*[.FAX]' \{\
-.			sp \\n^u
-.			nr ^ 0
-\s-1Fax\s0	\\*[.FAX]
-.			br
-.		\}
-.		if \\n[.EMAIL]>0 \{\
-.			sp \\n^u
-.			nr ^ 0
-.                       .EMAIL
-.			br
-.		\}
-.		di
-.		if \\n(d.=1 \{\
-.			nr s^ \\n(dn
-.			if \\n(dl>\\n(BW .tm Warning: Supplier address too wide
-.		\}
-.		if \\n(d.=2 \{\
-.			nr c^ \\n(dn
-.			if \\n(dl>\\n(BW .tm Warning: Customer address too wide
-.		\}
-.		nr d. 0
-.	\}
-.	ds .ABN
-.	ds .ACN
-.	ds .PHONE
-.	ds .MOBILE
-.	ds .FAX
-.       nr .EMAIL 0
-.	ds .EMAIL
-..
-.de ~b
-.	br
-.	ti 0
-.	it 1 ~b
-..
-.\"
-.\"	.Supplier
-.\"
-.de Supplier
-.	_end_address
-.	fi
-.	ad l
-.	ll \\n(BWu
-.	in 3n
-.	ti 0
-.	di S'
-.	nr d. 1
-.	ds addrid Supplier
-.	it 1 ~b
-..
-.\"
-.\"	.Customer
-.\"
-.de Customer
-.	_end_address
-.	fi
-.	ad l
-.	ll \\n(BWu
-.	in 3n
-.	ti 0
-.	di C'
-.	nr d. 2
-.	ds addrid Customer
-.	it 1 ~b
-..
-.de ATTN
-.	_end_address
-.	ds AT "\\$*
-..
-.de Ref
-.	_end_address
-.	ds _ref "\\$*
-..
-.de Date
-.	_end_address
-.	ds _date "\\$*
-..
-.de Who
-.	_end_address
-.	ds _who "\\$*
-..
 .de left
 \h'-\w@\\$1@u'\\$1\c
 ..
 .de right
 \h'\\$2-\w@\\$1@u'\\$1\c
 ..
-.de Start
-.	_end_address
-.	ll \\n(LLu
-.	lt \\n(LLu
-.	in 0
-.	ps +4
-.	ft 3
-.	ce 1
-\\*[_header]
-.	ft
-.	ps
-.	sp 2
-.	nr ^ \\n(s^
-.	if \\n(c^>\\n^ .nr ^ \\n(c^
-.	nr ^ +1v-\\n(bLu
-.	nr > \\n(BWu+2n
-.	mk a
-\\s-2SUPPLIER\\s0
-.	sp -\\n(bLu
-.	nf
-\h'|-1n'\D'l \\n>u 0'\D'l 0 \\n^u'\D'l -\\n>u 0'\D'l 0 -\\n^u'
-.	br
-.	S'
-.	br
-.	rt \\nau
-.	po +\\n(BWu+1c
-\\s-2CUSTOMER\\s0
-.	sp -\\n(bLu
-.	nf
-\h'|-1n'\D'l \\n>u 0'\D'l 0 \\n^u'\D'l -\\n>u 0'\D'l 0 -\\n^u'
-.	br
-.	C'
-.	sp |\\nau+\\n^u+3v
-.	po -(\\n(BWu+1c)
-.	ll \\n(LLu
-.	in 0
-.	fi
-.	if !''\\*(AT' \{\
-.		ft 3
-.		ce 1
-ATTENTION: \\*(AT
-.		ft
-.		sp 1
-.	\}
-.	in \\n(BWu+.5c
-.	if !''\\*[_who]' \{\
-.		left "\\\\*[who_label]: "
-.		ft 3
-\\*[_who]
-.		ft
-.		br
-.	\}
-.	if !''\\*[_date]' \{\
-.		left "\\\\*[_date_label]: "
-.		ft 3
-\\*[_date]
-.		ft
-.		br
-.	\}
-.	if !''\\*[_ref]' \{\
-.		left "\\\\*[ref_label]: "
-.		ft 3
-\\*[_ref]
-.		ft
-.		br
-.	\}
-.	nf
-.	in 0
-.	sp 1
-.	nr ?h 0
-.	nr ?r 0
-..
-.de StartBalance
-.	nf
-.	in 0
-.	nr ?r 0
-.	nr ?h 0
-.       Statement
-.       ds _amount_header
-..
-.de Item
-.	_enditem
-.	in 0
-.	if \\n(?h=0 \{\
-.		nr ?h 1
-.		_item_header
-.	\}
-.	if \\n(?r=0 \{\
-.		nr ?r 1
-.		_item_rule
-.	\}
-.	nr _in_item 1
-.       nr _item_height 0
-.	mk r
-.	sS ItemSV
-.	ps \\*[_item_point_size]
-.       vs 1.2m
-.	ll \\n(IWu-1n
-.	in 0
-.	fi
-.	ad l
-..
-.de Height
-.       nr _item_height \\$1v
-..
-.de _enditem
-.	if \\n[_in_item]=1 \{\
-.		nr _in_item 0
-.		br
-.		rS ItemSV
-.		mk b
-.		rt \\nru
-.               if \\nb-\\nr<\\n[_item_height] .nr b \\nr+\\n[_item_height]
-.		nf
-.		_itemcols
-.	\}
-..
-.de Price
-.	ds price "\\$1
-.	ds sign "\\$2
-..
-.de Total
-.	_enditem
-.	in \\n(IWu
-.	sp -.5
-\D'l (\\n(AWu+1n) 0'\h'-(\\n(AWu+1n)'
-.	_totline "\\\\*[_total_label] " "\f3\\$*\fP"
-.\"	_totline "\\\\*[_total_label]:  \\\\*[currency_symbol] " "\f3\\$*\fP"
-..
 .\"
-.\"			_item_header
-.\"
-.de _item_header
-.	nr AW 12n
-.	nr IW \\n(LL-\\n(AW
-.	nr IW2 0
-.	_hdrline "\\\\*[_description_header]" "\\\\*[_amount_header]"
-..
-.\"
-.\"			_item_rule
-.\"
-.de _item_rule
-.	_hdrrule
-..
-.\"
-.\"			_hdrline
-.\"
-.de _hdrline
-.	mk r
-.	ps -3
-.	if \\n(.$>0 \{\
-.		in 0
-.		sp |\\nru-1v
-\\&\\$1
-.	\}
-.	if \\n(.$>1 \{\
-.		sp -1
-.		in \\n(IWu
-.		right "\\$2" \\n(AWu
-.	\}
-.	if \\n(.$>2 \{\
-.		sp -1
-.		in \\n[IW2]u
-.		right "\\$3" \\n(AWu
-.	\}
-.	ps +3
-..
-.\"
-.\"			_hdrrule
-.\"
-.de _hdrrule
-.	in 0
-.	sp -\\n(bLu
-\h'-1n'\D'l \\n(LLu+2n 0'
-..
-.\"
-.\"			_itemcols
-.\"
-.de _itemcols
-.	_itemline "\\*[sign]" "\\*[price]"
-..
-.\"
-.\"			_itemline
-.\"
-.de _itemline
-.	in 0
-.	sp |\\nru-1v
-\h'-1n'\D'l 0 |\\nbu-\\n(bLu'\D'l \\n(IWu+1n 0'\D'l 0 -|(\\nbu-\\n(bLu)'\c
-.	in \\n(IWu
-.	_itemcol "\\$1" "\\$2"
-.	if \\n(.$>2 \{\
-.		in \\n[IW2]u
-.		_itemcol "" "\\$3"
-.	\}
-.	sp |\\nbu+1v-\\n(bLu
-.	in 0
-..
-.de _itemcol
-.	if !''\\$1' \{\
-\k>\ \\$1\h'|\\n>'\c
-.       \}
-.	right "\\$2" \\n(AWu
-.	br
-.	sp |\\nru-1v
-\D'l 0 |\\nbu-\\n(bLu'\D'l \\n(AWu+1n 0'\D'l 0 -|(\\nbu-\\n(bLu)'\h'-(\\n(AWu+1n)'\c
-..
-.\"
-.\"			_totline
-.\"
-.de _totline
-.	mk r
-.	in \\n(IWu
-.	left "\\$1"
-.	_totcol "\\$2"
-.	if \\n(.$>2 \{\
-.		in \\n[IW2]u
-.		_totcol "\\$3"
-.	\}
-.	sp |\\nbu+1v-\\n(bLu
-.	in 0
-..
-.de _totcol
-.	right "\\$1" \\n(AWu
-.	br
-.	mk b
-.	sp |\\nru-1v
-\D'l 0 |\\nbu-\\n(bLu'\D'l \\n(AWu+1n 0'\D'l 0 -|(\\nbu-\\n(bLu)'\h'-(\\n(AWu+1n)'\c
-..
-.\"
-.\"			End
+.\"                 .End
 .\"
 .de End
-.	_enditem
-.	_checktotals
-.	_end
+.   _end
+.   _emit
+.   _restore
 ..
 .de _end
-.	sp
-.	in 0
-.	ll \\n(LLu
-.	fi
-.	ad l
+.   if d_end_macro ._end_macro
+.   rm _end_macro
 ..
-.de Terms
+.de _emit
+.   if d_emit_macro ._emit_macro
+.   rm _emit_macro
 ..
-.de Account
+.\"
+.\"                 .reset_box
+.\"                 .start_box <id> <indent> <width>
+.\"                 .box_height <height>
+.\"                 .end_box
+.\"                 .replay_box <id> [<CAPTION>]
+.\"
+.de reset_box
+.   rm .boxtop
+.   nr .boxheight 0
+..
+.de start_box
+.   _end
+.   de _end_macro xx
+.       end_box
+.   xx
+.   ds _ \\$1
+.   ie !d.boxtop .mk .boxtop
+.   el rt \\n[.boxtop]u
+.   nr .boxindent.\\*_ \\$2
+.   nr .boxwid.\\*_ \\$3
+.   di 'box.\\*_
+.   ll \\n[.boxwid.\\*_]u
+..
+.de box_height
+.   if \\$1>\\n[.boxheight] .nr .boxheight \\$1
+..
+.de end_box
+.   di
+.   if \\n(dl>\\n(.l .tm Warning: box contents too wide
+.   if \\n(dn>\\n[.boxheight] .nr .boxheight \\n(dn
+..
+.de replay_box
+.   _end
+.   ds _ \\$1
+.   if d'box.\\*_ \{\
+.       rt \\n[.boxtop]u
+.       nr .boxindent \\n[.boxindent.\\*_]
+.       nr .boxwid \\n[.boxwid.\\*_]
+.       ll \\n[.boxwid]u
+.       in \\n[.boxindent]u
+.       if !''\\$2' \\&\\$2
+.       nr bL .5v
+.       if n .nr bL 0
+.       sp -\\n(bLu
+.       nr ^ \\n[.boxheight]u+\\n(bLu
+.       nr > \\n(.lu+1n
+.       nf
+\h'|-1n'\D'l \\n>u 0'\D'l 0 \\n^u'\D'l -\\n>u 0'\D'l 0 -\\n^u'
+.       br
+.       'box.\\*_
+.       rm 'box.\\*_
+.       in 0
+.   \}
+..
+.\"
+.\"                 .reset_address
+.\"                 .start_address <id> <indent> <width>
+.\"                 .end_address
+.\"                 .replay_address <id> [<CAPTION>]
+.\"
+.de reset_address
+.   reset_box
+..
+.reset_address          \" initialise whenever this file is sourced
+.de start_address
+.   start_box \\$@
+.   de _end_macro xx
+.       end_address
+.   xx
+.   \" indent wrapped lines by 3n using this input macro trick
+.   fi
+.   in 3n
+.   ta 4m +3n \" can override by using another .ta inside box
+.   ti 0
+.   it 1 _address_input_trap
+..
+.de _address_input_trap
+.   br
+.   ti 0
+.   it 1 _address_input_trap
+..
+.de end_address
+.   it 0 _address_input_trap
+.   ti 0
+.   in 0
+.   end_box
+..
+.de replay_address
+.   replay_box \\$@
+.   sp \\n(bLu
+..
+.\"
+.\"                 .Customer [<caption>]
+.\"                 .Supplier [<caption>]
+.\"
+.de Customer
+.   _end
+.   ds _customer_caption CUSTOMER
+.   if \\n(.$>0 .ds _customer_caption "\\$1
+.   start_address customer 0 \\n(BWu
+.   de _end_macro xx
+.       _end_customer
+.   xx
+.   de _emit_macro xx
+.       _emit_customer_supplier
+.   xx
+..
+.de _end_customer
+.   _emit_fields
+.   end_address customer
+..
+.de Supplier
+.   _end
+.   ds _supplier_caption SUPPLIER
+.   if \\n(.$>0 .ds _supplier_caption "\\$1
+.   start_address supplier \\n(BWu+1c \\n(BWu
+.   de _end_macro xx
+.       _end_supplier
+.   xx
+.   de _emit_macro xx
+.       _emit_customer_supplier
+.   xx
+..
+.de _end_supplier
+.   _emit_fields
+.   end_address supplier
+..
+.de _emit_customer_supplier
+.   sS .save
+.   ps -2
+.   vs 1.2m
+.   replay_address customer "\\*[_customer_caption]"
+.   replay_address supplier "\\*[_supplier_caption]"
+.   rS .save
+.   reset_address
+.   _restore
+.   sp 2
+..
+.\"
+.\"                 .Field <label> <text>
+.\"
+.de Field
+.   ds .label "\\$1
+.   shift 1
+.   nr .FIELDS +1
+.   am 'FIELDS end
+\\s-1\\*[.label]\\s0	\\$*
+.   br
+.   end
+..
+.de Phone
+.   Field Phone \\$@
+..
+.de Mobile
+.   Field Mobile \\$@
+..
+.de Fax
+.   Field Fax \\$@
+..
+.de Email
+.   Field Email \\$@
+..
+.de _emit_fields
+.   nr ^ .6v
+.   if \\n[.FIELDS]>0 \{\
+.       sp \\n^u
+.       nr ^ 0
+.       'FIELDS
+.       nr FIELDS 0
+.       ds 'FIELDS
+.       br
+.   \}
+..
+.\"
+.\"                 .Invoice <header> <descriptionheader> <amountheader>
+.\"                 .Statement <header> <descriptionheader> <amountheader>
+.\"
+.de Invoice
+.   End
+.   ds _section_header      "\\*[invoice_header]
+.   if \\n(.$>0 .if !'='\\$1' .ds _section_header "\\$1
+.   ds _description_header  "\\*[invoice_description_header]
+.   ds _amount_header       "\\*[invoice_amount_header]
+.   ds _date_label          "\\*[invoice_date_label]
+.   ds _due_date_label      "\\*[invoice_due_date_label]
+.   ds _item_point_size     "\\*[invoice_description_point_size]
+.   ds _total_label         "\\*[invoice_total_label]
+.   shift 1
+.   Section \\$@
+.   sS .save
+.   ps +4
+.   vs 1.2m
+.   B
+.   if !''\\*[_section_header]' .Header "\\*[_section_header]"
+.   R
+.   rS .save
+..
+.de Statement
+.   End
+.   ds _section_header      "\\*[statement_header]
+.   if \\n(.$>0 .if !'='\\$1' .ds _section_header "\\$1
+.   ds _description_header  "\\*[statement_description_header]
+.   ds _amount_header       "\\*[statement_amount_header]
+.   ds _date_label          "\\*[statement_date_label]
+.   ds _due_date_label      "\\*[statement_due_date_label]
+.   ds _item_point_size     "\\*[statement_description_point_size]
+.   ds _total_label         "\\*[statement_total_label]
+.   shift 1
+.   Section \\$@
+.   sS .save
+.   ps +4
+.   vs 1.2m
+.   B
+.   if !''\\*[_section_header]' .Header "\\*[_section_header]"
+.   R
+.   rS .save
+..
+.\"
+.\"                 .Section [<descriptionheader>|=] [<amountheader>|=]
+.\"
+.de Section
+.   End
+.   if \\n(.$>0 .if !'='\\$1' .ds _description_header "\\$1
+.   if \\n(.$>1 .if !'='\\$2' .ds _amount_header      "\\$2
+.   _start_items
+.   ns
+..
+.\"
+.\"                 .Header <text>
+.\"                 .Centre <label> <text>
+.\"
+.de Header
+.   End
+.   sp
+.   ce 1
+\\&\\$*
+.   br
+.   rs
+..
+.de Centre
+.   End
+.   sp .5
+.   in \\n(.lu/2u
+.   left "\s-1\\$1:\0\s0"
+\\&\\$2
+.   br
+.   ns
+..
+.de Ref
+.   Centre "\\*[ref_label]" "\\$*"
+..
+.de Date
+.   Centre "\\*[_date_label]" "\\$*"
 ..
 .de Due
+.   Centre "\\*[_due_date_label]" "\f3\\$*\fP"
+..
+.de _start_items
+.   nr ?r 0
+.   nr ?h 0
+.   nr .itemwid \\n(LL-\\n(AW-2n
+..
+.start_items
+.\"
+.\"                 .Header <text>
+.\"                 .Item <price> [<sign>]
+.\"
+.de Item
+.   End
+.   ds _item_price "\\$1
+.   ds _item_sign "\\$2
+.   rs
+.   if \\n(?h=0 \{\
+.	_header_line "\\\\*[_description_header]" "\\\\*[_amount_header]"
+.	nr ?h 1
+.   \}
+.   sS .itemsave
+.   ps \\*[_item_point_size]
+.   vs 1.2m
+.   start_box item 0 \\n[.itemwid]u
+.   de _end_macro xx
+.       _end_item
+.   xx
+.   ll -1n
+.   in 0
+.   fi
+.   ad l
+..
+.de Height
+.   box_height \\$1
+..
+.de Price                   \" deprecated - for compatibility only
+.   ds _item_price "\\$1
+.   ds _item_sign "\\$2
+..
+.de _end_item
+.   rm _end_macro
+.   br
+.   end_box
+.   rS .itemsave
+.   start_box price \\n[.itemwid]u+1n \\n(AWu+1n
+.   if !''\\*[_item_sign]' \{\
+\\&\\*[_item_sign]
+.       sp -1
+.   \}
+.   right "\\*[_item_price]" \\n(AWu
+.   br
+.   _end
+.   replay_box item
+.   replay_box price
+.   reset_box
+.   _restore
 ..
 .\"
-.\"	.EndInvoice
+.\"                 .Total <total> [+|-] [<label>]
 .\"
-.de EndInvoice
-.	if \\n%=1 .nr p? 0
+.de Total
+.   End
+.   ds .total "\\$1
+.   ds .sign
+.   ds .label "\\\\*[_total_label]
+.   shift 1
+.   if \\n(.$>0 .if \w@\\$1@<1m \{\
+.       ds .sign "\\$1
+.       shift 1
+.   \}
+.   if \\n(.$>0 .ds .label "\\$1
+.   start_box total \\n[.itemwid]u+1n \\n(AWu+1n
+.   left "\\*[.label]   "
+.   if !''\\*[.sign]' \{\
+\\&\\*[.sign]
+.       sp -1
+.   \}
+.   right "\\f3\\*[.total]\\fP" \\n(AWu
+.   br
+.   _end
+.   replay_box total
+.   reset_box
+.   _restore
+.   sp .5
+..
+.de _header_line
+.   sS .hdrsave
+.   ps -3
+.   vs 1.2m
+.   if \\n(.$>0 \{\
+.       in 0
+\\&\\$1
 .       br
-.	nf
+.   \}
+.   if \\n(.$>1 \{\
+.       sp -1
+.       in \\n[.itemwid]u
+.       right "\\$2" \\n(AWu
+.       br
+.   \}
+.   sp -.2
+.   rS .hdrsave
 ..
 .\"
-.\"	.EndStatement
-.\"
-.de EndStatement
-.	EndInvoice
-..
-.\"
-.\"	.Sg [lr]
+.\"	.Signature [right]
 .\"	Start signature block, at left or right of page.
 .\"
-.de Sg
-.	sp 1
-.	in 0
-.	if '\\$1'r' \{\
-.		if \\n(S'=0 .nr S' 5c
-.		if '\\$1'r' .in \\n(.lu-\\n(S'u\}
-.       EndInvoice
+.de Signature
+.   End
+.   sp 1
+.   if '\\$1'right' \{\
+.       if \\n(S'=0 .nr S' 5c
+.       if '\\$1'right' .in \\n(.lu-\\n(S'u
+.   \}
 ..
 .mso tmac.chars
 .mso tmac.text
@@ -475,15 +476,16 @@ ATTENTION: \\*(AT
 .\"
 .ds invoice_header "I\0N\0V\0O\0I\0C\0E
 .ds statement_header "S\0T\0A\0T\0E\0M\0E\0N\0T
-.ds who_label "Issued by
 .ds ref_label "Invoice reference number
 .ds currency_symbol AU$
 .ds invoice_date_label "Date of issue
+.ds invoice_due_date_label "Due by
 .ds invoice_description_header "ITEM
 .ds invoice_description_point_size -2
 .ds invoice_amount_header "PRICE (\\\\*[currency_symbol])
 .ds invoice_total_label TOTAL
 .ds statement_date_label "Statement issued
+.ds statement_due_date_label "Due by
 .ds statement_description_header "ITEM
 .ds statement_amount_header "PRICE (\\\\*[currency_symbol])
 .ds statement_description_point_size -2
@@ -499,6 +501,7 @@ ATTENTION: \\*(AT
 .ll -3.6c
 .nr LL \n(.l
 .nr BW (\n(LLu-1c)/2u
+.nr AW 12n
 .nr bL .6v
 .if n .nr bL 0
 .S 12
