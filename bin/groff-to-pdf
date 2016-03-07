@@ -1,0 +1,58 @@
+#!/bin/bash
+# Typeset UTF-8 encoded groff documents to PDF.
+# Copyright 2016 Andrew Bettison
+
+usage() {
+   echo "Usage: $0 groff-source.t [ destination.pdf ]"
+   echo "       $0 groff-source.t [...] directory"
+}
+
+groff_to_pdf() {
+   local src="$1"
+   case "$src" in
+   */*)
+      pushd "${src%/*}" >/dev/null || return $?
+      src="${src##*/}"
+      ;;
+   *)
+      pushd . >/dev/null
+      ;;
+   esac
+   case "$2" in
+   -) groff -Kutf-8 -Tpdf "$src";;
+   *) groff -Kutf-8 -Tpdf "$src" >"$2";;
+   esac
+   popd >/dev/null
+}
+
+if [ $# -eq 0 ]; then
+   usage >&2
+   exit 1
+fi
+args=("$@")
+dst=-
+if [ ${#args[*]} -gt 1 ]; then
+   dst="${args[-1]}"
+   unset args[-1]
+fi
+
+for groff_src in "${args[@]}"; do
+   if [ "x$groff_src" != x- -a ! -r "$groff_src" ]; then
+      echo "$0: cannot read $groff_src" >&2
+      exit 1
+   fi
+done
+
+if [ "x$dst" != x- -a -d "$dst" ]; then
+   for groff_src in "${args[@]}"; do
+      groff_src_basename="$groff_src"
+      groff_src_basename="${groff_src_basename##*/}"
+      groff_src_basename="${groff_src_basename%.t}"
+      groff_to_pdf "$groff_src" "$dst/${groff_src_basename}.pdf"
+   done
+elif [ ${#args[@]} -eq 1 ]; then
+   groff_to_pdf "${args[0]}" "$dst"
+else
+   usage >&2
+   exit 1
+fi
