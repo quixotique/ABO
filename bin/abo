@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+# vim: sw=4 sts=4 et fileencoding=utf8 nomod
+# Copyright 2013-2014 Andrew Bettison
+
+r'''Usage:
+    abo bsheet [-efWpqDs] [--fullnames] [--labels] [--bare] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
+    abo profloss [-efWpqDs] [--fullnames] [--labels] [--bare] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    abo acc [-bcefwWpqD] [--bare] [--remove=ACC...] [--width=COLUMNS] [--title=TEXT] <PRED> [<period>...]
+    abo due [-fWpqD] [--over] [--labels] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
+    abo table [-fWpqD] [--over] [--labels] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
+    abo balance [-faWpqDsj] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
+    abo journal [-fwWpqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
+    abo chart [-fvqD] [--select=PRED]
+    abo index [-fqD]
+    abo check [-efqD]
+    abo mako [-fqD] [--remove=PRED...] [--template-dir=DIR...] <template> [<args>...]
+    abo compa <command> <word> <preword>
+    abo -h | --help
+    abo --version
+
+Options:
+    -h --help               Show this message
+       --version            Show version and exit
+    -D --debug              Log debug on stderr
+    -q --quiet              Suppress information logging on stderr
+    -f --force              Force re-population of transaction cache
+       --select=PRED        Only show accounts satisfying PRED
+    -w --wrap               Wrap long lines
+       --width=COLUMNS      Maximum line length (default from 'COLUMNS' env var)
+    -W --wide               Wide output, no maximum width
+    -a --all                Show all accounts
+    -b --bring-forward      Bring balance of previous transactions forward
+    -c --control            Show control account
+       --fullnames          Show full account names instead of tree
+       --labels             Show account labels
+       --bare               Omit headers, subtotals, totals, separators
+       --over               Only show overdue amounts
+    -d --detail             Show transaction details
+    -e --effective          Sort by effective date
+    -p --projection         Include projected transactions
+    -v --verbose            Show more information
+    -r --remove=ACC         Remove account ACC
+    -s --subtotals          Show subtotal lines
+       --title=TEXT         Set report title
+    -j --journal            Display in journal format
+    -n --depth=N            Show accounts to this depth only
+       --tax                Separate tax-free and tax-deductible sections
+
+PRED = condition | disjunction
+disjunction = conjunction "|" disjunction
+conjunction = condition "&" conjunction
+condition = "!" condition
+condition = "=" TAG
+condition = "/" GLOB
+condition = ACC
+'''
+
+import sys
+import logging
+import locale
+import os
+import os.path
+
+try:
+    import abo.config
+except ImportError:
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib'))
+    import abo.config
+
+def main():
+    global abo
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    opts = None
+    try:
+        if len(sys.argv) >= 2 and sys.argv[1] == 'compa':
+            pass
+        else:
+            sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
+            import docopt
+            opts = docopt.docopt(__doc__, version='0.2')
+        try:
+            config = abo.config.Config().load()
+        except abo.config.ConfigException as e:
+            fatal(str(e))
+        if opts is None:
+            output = compa(config, [arg for arg in sys.argv[2:]])
+        else:
+            import abo.command
+            for word, value in opts.items():
+                if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
+                    func = getattr(abo.command, 'cmd_' + word)
+                    break
+            else:
+                fatal('unknown command : %s' % sys.argv[1])
+            if opts['--debug'] or len(os.environ.get('PYABO_DEBUG', '')):
+                pass
+            elif opts['--quiet']:
+                logging.disable(logging.INFO)
+            else:
+                logging.disable(logging.DEBUG)
+            logging.debug("parsed options, func=%s", func.__name__)
+            config.apply_options(opts)
+            output = func(config, opts)
+        for line in output:
+            print(line, end=getattr(output, 'sep', '\n'), file=sys.stdout)
+    except:
+        if opts and opts['--debug']:
+            raise
+        import abo.text
+        import abo.command
+        try:
+            raise
+        except abo.config.InvalidInput as e:
+            fatal(str(e))
+        except abo.text.LineError as e:
+            fatal(str(e))
+    sys.exit(0)
+
+def fatal(message, status=1):
+    print("%s: %s" % (os.path.basename(sys.argv[0]), message), file=sys.stderr)
+    sys.exit(status)
+
+def compa(config, args):
+    logging.disable(logging.INFO)
+    if len(args) != 3:
+        import abo.command
+        raise abo.config.InvalidInput("expecting exactly three arguments after 'compa'")
+    command, word, preword = args
+    logging.debug('command=%r word=%r preword=%r', command, word, preword)
+    keys = set()
+    if preword == 'abo':
+        import abo.command
+        for key, value in abo.command.__dict__.items():
+            if key.startswith('cmd_'):
+                cmd = key[4:]
+                if cmd.startswith(word) and len(cmd) > len(word) and type(value) is type(compa):
+                    keys.add(cmd + ' ')
+    elif preword == 'acc':
+        keys.update(compa_pred(config, word))
+    elif preword == '--select':
+        keys.update(compa_pred(config, word))
+    elif preword == 'mako':
+        keys.update(compa_mako(config, word))
+    keys = sorted(keys)
+    logging.debug('keys=%r', keys)
+    return keys
+
+def compa_accounts(config, word):
+    import abo.cache
+    chart = abo.cache.chart_cache(config).get()
+    for key in chart.keys():
+        if key.startswith(word):
+            comp = key[len(word):]
+            end = ''
+            if ':' in comp:
+                comp = comp.split(':', 1)[0] + ':'
+            else:
+                end = ' '
+            yield shell_quote(word + comp) + end
+
+def compa_tags(config, word):
+    import abo.cache
+    chart = abo.cache.chart_cache(config).get()
+    for tag in chart.tags():
+        if tag.startswith(word):
+            yield shell_quote(tag) + ' '
+
+def compa_pred(config, word):
+    if word.startswith('='):
+        for comp in compa_tags(config, word[1:]):
+            yield '=' + comp
+    elif word.startswith('/'):
+        pass
+    else:
+        if word == '':
+            yield '='
+            yield '/'
+        for comp in compa_accounts(config, word):
+            yield comp
+
+def compa_mako(config, word):
+    dirpath, prefix = os.path.split(word)
+    if not dirpath:
+        if os.path.isdir(prefix):
+            yield prefix + '/'
+            return
+        elif os.path.exists(prefix):
+            yield prefix + ' '
+            return
+    for name in ['..'] + os.listdir(dirpath if dirpath else '.'):
+        if name.startswith(prefix) and 'mako' in name:
+            path = dirpath + ('/' if dirpath else '') + name
+            if os.path.isdir(path):
+                path += '/'
+            elif os.path.exists(path):
+                path += ' '
+            yield path
+
+def shell_quote(text):
+    return (text.replace('\\', '\\\\')
+                .replace('"', '\\"')
+                .replace("'", "\\'")
+                .replace('$', '\\$')
+                .replace('`', '\\`')
+                .replace(' ', '\\ '))
+
+if __name__ == '__main__':
+    main()
