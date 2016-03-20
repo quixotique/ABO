@@ -495,9 +495,13 @@ class Journal(object):
                     d = datetime.datetime.strptime(text + '/%04u' % self._period[0].year, '%d/%m/%Y').date()
                     if d < self._period[0]:
                         d = None
-                        d = datetime.datetime.strptime(text + '/%04u' % self._period[1].year, '%d/%m/%Y').date()
                 except ValueError:
                     pass
+                if d is None:
+                    try:
+                        d = datetime.datetime.strptime(text + '/%04u' % self._period[1].year, '%d/%m/%Y').date()
+                    except ValueError:
+                        pass
         if d is not None:
             if self._period and (d < self._period[0] or d > self._period[1]):
                 raise ParseException(text, 'date %s outside period' % text)
