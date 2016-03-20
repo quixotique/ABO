@@ -303,12 +303,23 @@ class API_Invoice(API_Movement):
             yield (e, balance)
         assert balance == self.amount
 
-    def statement(self, since=None, atleast=None, exclude_this=False):
-        return API_Statement(self._api, self.account, since=since, until=self.date, atleast=atleast, exclude=(self,) if exclude_this else ())
+    def statement_pre(self, since=None, atleast=None, exclude_this=False):
+        return API_Statement(self._api,
+                             self.account,
+                             since=since,
+                             since_zero_balance=True,
+                             until=self.date,
+                             atleast=atleast,
+                             exclude=(self,) if exclude_this else ())
+
+    def statement_post(self):
+        return API_Statement(self._api,
+                             self.account,
+                             since=self.date + datetime.timedelta(1))
 
 class API_Statement(object):
 
-    def __init__(self, api, api_account, since=None, until=None, atleast=None, since_zero_balance=True, exclude=()):
+    def __init__(self, api, api_account, since=None, until=None, atleast=None, since_zero_balance=False, exclude=()):
         assert isinstance(api, API)
         assert isinstance(api_account, API_Account)
         if until is not None:
