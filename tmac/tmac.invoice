@@ -26,7 +26,7 @@
 .\"     .Mobile 0400 444 444                \" optional
 .\"     .Phone 08 8888 8888                 \" optional
 .\"     .Fax 08 8888 8888                   \" optional
-.\"     .Invoice|.Statement [<header>]
+.\"     .Invoice|.Statement [<header>] [<description-header>] [<amount-header>]
 .\"     .Centre "Invoice reference number" <ref>
 .\"     .Centre "Issued on" <date>
 .\"     .Item <price> [+|-]
@@ -232,7 +232,7 @@
 .   rS .save
 .   reset_address
 .   _restore
-.   sp 2
+.   sp 1
 ..
 .\"
 .\"                 .Field <label> <text>
@@ -270,8 +270,8 @@
 .   \}
 ..
 .\"
-.\"                 .Invoice <header> <descriptionheader> <amountheader>
-.\"                 .Statement <header> <descriptionheader> <amountheader>
+.\"                 .Invoice <header>|= <descriptionheader> <amountheader>
+.\"                 .Statement <header>|= <descriptionheader> <amountheader>
 .\"
 .de Invoice
 .   End
