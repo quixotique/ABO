@@ -91,6 +91,13 @@ def cmd_acc(config, opts):
     logging.debug('common_root_account = %r' % str(common_root_account))
     all_transactions = get_transactions(chart, config, opts)
     range, bf, transactions = filter_period(chart, all_transactions, opts)
+    if opts['--control']:
+        entries = [e for e in chain(*(t.entries for t in all_transactions)) if chart[e.account] in accounts and (e.cdate or e.transaction.date) in range]
+        entries.sort(key=lambda e: e.cdate or e.transaction.date)
+    else:
+        entries = [e for e in chain(*(t.entries for t in transactions)) if chart[e.account] in accounts]
+    if opts['--omit-empty'] and not entries:
+        return
     dw = 11
     mw = config.money_column_width()
     bw = config.balance_column_width()
@@ -144,11 +151,6 @@ def cmd_acc(config, opts):
         if not opts['--bare'] or tally.balance != 0:
             for line in lines:
                 yield line
-    if opts['--control']:
-        entries = [e for e in chain(*(t.entries for t in all_transactions)) if chart[e.account] in accounts and (e.cdate or e.transaction.date) in range]
-        entries.sort(key=lambda e: e.cdate or e.transaction.date)
-    else:
-        entries = [e for e in chain(*(t.entries for t in transactions)) if chart[e.account] in accounts]
     for entry in entries:
         date = entry.cdate if opts['--control'] and entry.cdate else entry.transaction.edate if opts['--effective'] else entry.transaction.date
         tally.balance += entry.amount
