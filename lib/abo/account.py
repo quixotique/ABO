@@ -331,7 +331,7 @@ class Chart(object):
     ...     "Transport"
     ...       :nd "Car"
     ...         car "Car rego, insurance, maintenance"
-    ...         petrol "Petrol for cars"
+    ...         petrol "Gas"
     ...       taxi "Taxi journeys"
     ... inc pl "Income"
     ...     :nd "Salary"
@@ -351,7 +351,7 @@ class Chart(object):
     ':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss ('cons', 'nd')
     ':Expenses:Household:Transport' None AccountType.ProfitLoss ()
     ':Expenses:Household:Transport:Car' None AccountType.ProfitLoss ('nd',)
-    ':Expenses:Household:Transport:Car:Petrol for cars' 'petrol' AccountType.ProfitLoss ('nd',)
+    ':Expenses:Household:Transport:Car:Gas' 'petrol' AccountType.ProfitLoss ('nd',)
     ':Expenses:Household:Transport:Car:rego, insurance, maintenance' 'car' AccountType.ProfitLoss ('nd',)
     ':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss ()
     ':Expenses:Household:Utilities' None AccountType.ProfitLoss ()
@@ -396,7 +396,7 @@ class Chart(object):
     ...     Transport
     ...       Car
     ...         rego, [car] insurance, maintenance
-    ...         Petrol for cars [petrol] =energy
+    ...         Gas [petrol] =energy
     ...       Taxi journeys [taxi]
     ... Income [inc] =PL
     ...     Salary
@@ -439,7 +439,7 @@ class Chart(object):
     >>> for a in c2.accounts():
     ...     if p1(a):
     ...         print(str(a))
-    :Expenses:Household:Transport:Car:Petrol for cars
+    :Expenses:Household:Transport:Car:Gas
 
     >>> p1 = c2.parse_predicate('/u')
     >>> for a in c2.accounts():
@@ -451,7 +451,7 @@ class Chart(object):
     :Expenses:Household:Consumibles:Food
     :Expenses:Household:Transport
     :Expenses:Household:Transport:Car
-    :Expenses:Household:Transport:Car:Petrol for cars
+    :Expenses:Household:Transport:Car:Gas
     :Expenses:Household:Transport:Car:rego, insurance, maintenance
     :Expenses:Household:Transport:Taxi journeys
     :Expenses:Household:Utilities
@@ -469,6 +469,13 @@ class Chart(object):
     :Income:Prizes
     :Income:Rent
     :Income:Salary
+
+    >>> p3 = c2.parse_predicate('*:Gas')
+    >>> for a in c2.accounts():
+    ...     if p3(a):
+    ...         print(str(a))
+    :Expenses:Household:Transport:Car:Gas
+    :Expenses:Household:Utilities:Gas
 
     >>> c2.parse_predicate('nonexistent')
     Traceback (most recent call last):
@@ -632,6 +639,11 @@ class Chart(object):
         if text.startswith('!'):
             func, text = self._parse_condition(text[1:])
             return (lambda a: not func(a)), text
+        if text.startswith('*:'):
+            m = self._regex_cond_pattern.match(text, 2)
+            if m:
+                part = m.group()
+                return (lambda a: a.name == part or a.label == part), text[m.end():]
         if text.startswith('='):
             m = self._regex_cond_tag.match(text, 1)
             if m:
