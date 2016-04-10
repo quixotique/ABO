@@ -76,6 +76,18 @@ def cmd_chart(config, opts):
             line.append('=%s' % (tag,))
         yield ' '.join(line)
 
+def cmd_list(config, opts):
+    chart = get_chart(config, opts)
+    try:
+        accounts = filter_accounts(chart, opts['<PRED>'].lstrip())
+    except ValueError as e:
+        raise InvalidArg('<PRED>', e)
+    for account in sorted(accounts):
+        if opts['--verbose']:
+            yield account.full_name()
+        else:
+            yield account.short_name()
+
 def cmd_index(config, opts):
     chart = get_chart(config, opts)
     return sorted(chart.keys())

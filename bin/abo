@@ -11,6 +11,7 @@ r'''Usage:
     abo balance [-faWpqDsj] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     abo journal [-fwWpqD] [--remove=ACC...] [--width=COLUMNS] [<period>...]
     abo chart [-fvqD] [--select=PRED]
+    abo list [-fqD] [<PRED>]
     abo index [-fqD]
     abo check [-efqD]
     abo mako [-fqD] [--remove=PRED...] [--template-dir=DIR...] <template> [<args>...]
