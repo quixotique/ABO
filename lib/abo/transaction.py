@@ -314,7 +314,7 @@ class Transaction(abo.base.Base):
                 date= self.date if date is None else date,
                 who= self.who,
                 what= self.what,
-                entries= self.entries if entries is None else entries
+                entries= self.entries if entries is None else list(entries)
             )
 
     def split(self, account, amount):
