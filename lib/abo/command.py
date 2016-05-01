@@ -172,7 +172,7 @@ def cmd_acc(config, opts):
             tally.totcr += entry.amount
         desc = entry.description(with_due=not opts['--control'], config=config)
         acc = chart[entry.account]
-        if acc is not common_root_account:
+        if not opts['--short'] and acc is not common_root_account:
             rel = []
             for par in chain(reversed(list(acc.parents_not_in_common_with(common_root_account))), (acc,)):
                 b = par.bare_name()
