@@ -615,8 +615,6 @@ class Chart(object):
         if text and text[0] == '|':
             if text[1:]:
                 func2, text = self._parse_disjunction(text[1:])
-                if text:
-                    raise InvalidAccountPredicate(text)
                 return (lambda a: func(a) or func2(a)), text
             raise InvalidAccountPredicate(text)
         return func, text
@@ -626,8 +624,6 @@ class Chart(object):
         if text and text[0] == '&':
             if text[1:]:
                 func2, text = self._parse_conjunction(text[1:])
-                if text:
-                    raise InvalidAccountPredicate(text)
                 return (lambda a: func(a) and func2(a)), text
             raise InvalidAccountPredicate(text)
         return func, text
