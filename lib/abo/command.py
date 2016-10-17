@@ -409,7 +409,8 @@ def cmd_bsheet(config, opts):
     pred = lambda a: a.atype != abo.account.AccountType.ProfitLoss and a in selected_accounts
     balances = [abo.balance.Balance(all_transactions, date_range=r, chart=chart,
                                     acc_pred=pred,
-                                    acc_map=lambda a: retained if plpred(a) else amap.get(a, a))
+                                    acc_map=lambda a: retained if plpred(a) else amap.get(a, a),
+                                    use_edate=opts['--effective'])
                 for r in ranges]
     make_sections(sections, balances)
     all_accounts = set(chain(*(s.accounts for s in sections)))
@@ -431,7 +432,7 @@ def cmd_balance(config, opts):
     selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
-    balances = [abo.balance.Balance(all_transactions, date_range=r, chart=chart, acc_pred=lambda a: a in selected_accounts) for r in ranges]
+    balances = [abo.balance.Balance(all_transactions, date_range=r, chart=chart, acc_pred=lambda a: a in selected_accounts, use_edate=opts['--effective']) for r in ranges]
     if opts['--journal']:
         for b in balances:
             yield ''
@@ -471,7 +472,6 @@ def cmd_balance(config, opts):
                     balance_check[b] += amt
         for b in balances:
             assert balance_check[b] == 0, 'balance_check[%r] = %s' % (b, balance_check[b])
-
         yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
 
 def compute_due_accounts(chart, transactions, selected_accounts=None):
