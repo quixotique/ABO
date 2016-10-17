@@ -208,7 +208,7 @@ class Journal(object):
                     try:
                         self._parse_line_tagtext(line, words[1])
                     except ParseException:
-                        raise ParseException(line, 'in %%default: ' + e)
+                        raise ParseException(line, 'in %default: ' + e)
                     if line.tag not in defaults:
                         raise ParseException(line, 'invalid %%default tag %r' % line.tag)
                     if not line.text:
@@ -219,28 +219,29 @@ class Journal(object):
                         defaults[line.tag] = line
                 elif words[0] == '%period':
                     self._period = None
-                    try:
-                        start, end = list(map(self._parse_date, words[1].split(None, 1)))
-                    except (IndexError, ValueError):
-                        raise ParseException(line, 'invalid %%period arguments')
-                    if end <= start or end >= start + datetime.timedelta(366) or end.replace(year=start.year) >= start:
-                        raise ParseException(line, 'invalid %%period date range')
-                    self._period = (start, end)
+                    if len(words) > 1:
+                        try:
+                            start, end = list(map(self._parse_date, words[1].split(None, 1)))
+                        except (IndexError, ValueError):
+                            raise ParseException(line, 'invalid %period arguments')
+                        if end <= start or end >= start + datetime.timedelta(366) or end.replace(year=start.year) >= start:
+                            raise ParseException(line, 'invalid %period date range')
+                        self._period = (start, end)
                 elif words[0] == '%projection':
                     if len(words) > 1:
-                        raise ParseException(line, 'spurious %%projection arguments')
+                        raise ParseException(line, 'spurious %projection arguments')
                     if in_projection:
-                        raise ParseException(line, 'unexpected %%projection (missing %%end projection)')
+                        raise ParseException(line, 'unexpected %projection (missing %end projection)')
                     in_projection = True
                 elif words[0] == '%end':
                     if len(words) < 2:
-                        raise ParseException(line, 'missing %%end argument')
+                        raise ParseException(line, 'missing %end argument')
                     if words[1] == 'projection':
                         if not in_projection:
-                            raise ParseException(line, 'unexpected %%end projection (missing %%projection?)')
+                            raise ParseException(line, 'unexpected %end projection (missing %projection?)')
                         in_projection = False
                     else:
-                        raise ParseException(line, 'unsupported %%end argument')
+                        raise ParseException(line, 'unsupported %end argument')
                 if words[0].startswith('%'):
                     continue
                 percent_block = False
