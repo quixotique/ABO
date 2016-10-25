@@ -120,7 +120,8 @@
 .   ll \\n[.boxwid.\\*_]u
 ..
 .de box_height
-.   if \\$1>\\n[.boxheight] .nr .boxheight \\$1
+.   nr _ \\$1v
+.   if \\n_>\\n[.boxheight] .nr .boxheight \\n_
 ..
 .de end_box
 .   di
@@ -148,6 +149,8 @@
 .       'box.\\*_
 .       rm 'box.\\*_
 .       in 0
+.       nr _ \\n[.boxtop]+\\n^
+.       sp |\\n_u
 .   \}
 ..
 .\"
