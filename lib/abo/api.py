@@ -197,8 +197,8 @@ class API_Account(object):
             if i in self:
                 yield i
 
-    def statement(self, until=None, since=None, atleast=None):
-        return API_Statement(self._api, self, since=since, until=until, atleast=atleast)
+    def statement(self, until=None, since=None, atleast=None, since_zero_balance=False):
+        return API_Statement(self._api, self, since=since, until=until, atleast=atleast, since_zero_balance=since_zero_balance)
 
     @property
     def sub_accounts(self):
@@ -289,11 +289,13 @@ class API_Invoice(API_Movement):
                 return True
         return False
 
+    def _strip_ref(self, text):
+        return self._re_ref.sub('', text).strip()
+
     @property
     def entries(self):
         for e in self._entries:
-            desc = '; '.join(part for part in (self._re_ref.sub('', text).strip() for text in (e.transaction.description(), e.detail) if text) if part)
-            yield API_Entry(self._api, e, desc=desc)
+            yield API_Entry(self._api, e, text_filter=self._strip_ref)
 
     @property
     def lines(self):
@@ -315,11 +317,77 @@ class API_Invoice(API_Movement):
     def statement_post(self):
         return API_Statement(self._api,
                              self.account,
-                             since=self.date + datetime.timedelta(1))
+                             since=self.date + datetime.timedelta(1),
+                             with_brought_forward=False)
+
+    @property
+    def movements(self):
+        # Return one movement for each distinct due date in the invoice.
+        entries_by_due_date = defaultdict(lambda: [])
+        for e in self._entries:
+            entries_by_due_date[e.cdate or self.date].append(e)
+        for due_date in sorted(entries_by_due_date):
+            entries = entries_by_due_date[due_date]
+            amount = sum(e.amount for e in entries)
+            if amount:
+                desc = []
+                invdesc = []
+                if self.description:
+                    invdesc.append(self.description)
+                if due_date != self.date:
+                    invdesc.append('due ' + self._api.config.format_date_short(due_date, relative_to=self.date))
+                if invdesc:
+                    desc.append(' '.join(invdesc))
+                groups = defaultdict(lambda: [])
+                for e in entries:
+                    transdesc = self._strip_ref(e.transaction.description())
+                    detail = []
+                    account = self._api._chart[e.account]
+                    if account is not self.account._account:
+                        detail.append(account.relative_name(self.account._account))
+                    detail.append(self._strip_ref(e.detail))
+                    group = ' '.join(d for d in detail if d)
+                    groups[transdesc].append(group)
+                for transdesc in sorted(groups):
+                    group = groups[transdesc]
+                    groupdesc = []
+                    if transdesc:
+                        groupdesc.append(transdesc)
+                    if group:
+                        groupdesc.append(', '.join(d for d in group if d))
+                    if groupdesc:
+                        desc.append(': '.join(d for d in groupdesc if d))
+                yield API_InvoiceMovement(api= self._api,
+                                          invoice= self,
+                                          due_date= due_date,
+                                          amount= amount,
+                                          description= '; '.join(desc))
+
+class API_InvoiceMovement(API_Movement):
+
+    is_invoice = True
+
+    def __init__(self, api, invoice, due_date, amount, description):
+        API_Movement.__init__(self, api= api,
+                                    date= invoice.date,
+                                    amount= amount,
+                                    description= description)
+        self.account = invoice.account
+        self.invoice = invoice
+        self.invoice_ref = invoice.ref
+        self.due_date= due_date
 
 class API_Statement(object):
 
-    def __init__(self, api, api_account, since=None, until=None, atleast=None, since_zero_balance=False, exclude=()):
+    def __init__(self,
+                 api,
+                 api_account,
+                 since=None,
+                 until=None,
+                 atleast=None,
+                 since_zero_balance=False,
+                 with_brought_forward=True,
+                 exclude=()):
         assert isinstance(api, API)
         assert isinstance(api_account, API_Account)
         if until is not None:
@@ -336,24 +404,57 @@ class API_Statement(object):
         self.until = until
         self.atleast = atleast
         self.since_zero_balance = since_zero_balance
-        self._movements = [m for m in self.account.movements if m not in self._exclude and (self.until is None or m.date <= self.until)]
+        self.with_brought_forward = with_brought_forward
+        self._movements = []
+        for m in self.account.movements:
+            if m not in self._exclude and (self.until is None or m.date <= self.until):
+                if isinstance(m, API_Invoice):
+                    # Unpack invoice into one movement per due date.
+                    self._movements += m.movements
+                else:
+                    self._movements.append(m)
         self.balance = sum(m.amount for m in self._movements)
+
+    def payments_due(self, date):
+        due = defaultdict(lambda: 0)
+        overdue_date = date - datetime.timedelta(1)
+        paid = 0
+        for m in self._movements:
+            if m.amount < 0:
+                due_date = m.due_date
+                if due_date is None or due_date <= overdue_date:
+                    due_date = overdue_date
+                due[due_date] -= m.amount
+            else:
+                paid += m.amount
+        for due_date in sorted(due):
+            amount = due[due_date]
+            if amount <= paid:
+                paid -= amount
+            else:
+                yield due_date, amount - paid
+                paid = 0
+
+    @property
+    def movements(self):
+        return iter(self._movements)
 
     @property
     def lines(self):
-        movements = reversed(self._movements)
+        movements = reversed(list(self.movements))
         balance = self.balance
         lines = []
         for m in movements:
-            if (   (self.since is None and self.atleast is None and not self.since_zero_balance)
-                or (self.since is not None and m.date >= self.since)
-                or (self.atleast is not None and len(lines) < self.atleast)
-                or (self.since_zero_balance and balance != 0)
+            if (    (    (self.atleast is not None and len(lines) < self.atleast)
+                      or (self.since_zero_balance and balance != 0))
+                and (self.since is None or m.date >= self.since)
             ):
                 lines.append((m, balance))
                 balance -= m.amount
             else:
                 break
+        if self.with_brought_forward and balance:
+            lines.append((None, balance))
         lines.reverse()
         return iter(lines)
 
@@ -373,17 +474,27 @@ class API_Transaction(object):
 
 class API_Entry(API_Movement):
 
-    def __init__(self, api, entry, trans=None, desc=None):
+    def __init__(self, api, entry, trans=None, text_filter=lambda t: t):
         if trans is None:
             trans = API_Transaction(api, entry.transaction)
         else:
             assert isinstance(trans, API_Transaction)
+        desc = []
+        desc.append(trans.description)
+        detail = []
+        account = api._chart[entry.account]
+        relname = account.accrual_relative_name()
+        if relname:
+            detail.append(relname)
+        if entry.detail:
+            detail.append(text_filter(entry.detail))
+        desc.append(' '.join(d for d in detail if d))
         API_Movement.__init__(self, api= api,
                                     date= trans.date,
                                     amount= entry.amount,
-                                    description= desc if desc is not None else entry.description())
+                                    description= '; '.join(d for d in desc if d))
         self._entry = entry
         self.transaction = trans
         self.account = self._api.account(entry.account)
         self.invoice_ref = API_Invoice._extract_ref(entry)
-        self.due_date = entry.cdate
+        self.due_date= entry.cdate

@@ -260,6 +260,10 @@ class Account(object):
     def accrual_parent(self):
         return None if not self.is_accrual() else self if self.parent is None or not self.parent.is_accrual() else self.parent.accrual_parent()
 
+    def accrual_relative_name(self):
+        accrual = self.accrual_parent()
+        return self.relative_name(accrual) if accrual is not None and accrual is not self else ''
+
     def loan_parent(self):
         return None if not self.is_loan() else self if self.parent is None or not self.parent.is_loan() else self.parent.loan_parent()
 
