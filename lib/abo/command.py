@@ -388,14 +388,16 @@ def cmd_profloss(config, opts):
 def cmd_bsheet(config, opts):
     plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss
     alpred = lambda a: a.atype == abo.account.AccountType.AssetLiability
+    netpred = lambda a: plpred(a) or alpred(a)
     eqpred = lambda a: a.atype == abo.account.AccountType.Equity
     sections = (
         Section(-1, None, 'Assets', lambda a, m: alpred(a) and m < 0),
         Section(1, None, 'Liabilities', lambda a, m: alpred(a) and m > 0),
+        Section(-1, 1, 'Net assets', lambda a, m: netpred(a) and m),
         Section(1, None, 'Equity', lambda a, m: eqpred(a)),
     )
     chart = get_chart(config, opts)
-    retained = chart.get_or_create(name='Retained profit(-loss)', atype=abo.account.AccountType.Equity)
+    retained = chart.get_or_create(name='retained profit(-loss)', atype=abo.account.AccountType.Equity)
     selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
