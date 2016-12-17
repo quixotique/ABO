@@ -224,7 +224,9 @@ class Journal(object):
                             start, end = list(map(self._parse_date, words[1].split(None, 1)))
                         except (IndexError, ValueError):
                             raise ParseException(line, 'invalid %period arguments')
-                        if end <= start or end >= start + datetime.timedelta(366) or end.replace(year=start.year) >= start:
+                        if (    end <= start
+                            or  end >= start + datetime.timedelta(days=366)
+                            or  (end.year != start.year and end.replace(year=start.year) >= start)):
                             raise ParseException(line, 'invalid %period date range')
                         self._period = (start, end)
                 elif words[0] == '%projection':
