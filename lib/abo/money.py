@@ -112,6 +112,13 @@ class Currency(object):
             return singleton
         raise RegistryError("%s.%s already set" % (registry.__name__, singleton.code))
 
+    def __hash__(self):
+        return (hash(self.code) ^
+                hash(self.local_frac_digits) ^
+                hash(self.local_symbol) ^
+                hash(self.local_symbol_precedes) ^
+                hash(self.local_symbol_separated_by_space))
+
     def __eq__(self, other):
         if not isinstance(other, Currency):
             return NotImplemented
@@ -462,6 +469,9 @@ class Money(object):
                 raise CurrencyMismatch(fmt.format(self, other))
             return other.amount
         return other
+
+    def __hash__(self):
+        return hash(self.currency) ^ hash(self.amount)
 
     def __eq__(self, other):
         return type(self)(self.amount == self._unmoney(other, '{0} == {1}'))

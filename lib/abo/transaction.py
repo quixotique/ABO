@@ -58,7 +58,6 @@ class Entry(abo.base.Base):
         assert account is not None, 'missing account'
         assert amount is not None, 'missing amount'
         assert amount != 0, 'zero amount: account=%r cdate=%r detail=%r' % (account, cdate, detail)
-        self.id = self._make_unique_id()
         self.transaction = transaction
         self.account = str(account)
         self.amount = amount
@@ -76,7 +75,7 @@ class Entry(abo.base.Base):
         return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % i for i in r))
 
     def __hash__(self):
-        return self.id
+        return hash(self.account) ^ hash(self.amount) ^ hash(self.cdate) ^ hash(self.detail)
 
     def __eq__(self, other):
         if not isinstance(other, Entry):
@@ -97,7 +96,7 @@ class Entry(abo.base.Base):
         this Entry object is already attached to the given Transaction, then
         this method just returns a reference to the object itself.  Otherwise,
         this method returns a copy of the object, attached to the given
-        transction, and with a new id.
+        transaction.
         """
         if self.transaction is transaction:
             return self
@@ -263,7 +262,6 @@ class Transaction(abo.base.Base):
         """
         assert date is not None, 'missing date'
         assert len(entries) >= 2, 'too few entries'
-        self.id = self._make_unique_id()
         self.date = date
         self.edate = edate if edate is not None else date
         self.who = who
@@ -444,12 +442,6 @@ __test__ = {
     ''
     >>> t.entries[1].description()
     'Someone; something'
-    >>> t.id == t.entries[0].id
-    False
-    >>> t.id == t.entries[1].id
-    False
-    >>> t.entries[0].id == t.entries[1].id
-    False
 """,
 'replace':"""
     >>> t = Transaction(date=1, who="Someone", what="something", \\
