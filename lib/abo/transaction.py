@@ -463,8 +463,8 @@ __test__ = {
     Traceback (most recent call last):
     AssertionError: too few entries
     >>> t = Transaction(date=1, who="Someone", what="something", \\
-    ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
-    ...                  {'account':'a2', 'amount':-14.55}))
+    ...         entries=({'account':'a1', 'amount':1456, 'detail':'else'}, \\
+    ...                  {'account':'a2', 'amount':-1455}))
     Traceback (most recent call last):
     AssertionError: entries sum to 1, should be zero: ...
     >>> t = Transaction(date=1, who="Someone", what="something", \\
