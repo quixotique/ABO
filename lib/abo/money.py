@@ -474,22 +474,22 @@ class Money(object):
         return hash(self.currency) ^ hash(self.amount)
 
     def __eq__(self, other):
-        return type(self)(self.amount == self._unmoney(other, '{0} == {1}'))
+        return self.amount == self._unmoney(other, '{0} == {1}')
 
     def __ne__(self, other):
-        return type(self)(self.amount != self._unmoney(other, '{0} != {1}'))
+        return self.amount != self._unmoney(other, '{0} != {1}')
 
     def __lt__(self, other):
-        return type(self)(self.amount < self._unmoney(other, '{0} < {1}'))
+        return self.amount < self._unmoney(other, '{0} < {1}')
 
     def __le__(self, other):
-        return type(self)(self.amount <= self._unmoney(other, '{0} <= {1}'))
+        return self.amount <= self._unmoney(other, '{0} <= {1}')
 
     def __gt__(self, other):
-        return type(self)(self.amount > self._unmoney(other, '{0} > {1}'))
+        return self.amount > self._unmoney(other, '{0} > {1}')
 
     def __ge__(self, other):
-        return type(self)(self.amount >= self._unmoney(other, '{0} >= {1}'))
+        return self.amount >= self._unmoney(other, '{0} >= {1}')
 
     def __neg__(self):
         return type(self)(-self.amount)
