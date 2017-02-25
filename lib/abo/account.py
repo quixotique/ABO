@@ -849,7 +849,8 @@ def remove_account(chart, pred, transactions):
             assert entries
             remove = [e for e in remove if e.account != account]
             assert t is not None
-            assert entries == [e for e in t.entries if e.account == account]
+            assert frozenset(entries) == frozenset(e for e in t.entries if e.account == account), \
+                    "entries=\n   %s,\nshould be \n   %s" % ('\n   '.join(map(repr, entries)), '\n   '.join([repr(e) for e in t.entries if e.account == account]))
             amount = sum(e.amount for e in entries)
             assert sign(amount) == sign(remove_amount)
             assert abs(amount) <= abs(remove_amount)

@@ -36,7 +36,7 @@ if __name__ == "__main__":
         del sys.path[0]
     import doctest
     import abo.transaction
-    doctest.testmod(abo.transaction)
+    doctest.testmod(abo.transaction, optionflags= doctest.ELLIPSIS)
 
 import re
 import datetime
@@ -277,7 +277,7 @@ class Transaction(abo.base.Base):
                 e = Entry(self, **e)
                 ents.append(e)
             bal += e.amount
-        assert bal == 0, 'entries sum to %s, should be zero' % bal
+        assert bal == 0, 'entries sum to %r, should be zero:\n   %s %s; %s\n   %s' % (bal, date, who, what, '\n   '.join(map(repr, entries)))
         self.entries = tuple(sorted(ents, key=lambda e: (e.amount, e.account, e.detail)))
 
     def __repr__(self):
@@ -466,7 +466,7 @@ __test__ = {
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
     ...                  {'account':'a2', 'amount':-14.55}))
     Traceback (most recent call last):
-    AssertionError: entries sum to zero
+    AssertionError: entries sum to 1, should be zero: ...
     >>> t = Transaction(date=1, who="Someone", what="something", \\
     ...         entries=({'account':'a1', 'amount':14.56, 'detail':'else'}, \\
     ...                  {'amount':-14.55}))
