@@ -14,6 +14,7 @@ import abo.period
 import abo.cache
 from abo.text import LineError
 import abo.money
+import abo.balance
 
 class API(object):
 
@@ -22,6 +23,11 @@ class API(object):
     @staticmethod
     def parse_date(words):
         return abo.period.parse_when(words)
+
+    @staticmethod
+    def parse_range(words):
+        period = abo.period.parse_period(words)
+        return abo.balance.Range(period[0], period[1])
 
     @staticmethod
     def money_format_factory(**kwargs):
