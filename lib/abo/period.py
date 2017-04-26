@@ -190,6 +190,23 @@ def parse_periods(args):
         raise ValueError("unrecognised argument '%s'" % args[0])
     return periods
 
+def parse_period(args):
+    r"""
+    >>> import abo.period
+    >>> abo.period._today = lambda: date(2017, 4, 26)
+
+    >>> parse_period(['last', '30', 'days'])
+    (datetime.date(2017, 3, 28), datetime.date(2017, 4, 26))
+    """
+    periods = _parse_periods(args)
+    if args:
+        raise ValueError("unrecognised argument '%s'" % args[0])
+    if len(periods) == 0:
+        raise ValueError('missing period')
+    if len(periods) > 1:
+        raise ValueError('too many periods')
+    return periods[0]
+
 def parse_whens(args):
     r"""
     >>> import abo.period
