@@ -144,20 +144,32 @@ def cmd_acc(config, opts):
                         amount = bf.cbalance(account)
                         if amount != 0:
                             tally.balance += amount
-                            yield fmt % ('', '; '.join(filter(bool, ['Brought forward', account.relative_name(common_root_account)])),
-                                    config.format_money(-amount) if amount < 0 else '',
-                                    config.format_money(amount) if amount > 0 else '',
-                                    config.format_money(tally.balance))
+                            text = textwrap.wrap('; '.join(filter(bool, ['Brought forward', account.relative_name(common_root_account)])),
+                                                 width=pw)
+                            yield fmt % ('',
+                                         text.pop(0) if text else '',
+                                         config.format_money(-amount) if amount < 0 else '',
+                                         config.format_money(amount) if amount > 0 else '',
+                                         config.format_money(tally.balance))
+                            if opts['--wrap']:
+                                while text:
+                                    yield fmt % ('', text.pop(0), '', '', '')
                     else:
                         for e in sorted(bf.entries(), key=lambda e: (e.cdate or datetime.date.min, e.amount, e.account)):
                             if chart[e.account] is account and e.amount != 0:
                                 tally.balance += e.amount
-                                yield fmt % ('', '; '.join(filter(bool, ['Brought forward',
-                                                                        'due ' + e.cdate.strftime(r'%-d-%b-%Y') if e.cdate else '',
-                                                                        account.relative_name(common_root_account)])),
-                                        config.format_money(-e.amount) if e.amount < 0 else '',
-                                        config.format_money(e.amount) if e.amount > 0 else '',
-                                        config.format_money(tally.balance))
+                                text = textwrap.wrap('; '.join(filter(bool, ['Brought forward',
+                                                                             'due ' + e.cdate.strftime(r'%-d-%b-%Y') if e.cdate else '',
+                                                                             account.relative_name(common_root_account)])),
+                                                     width=pw)
+                                yield fmt % ('',
+                                             text.pop(0) if text else '',
+                                             config.format_money(-e.amount) if e.amount < 0 else '',
+                                             config.format_money(e.amount) if e.amount > 0 else '',
+                                             config.format_money(tally.balance))
+                                if opts['--wrap']:
+                                    while text:
+                                        yield fmt % ('', text.pop(0), '', '', '')
 
         lines = list(bflines())
         if not opts['--bare'] or tally.balance != 0:
