@@ -51,6 +51,7 @@ def uint(text):
 class Config(object):
 
     def __init__(self):
+        self.basedir = None
         self.journal_file_paths = []
         self.checkpoint_file_paths = []
         self.chart_file_path = None
@@ -83,6 +84,7 @@ class Config(object):
 
     def read_from(self, path):
         with Parser(path) as parser:
+            self.basedir = parser.basedir
             self.chart_file_path = os.path.join(parser.basedir, 'accounts')
             parser.add_keyword('journal', self._set_journal)
             parser.add_keyword('heading', self._set_heading)
