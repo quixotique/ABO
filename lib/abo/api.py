@@ -452,7 +452,8 @@ class API_Statement(object):
         lines = []
         for m in movements:
             if (    (    (self.atleast is not None and len(lines) < self.atleast)
-                      or (self.since_zero_balance and balance != 0))
+                      or (self.since_zero_balance and balance != 0)
+                      or (self.since is not None))
                 and (self.since is None or m.date >= self.since)
             ):
                 lines.append((m, balance))
