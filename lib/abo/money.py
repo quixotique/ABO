@@ -41,7 +41,7 @@ class Currency(object):
 
     def __new__(cls, code, local_frac_digits=0, local_symbol=None, local_symbol_precedes=False, local_symbol_separated_by_space=False):
         try:
-            currency = pycountry.currencies.get(letter=code)
+            currency = pycountry.currencies.get(alpha_3=code)
         except KeyError:
             currency = None
         if not currency:
