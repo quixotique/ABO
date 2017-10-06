@@ -57,12 +57,12 @@ class Config(object):
         self.chart_file_path = None
         self.heading = None
         self.width = None
-        text = os.environ.get('PYABO_WIDTH')
+        text = os.environ.get('ABO_WIDTH')
         if text is not None:
             try:
                 self.width = uint(text)
             except ValueError as e:
-                warn('ignoring invalid environment variable PYABO_WIDTH: %r' % text)
+                warn('ignoring invalid environment variable ABO_WIDTH: %r' % text)
 
     _regex_encoding = re.compile(r'coding[=:]\s*([-\w.]+)', re.MULTILINE)
 

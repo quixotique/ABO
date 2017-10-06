@@ -95,7 +95,7 @@ def main():
                     break
             else:
                 fatal('unknown command : %s' % sys.argv[1])
-            if opts['--debug'] or len(os.environ.get('PYABO_DEBUG', '')):
+            if opts['--debug'] or len(os.environ.get('ABO_DEBUG', '')):
                 pass
             elif opts['--quiet']:
                 logging.disable(logging.INFO)
