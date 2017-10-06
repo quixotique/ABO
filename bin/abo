@@ -49,13 +49,18 @@ Options:
     -n --depth=N            Show accounts to this depth only
        --tax                Separate tax-free and tax-deductible sections
 
-PRED = condition | disjunction
-disjunction = conjunction "|" disjunction
-conjunction = condition "&" conjunction
-condition = "!" condition
-condition = "=" TAG
-condition = "/" GLOB
-condition = ACC
+Account selection predicates syntax:
+    PRED = condition | disjunction
+    disjunction = conjunction "|" disjunction
+    conjunction = condition "&" conjunction
+    condition = "!" condition
+    condition = "=" TAG
+    condition = "/" GLOB
+    condition = ACC
+
+Environment variables:
+    PYABO_DEBUG=ANY         if ANY is non-empty, equivalent to --debug
+    PYABO_WIDTH=COLUMNS     equivalent to --width=COLUMNS
 '''
 
 import sys
