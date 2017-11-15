@@ -273,7 +273,7 @@ class Journal(object):
                             ledger_date = self._parse_date_edate(line.tag)
                             ledger_what = line.text
                         except ValueError:
-                            raise ParseException(line, 'invalid tag %r' % line.tag)
+                            raise ParseException(line, 'invalid date %r' % line.tag)
                     else:
                         raise ParseException(line, 'invalid tag %r' % line.tag)
             kwargs = None
@@ -494,23 +494,28 @@ class Journal(object):
 
     def _parse_date(self, text, relative_to=None):
         d = None
+        enforce = True
+        if text.endswith("!"):
+            enforce = False
+            text = text[:-1]
         try:
             d = datetime.datetime.strptime(text, '%d/%m/%Y').date()
         except ValueError:
             if self._period:
+                enforce = True
                 try:
                     d = datetime.datetime.strptime(text + '/%04u' % self._period[0].year, '%d/%m/%Y').date()
                     if d < self._period[0]:
                         d = None
                 except ValueError:
                     pass
-                if d is None:
+                if d is None and self._period[0].year != self._period[1].year:
                     try:
                         d = datetime.datetime.strptime(text + '/%04u' % self._period[1].year, '%d/%m/%Y').date()
                     except ValueError:
                         pass
         if d is not None:
-            if self._period and (d < self._period[0] or d > self._period[1]):
+            if enforce and self._period and (d < self._period[0] or d > self._period[1]):
                 raise ParseException(text, 'date %s outside period' % text)
             return d
         if relative_to is not None and self._regex_relative.match(text):
