@@ -498,6 +498,16 @@ class Journal(object):
         if text.endswith("!"):
             enforce = False
             text = text[:-1]
+        if relative_to is not None:
+            dmy = text.split('/', 2)
+            if len(dmy) == 3:
+                if not dmy[0]:
+                    dmy[0] = '%u' % relative_to.day
+                if not dmy[1]:
+                    dmy[1] = '%u' % relative_to.month
+                if not dmy[2]:
+                    dmy[2] = '%04u' % relative_to.year
+                text = '/'.join(dmy)
         try:
             d = datetime.datetime.strptime(text, '%d/%m/%Y').date()
         except ValueError:
@@ -525,7 +535,7 @@ class Journal(object):
     def _parse_date_edate(self, text):
         texts = text.split('=', 1)
         date = self._parse_date(texts[0])
-        edate = self._parse_date(texts[1]) if len(texts) > 1 else None
+        edate = self._parse_date(texts[1], relative_to=date) if len(texts) > 1 else None
         return date, edate
 
     def _gst_account_bill(self, line):
