@@ -1,0 +1,98 @@
+#!/bin/bash
+
+shopt -s extglob
+set -e
+
+usage() {
+   echo -n -e "\
+Usage: ${0##*/} [options] SRC DEST
+Options:
+   -q, --quality $quality_glob
+   -r, --resolution DPI
+"
+}
+
+fatal_usage() {
+   echo "${0##*/}: $*" >&2
+   echo "See \`${0##*/} --help' for usage." >&2
+   exit 1
+}
+
+fatal() {
+   echo "${0##*/}: $*" >&2
+   exit 1
+}
+
+quality_glob='screen|ebook|printer|prepress|default'
+quality=
+resolution=
+src=
+dst=
+
+parse_quality() {
+   case "$1" in
+   @($quality_glob)) quality="$1";;
+   *) fatal_usage "unsupported quality: $1";;
+   esac
+}
+
+parse_resolution() {
+   case "$1" in
+   +([0-9])) resolution="$1";;
+   *) fatal_usage "unsupported resolution: $1";;
+   esac
+}
+
+while [ $# -ne 0 ]; do
+   opt="$1"
+   case "$opt" in
+   -h|--help) usage; exit 0;;
+   -q?*) parse_quality "${opt#-q}";;
+   --quality=*) parse_quality "${opt#*=}";;
+   -q|--quality) shift; parse_quality "${1?missing argument for $opt}";;
+   -r?*) parse_resolution "${opt#-r}";;
+   --resolution=*) parse_resolution "${opt#*=}";;
+   -r|--resolution) shift; parse_resolution "${1?missing argument for $opt}";;
+   -*) fatal_usage "unrecognised option: $1";;
+   *) break;;
+   esac
+   shift
+done
+
+if [[ $# -eq 0 ]]; then
+   fatal_usage "missing argument: source file"
+fi
+
+src="${1?}"
+shift
+if ! [[ -f $src ]]; then
+   fatal "not a file: $src"
+fi
+
+dst="${1:-$src}"
+shift || true
+if [ -d "$dst" ]; then
+   dst="$dst/${src##*/}"
+fi
+
+exec 5>&1
+run() {
+   echo "+ $*" >&5
+   "$@"
+}
+
+tmp="/tmp/${0##*/}-$$.pdf"
+
+run gs \
+      -sDEVICE=pdfwrite \
+      -sOutputFile="$tmp" \
+      -dCompatibilityLevel=1.4 -dNOPAUSE -dQUIET -dBATCH \
+      -sDownsampleColorImages=true \
+      -sColorConversionStrategy=/sRGB \
+      ${quality:+-"dPDFSETTINGS=/$quality"} \
+      ${resolution:+-"sColorImageResolution=$resolution"} \
+      "$src"
+
+if [ -s "$tmp" ]; then
+    run mv --backup --suffix=.bak "$tmp" "$dst"
+fi
