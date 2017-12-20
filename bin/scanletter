@@ -1,1 +1,229 @@
-/home/andrewb/Dropbox/bin/scanletter
+#!/bin/bash
+
+source "$SHELLBOOST/libsh/text.sh"
+
+me="${0##*/}"
+
+opt_output=letter.pdf
+opt_pagesize=A4
+opt_resolution=150
+opt_threshold=5,90
+opt_edge=3
+opt_jpeg=false
+opt_jpeg_quality=75
+usage() {
+    echo -n "\
+Usage: $me [options]
+Options:
+  -n,--noscan          Use the original scan from the last run
+  -o,--output FILE     Write to the given FILE (default $opt_output)
+  -p,--page SIZE       Page size A4 A5 WxH (mm) (default $opt_pagesize)
+  -r90,--rotate90      Rotate page anticlockwise 90 degrees
+  -r180,--rotate180    Rotate page 180 degrees
+  -r-90,--rotate-90    Rotate page clockwise 90 degrees
+  -r,--resolution N    Output resolution N dpi (default $opt_resolution)
+  -C,--fullcolour      Produce an un quantised colour result (default monochrome)
+  -c,--quantcolour     Produce a quantised colour result (default monochrome)
+  -t,--threshold B[,W] Normalise B percent to black [B to white] (default $opt_threshold)
+  -e,--edge N          Blank N mm of margin (default $opt_edge)
+  -j,--jpeg[=N]        Generate JPEG PDF, quality N (default $opt_jpeg_quality)
+  -T,--title TEXT      Set title of PDF (default --output file name)
+  -h,--help            Print this message on standard output
+"
+}
+
+bad_usage() {
+    echo "$me: $*" >&2
+    echo "Try '$me --help' for more information." >&2
+}
+
+is_integer() {
+    [ -n "$1" -a "${1#*[!0-9]}" = "$1" ]
+}
+
+shopt -s extglob
+
+device='hpaio:/net/Officejet_4620_series?ip=192.168.178.31'
+tmp="${TMPDIR:-/tmp}"
+stem="$tmp/$me"
+
+opt_scan=true
+opt_rotate=0
+opt_mode=greyscale
+opt_title=
+while [ $# -ne 0 ]; do
+    arg="$1"
+    case "$arg" in
+    -h|--help) usage; exit 0;;
+    -n|--noscan) opt_scan=false;;
+    -r90|--rotate90) opt_rotate=90;;
+    -r180|--rotate180) opt_rotate=180;;
+    -r-90|--rotate-90) opt_rotate=270;;
+    --output=*) opt_output="${arg#*=}";;
+    -o|--output) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_output="$1";;
+    --title=) opt_title="${arg#*=}";;
+    -T|--title) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_title="$1";;
+    -C|--fullcolour) opt_mode=fullcolour;;
+    -c|--quantcolour) opt_mode=quantcolour;;
+    -m|--monochrome) opt_mode=monochrome;;
+    --page=*) opt_pagesize="${arg#*=}";;
+    -p|--page) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_pagesize="$1";;
+    --resolution=*) opt_resolution="${arg#*=}";;
+    -r|--resolution) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_resolution="$1";;
+    --threshold=*) opt_threshold="${arg#*=}";;
+    -t|--threshold) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_threshold="$1";;
+    --edge=*) opt_edge="${arg#*=}";;
+    -e|--edge) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_edge="$1";;
+    --jpeg=*) opt_jpeg=true; opt_jpeg_quality="${arg#*=}";;
+    -j|--jpeg) opt_jpeg=true; shift; is_integer "$1" && { opt_jpeg_quality="$1"; shift; };;
+    -*) bad_usage "unsupported option: $arg"; exit 1;;
+    *) bad_usage "unsupported argument: $arg"; exit 1;;
+    esac
+    shift
+done
+
+pdftitle="${opt_title:-${opt_output##*/}}"
+
+pdfpagesize=
+case $opt_pagesize in
+A4|a4)
+    scansize='-l 0 -t 0 -x 210 -y 297'
+    pdfpagesize=A4
+    ;;
+A5|a5)
+    scansize='-l 0 -t 0 -x 148.5 -y 210'
+    pdfpagesize=A5
+    ;;
++([0-9])?(.[0-9])x+([0-9])?(.[0-9]) )
+    width=${opt_pagesize%x*}
+    height=${opt_pagesize#*x}
+    scansize="-l 0 -t 0 -x $width -y $height"
+    ;;
+*)
+    echo "$me: unsupported page size: $opt_pagesize" >&2
+    exit 1
+    ;;
+esac
+
+res=$opt_resolution
+
+case $opt_mode in
+monochrome | greyscale)
+    scanmode=Gray
+    scansuffix=pgm
+    ;;
+quantcolour|fullcolour)
+    scanmode=Color
+    scansuffix=ppm
+    ;;
+*)
+    exit 101
+    ;;
+esac
+
+case "$opt_threshold" in
+    +([0-9])?(.+([0-9])) )
+    bpercent=$opt_threshold
+    wpercent=$(dc -e "4k 95 $bpercent -p")
+    if [ $(dc -e "[1p]sa 95 $bpercent >a") ]; then
+        echo "$me: threshold out of range: $opt_threshold" >&2
+        exit 1
+    fi
+    ;;
++([0-9])?(.+([0-9])),+([0-9])?(.+([0-9])) )
+    bpercent=${opt_threshold%,*}
+    wpercent=${opt_threshold#*,}
+    if [ $(dc -e "[1p]sa 100 $bpercent $wpercent +>a") ]; then
+        echo "$me: threshold out of range: $opt_threshold" >&2
+        exit 1
+    fi
+    ;;
+none)
+    ;;
+*)
+    echo "$me: unsupported threshold: $opt_threshold" >&2
+    exit 1
+    ;;
+esac
+
+scale=
+[ $opt_resolution -ne 300 ] && scale=$(echo 8k $opt_resolution 300 /p | dc)
+edgepix=$((opt_edge * 3000 / 254))
+
+exec 5>&1
+
+run() {
+    quoted + "$@" >&5
+    "$@"
+}
+
+$opt_scan && run scanimage --progress -d "$device" --format pnm --mode $scanmode --resolution 300 $scansize >|"$stem-300-scan.$scansuffix"
+
+if [ $edgepix -gt 0 ]; then
+   run pnmcut -left $edgepix -right -$edgepix -top $edgepix -bottom -$edgepix "$stem-300-scan.$scansuffix" |
+      run pnmpad -white -left $edgepix -right $edgepix -top $edgepix -bottom $edgepix >|"$stem-300-clean.$scansuffix"
+else
+   cp "$stem-300-scan.$scansuffix" "$stem-300-clean.$scansuffix"
+fi
+
+if [ "$opt_threshold" != none ]; then
+    run pnmnorm -keephues -bpercent $bpercent -wpercent $wpercent "$stem-300-clean.$scansuffix" >|"$stem-300-norm.$scansuffix"
+else
+    cp "$stem-300-clean.$scansuffix" "$stem-300-norm.$scansuffix"
+fi
+
+if [ -n "$scale" ]; then
+    run pnmscale $scale "$stem-300-norm.$scansuffix" >|"$stem-$res-norm.$scansuffix"
+fi
+
+case $opt_rotate in
+90|180|270)
+   run pnmflip -rotate$opt_rotate "$stem-$res-norm.$scansuffix" >|"$stem-$res-flip.$scansuffix"
+   ;;
+*)
+   cp "$stem-$res-norm.$scansuffix" "$stem-$res-flip.$scansuffix"
+   ;;
+esac
+case $opt_rotate in
+90|270)
+   pdfpagesize=
+   ;;
+esac
+
+tiff_to_pdf() {
+    if $opt_jpeg; then
+        run tiff2pdf ${pdfpagesize:+ -p "$pdfpagesize"} -t "$pdftitle" -F -j -q $opt_jpeg_quality "$@"
+    else
+        run tiff2pdf ${pdfpagesize:+ -p "$pdfpagesize"} -t "$pdftitle" -F -z "$@"
+    fi
+}
+
+case $opt_mode in
+
+fullcolour)
+    run pnmtotiff -lzw -truecolor "$stem-$res-flip.$scansuffix" >|"$stem-$res-flip.tiff"
+    tiff_to_pdf -o "$opt_output" "$stem-$res-flip.tiff"
+    ;;
+
+quantcolour)
+    #run ppmdither "$stem-$res-flip.$scansuffix" >|"$stem-$res-quant.ppm"
+    run ppmcolors -maxval=5 >|"$stem-colourmap.ppm"
+    run ppmquant -fs -mapfile="$stem-colourmap.ppm" "$stem-$res-flip.$scansuffix" >|"$stem-$res-quant.ppm"
+    run pnmtotiff -lzw "$stem-$res-quant.ppm" >|"$stem-$res-quant.tiff"
+    tiff_to_pdf -o "$opt_output" "$stem-$res-quant.tiff"
+    ;;
+
+greyscale)
+    run pgmramp -lr 256 1 >|"$stem-colourmap.pgm"
+    run ppmquant -fs -mapfile="$stem-colourmap.pgm" "$stem-$res-flip.$scansuffix" >|"$stem-$res-quant.pgm"
+    run pnmtotiff -lzw "$stem-$res-quant.pgm" >|"$stem-$res-quant.tiff"
+    tiff_to_pdf -o "$opt_output" "$stem-$res-quant.tiff"
+    ;;
+
+monochrome)
+    run pgmtopbm -fs "$stem-$res-flip.$scansuffix" >|"$stem-$res-flip.pnm"
+    run pnmtops -equalpixels -dpi 150 "$stem-$res-flip.pnm" >|"$stem-$res-flip.ps"
+    run ps2pdf -sPAPERSIZE=a4 -dEPSCrop "$stem-$res-flip.ps" "$opt_output"
+    ;;
+
+esac
