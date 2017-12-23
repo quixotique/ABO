@@ -80,19 +80,25 @@ def main():
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     opts = None
     try:
+        output = []
+        # For speed and simplicity, don't parse the 'compa' command using docopt.
         if len(sys.argv) >= 2 and sys.argv[1] == 'compa':
-            pass
+            try:
+                config = abo.config.Config().load()
+                output = compa(config, [arg for arg in sys.argv[2:]])
+            except abo.config.ConfigException as e:
+                # Attempting to do abo command-line completion when not in an
+                # ABO directory will simply have no effect, rather than
+                # printing an error message.
+                pass
         else:
             sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
             import docopt
             opts = docopt.docopt(__doc__, version='0.2')
-        try:
-            config = abo.config.Config().load()
-        except abo.config.ConfigException as e:
-            fatal(str(e))
-        if opts is None:
-            output = compa(config, [arg for arg in sys.argv[2:]])
-        else:
+            try:
+                config = abo.config.Config().load()
+            except abo.config.ConfigException as e:
+                fatal(str(e))
             import abo.command
             for word, value in opts.items():
                 if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
