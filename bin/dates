@@ -12,12 +12,17 @@ except ImportError:
 	import abo.period
 
 def main():
+	argv0 = os.path.basename(sys.argv[0])
 	args = sys.argv[1:]
-	if args == []:
-		raise ValueError('missing arguments')
-	whens = abo.period.parse_whens(args)
-	for when in whens:
-		print format_date(when)
+	try:
+		if args == []:
+			raise ValueError('missing arguments')
+		whens = abo.period.parse_whens(args)
+	except ValueError, e:
+		print "%(argv0)s: %(e)s" % locals()
+	else:
+		for when in whens:
+			print format_date(when)
 
 def format_date(d):
 	return d.strftime('%-d/%-m/%Y')

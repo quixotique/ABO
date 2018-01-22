@@ -12,27 +12,32 @@ except ImportError:
 	import abo.period
 
 def main():
+	argv0 = os.path.basename(sys.argv[0])
 	args = sys.argv[1:]
-	if args == []:
-		raise ValueError('missing arguments')
-	format = 'profloss'
-	if args[0] == '-':
-		args.pop(0)
-		format = 'stmt'
-	periods = abo.period.parse_periods(args)
-	if format == 'stmt' and len(periods) > 1:
-		raise ValueError("too many periods for %r format" % format)
-	last_end = None
-	word_to = '-to' if format == 'stmt' else 'to'
-	word_from = '-from' if format == 'stmt' else 'from'
-	for start, end in periods:
-		if last_end is not None and last_end != start - timedelta(1):
+	try:
+		if args == []:
+			raise ValueError('missing arguments')
+		format = 'profloss'
+		if args[0] == '-':
+			args.pop(0)
+			format = 'stmt'
+		periods = abo.period.parse_periods(args)
+		if format == 'stmt' and len(periods) > 1:
+			raise ValueError("too many periods for %r format" % format)
+	except ValueError, e:
+		print "%(argv0)s: %(e)s" % locals()
+	else:
+		last_end = None
+		word_to = '-to' if format == 'stmt' else 'to'
+		word_from = '-from' if format == 'stmt' else 'from'
+		for start, end in periods:
+			if last_end is not None and last_end != start - timedelta(1):
+				print word_to, format_date(last_end),
+			print word_from, format_date(start),
+			last_end = end
+		if last_end is not None:
 			print word_to, format_date(last_end),
-		print word_from, format_date(start),
-		last_end = end
-	if last_end is not None:
-		print word_to, format_date(last_end),
-	print
+		print
 
 def format_date(d):
 	return d.strftime('%-d/%-m/%Y') if d is not None else '.'
