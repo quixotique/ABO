@@ -176,14 +176,23 @@ def cmd_acc(config, opts):
             for line in lines:
                 yield line
     for entry in entries:
+        acc = chart[entry.account]
         date = entry.cdate if opts['--control'] and entry.cdate else entry.transaction.edate if opts['--effective'] else entry.transaction.date
         tally.balance += entry.amount
         if entry.amount < 0:
             tally.totdb += entry.amount
         elif entry.amount > 0:
             tally.totcr += entry.amount
-        desc = entry.description(with_due=not opts['--control'], config=config)
-        acc = chart[entry.account]
+        desc = entry.description(
+                with_who= entry.transaction.who != common_root_account.name,
+                with_due= not opts['--control'],
+                config= config)
+        # Prefix the description with the bare name of the payable/receivable
+        # account.
+        alacc = single_accrual_account(chart, entry.transaction)
+        if alacc is not None and not alacc.is_cash() and alacc is not common_root_account:
+            desc = '; '.join(filter(len, [alacc.bare_name(), desc]))
+        # Prefix the description with the sub-account name.
         if not opts['--short'] and acc is not common_root_account:
             rel = []
             for par in chain(reversed(list(acc.parents_not_in_common_with(common_root_account))), (acc,)):
@@ -194,13 +203,17 @@ def cmd_acc(config, opts):
                         break
             if rel:
                 desc = '; '.join(s for s in [':'.join(rel), desc] if s)
+        # If no description, use the bare account name of the other entry.
         if not desc and len(entry.transaction.entries) == 2:
             oe = [e for e in entry.transaction.entries if e is not entry]
             assert len(oe) == 1
             oe = oe[0]
             desc = chart[oe.account].bare_name()
+        # In control accounts, or if sorting by effective date, prepend the
+        # actual date of the transaction to the description.
         if opts['--control'] or (opts['--effective'] and entry.transaction.edate != entry.transaction.date):
             desc = config.format_date_short(entry.transaction.date, relative_to=date) + ' ' + desc
+        # Wrap the description onto one or more lines.
         desc = textwrap.wrap(desc, width=pw)
         yield fmt % (date.strftime(r'%_d-%b-%Y'),
                 desc.pop(0) if desc else '',
@@ -216,6 +229,14 @@ def cmd_acc(config, opts):
             config.format_money(tally.totcr),
             '')
     yield fmt % ('', 'Balance', '', '', config.format_money(tally.balance))
+
+def single_accrual_account(chart, transaction):
+    accrual_accounts = []
+    for e in transaction.entries:
+        acc = chart[e.account]
+        if acc.is_accrual():
+            accrual_accounts.append(acc)
+    return accrual_accounts[0] if len(accrual_accounts) == 1 else None
 
 # TODO refactor filter_display_accounts() as method of Formatter
 def filter_display_accounts(accounts, opts):

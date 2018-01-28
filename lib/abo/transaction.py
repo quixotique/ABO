@@ -105,12 +105,12 @@ class Entry(abo.base.Base):
     def sign(self):
         return sign(self.amount)
 
-    def description(self, with_due=False, config=None):
+    def description(self, with_who=True, with_due=False, config=None):
         """Return the full description for this Entry, by appending its detail
         string to the description string of its Transaction, separated by a
         comma and space.
         """
-        return ', '.join([s for s in (self.transaction.description(),
+        return ', '.join([s for s in (self.transaction.description(with_who=with_who),
                                       self.detail,
                                       'due ' + config.format_date_short(self.cdate, relative_to=self.transaction.date)
                                             if      with_due
@@ -277,7 +277,7 @@ class Transaction(abo.base.Base):
                 e = Entry(self, **e)
                 ents.append(e)
             bal += e.amount
-        assert bal == 0, 'entries sum to %r, should be zero:\n   %s %s; %s\n   %s' % (bal, date, who, what, '\n   '.join(map(repr, entries)))
+        assert bal == 0, 'entries sum to %r, should be zero: %s %s; %s\n   %s' % (bal, date, who, what, '\n   '.join(map(repr, entries)))
         self.entries = tuple(sorted(ents, key=lambda e: (e.amount, e.account, e.detail)))
 
     def __repr__(self):
@@ -297,13 +297,13 @@ class Transaction(abo.base.Base):
         """
         return sum(e.amount for e in self.entries if e.amount > 0)
 
-    def description(self):
+    def description(self, with_who=True):
         """Return the full description for this Transaction, by appending its
         who and what strings, separated by a semicolon and space.  The
         semicolon allows a description string to be split into who and what
         strings if needed.
         """
-        return '; '.join(s for s in (self.who, self.what) if s and s.strip())
+        return '; '.join(s for s in (self.who if with_who else None, self.what) if s and s.strip())
 
     def replace(self, date=None, entries=None):
         """Return a copy of this Transaction with new attributes.

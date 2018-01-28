@@ -214,6 +214,9 @@ class Account(object):
     def is_accrual(self):
         return self.is_receivable() or self.is_payable()
 
+    def is_cash(self):
+        return self.atype is AccountType.AssetLiability and 'cash' in self.tags
+
     def is_loan(self):
         return self.atype is AccountType.AssetLiability and 'loans' in self.tags
 
