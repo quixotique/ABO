@@ -56,7 +56,7 @@
 ... acc account2
 ... amt 81.11
 ...
-... 7/5/2013=1/1/2013 Modern text
+... 7/5/2013=1/1/2013 Somebody; Modern text
 ...  account one  45.06 ; comment
 ...  account two  -60.00 ; another comment {31/5/2013}
 ...  account three ; {+15}
@@ -88,6 +88,7 @@
              Entry(account='cash', amount=Money.AUD(81.11)))),
  Transaction(date=datetime.date(2013, 5, 7),
     edate=datetime.date(2013, 1, 1),
+    who='Somebody',
     what='Modern text',
     entries=(Entry(account='account two', amount=Money.AUD(-60.00), cdate=datetime.date(2013, 5, 31), detail='another comment'),
              Entry(account='account three', amount=Money.AUD(14.94), cdate=datetime.date(2013, 5, 22)),
@@ -297,6 +298,11 @@ class Journal(object):
     _regex_ledger_due = re.compile(r'\s*{([^}]*)}\s*')
 
     def _parse_ledger_block(self, ledger_date, ledger_what, ledger_lines):
+        if ';' in ledger_what:
+            who, what = map(str.strip, str(ledger_what).split(';', 1))
+        else:
+            who = None
+            what = str(ledger_what).strip()
         entries = []
         noamt = None
         for line in ledger_lines:
@@ -342,7 +348,8 @@ class Journal(object):
             noamt['amount'] = -total
         kwargs = {}
         kwargs['date'], kwargs['edate'] = ledger_date
-        kwargs['what'] = ledger_what
+        kwargs['who'] = who
+        kwargs['what'] = what
         kwargs['entries'] = entries
         return kwargs
 
