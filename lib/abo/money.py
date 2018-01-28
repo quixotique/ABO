@@ -162,12 +162,12 @@ class Currency(object):
         (None, '$AUD 100.71')
         '''
         try:
-            if pycountry.currencies.get(letter=text[:3]).letter == text[:3]:
+            if pycountry.currencies.get(alpha_3=text[:3]).alpha_3 == text[:3]:
                 return str(text[:3]), text[3:].lstrip()
         except KeyError:
             pass
         try:
-            if pycountry.currencies.get(letter=text[-3:]).letter == text[-3:]:
+            if pycountry.currencies.get(alpha_3=text[-3:]).alpha_3 == text[-3:]:
                 return str(text[-3:]), text[:-3].rstrip()
         except KeyError:
             pass
