@@ -98,9 +98,9 @@ def cmd_acc(config, opts):
         accounts = filter_accounts(chart, opts['<PRED>'].lstrip())
     except ValueError as e:
         raise InvalidArg('<PRED>', e)
-    logging.debug('accounts = %r' % list(map(str, accounts)))
+    logging.debug('accounts = %r' % list(map(repr, accounts)))
     common_root_account = abo.account.common_root(accounts)
-    logging.debug('common_root_account = %r' % str(common_root_account))
+    logging.debug('common_root_account = %r' % common_root_account)
     all_transactions = get_transactions(chart, config, opts)
     range, bf, transactions = filter_period(chart, all_transactions, opts)
     if opts['--control']:
@@ -184,7 +184,7 @@ def cmd_acc(config, opts):
         elif entry.amount > 0:
             tally.totcr += entry.amount
         desc = entry.description(
-                with_who= entry.transaction.who != common_root_account.name,
+                with_who= not (common_root_account and entry.transaction.who == common_root_account.name),
                 with_due= not opts['--control'],
                 config= config)
         # Prefix the description with the bare name of the payable/receivable
