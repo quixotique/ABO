@@ -1,6 +1,6 @@
 #!/bin/bash
-# Typeset UTF-8 encoded groff documents to PDF.
-# Copyright 2016 Andrew Bettison
+# Typeset UTF-8 encoded groff documents to PDF via PostScript.
+# Copyright 2016-2018 Andrew Bettison
 
 usage() {
    echo "Usage: $0 groff-source.t [ destination.pdf ]"
@@ -19,8 +19,8 @@ groff_to_pdf() {
       ;;
    esac
    case "$2" in
-   -) groff -Kutf-8 -Tpdf "$src";;
-   *) groff -Kutf-8 -Tpdf "$src" >"$2";;
+   -) groff -Kutf-8 -Tps "$src" | ps2pdf - -;;
+   *) groff -Kutf-8 -Tps "$src" | ps2pdf - "$2";;
    esac
    popd >/dev/null
 }
