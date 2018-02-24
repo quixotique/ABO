@@ -518,7 +518,7 @@ def compute_due_accounts(chart, transactions, selected_accounts=None):
                 if account.is_accrual():
                     account = account.accrual_parent()
                     due_accounts.add(account)
-                elif e.cdate:
+                elif account.atype is abo.account.AccountType.AssetLiability and e.cdate:
                     due_accounts.add(account)
                 accounts[account].append(e)
     return dict((account, entries) for account, entries in accounts.items() if account in due_accounts)
