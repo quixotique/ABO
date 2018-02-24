@@ -26,15 +26,12 @@ def cmd_journal(config, opts):
     chart = get_chart(config, opts)
     range, bf, transactions = filter_period(chart, get_transactions(chart, config, opts), opts)
     dw = 11
+    minpw = 8
+    natpw = 35
     bw = config.balance_column_width()
-    aw = max(len(a.short_name()) for a in chart.accounts())
-    if config.output_width():
-        width = max(50, config.output_width())
-        aw = min(15, aw)
-        pw = max(1, width - (dw + 2 + 1 + bw + 1 + 2 + 1 + aw))
-    else:
-        pw = 35
-        width = dw + 2 + pw + 1 + bw + 1 + 2 + 1 + aw
+    maxaw = max(len(a.short_name()) for a in chart.accounts())
+    minaw = min(maxaw, 15)
+    width, aw, pw = config.get_output_widths((minaw, maxaw, maxaw), (minpw, natpw, None), section='journal', fixed=dw + 2 + 1 + bw + 1 + 2 + 1)
     fmt = '%-{dw}.{dw}s  %-{pw}.{pw}s %{bw}s %-2.2s %-.{aw}s'.format(**locals())
     if config.heading:
         yield config.heading.center(width)
@@ -113,12 +110,7 @@ def cmd_acc(config, opts):
     dw = 11
     mw = config.money_column_width()
     bw = config.balance_column_width()
-    if config.output_width():
-        width = max(50, config.output_width())
-        pw = max(1, width - (dw + 2 + 2 * (mw + 1) + 1 + bw))
-    else:
-        pw = 35
-        width = dw + 2 + pw + 2 * (mw + 1) + 1 + bw
+    width, pw = config.get_output_widths((8, 35, None), section='acc', fixed=dw + 2 + 2 * (mw + 1) + 1 + bw)
     fmt = '%-{dw}.{dw}s  %-{pw}.{pw}s %{mw}s %{mw}s %{bw}s'.format(**locals())
     if not opts['--bare']:
         if config.heading:
@@ -249,7 +241,7 @@ def filter_display_accounts(accounts, opts):
 
 class Formatter(object):
 
-    def __init__(self, config, opts, accounts, ncolumns):
+    def __init__(self, config, section, opts, accounts, ncolumns):
         self.config = config
         self.opts = opts # TODO get rid of this, only needed to pass to filter_display_accounts()
         self.opt_bare = bool(opts['--bare'])
@@ -258,16 +250,16 @@ class Formatter(object):
         self.num_columns = ncolumns
         self.labelwid = max(chain([8], (len(a.label or '') for a in accounts)))
         self.balwid = self.config.balance_column_width()
-        if self.opt_fullnames:
-            self.accwid = max(chain([10], (len(str(a)) for a in accounts)))
+        minaw = 10
+        if self.config.width:
+            maxaw = None
+        elif self.opt_fullnames:
+            maxaw = max(chain([minaw], (len(str(a)) for a in accounts)))
         else:
-            self.accwid = max(chain([10], (3 * a.depth() + len(a.bare_name()) for a in accounts)))
+            maxaw = max(chain([minaw], (3 * a.depth() + len(a.bare_name()) for a in accounts)))
             if self.opt_bare:
-                self.accwid -= 3
-        self.width = (self.balwid + 1) * self.num_columns + self.accwid
-        if self.config.output_width() and self.width > self.config.output_width():
-            self.accwid = max(10, self.config.output_width() - ((self.balwid + 1) * self.num_columns))
-            self.width = self.config.output_width()
+                maxaw = max(minaw, maxaw - 3)
+        self.width, self.accwid = self.config.get_output_widths((minaw, 45, maxaw), section=section, fixed=(self.balwid + 1) * self.num_columns)
 
     @staticmethod
     def plain(text):
@@ -401,7 +393,7 @@ def cmd_profloss(config, opts):
     balances = [abo.balance.Balance(transactions, date_range=r, chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for r in ranges]
     make_sections(sections, balances)
     all_accounts = set(chain(*(s.accounts for s in sections)))
-    f = Formatter(config, opts, all_accounts, len(balances))
+    f = Formatter(config, 'profloss', opts, all_accounts, len(balances))
     if not f.opt_bare:
         if config.heading:
             yield f.centre(config.heading)
@@ -448,7 +440,7 @@ def cmd_bsheet(config, opts):
                 for r in ranges]
     make_sections(sections, balances)
     all_accounts = set(chain(*(s.accounts for s in sections)))
-    f = Formatter(config, opts, all_accounts, len(balances))
+    f = Formatter(config, 'bsheet', opts, all_accounts, len(balances))
     if not f.opt_bare:
         if config.heading:
             yield f.centre(config.heading)
@@ -481,11 +473,10 @@ def cmd_balance(config, opts):
     else:
         display_accounts = sorted(filter_display_accounts(chain(*(b.accounts for b in balances)), opts))
         logging.debug('display_accounts = %r' % display_accounts)
-        aw = max(chain([10], (len(str(a)) for a in display_accounts)))
+        minaw = 10
+        maxaw = max(chain([minaw], (len(str(a)) for a in display_accounts)))
         bw = config.balance_column_width()
-        width = (bw + 1) * len(balances) + 1 + aw
-        if config.output_width() and width > config.output_width():
-            aw = max(10, config.output_width() - ((bw + 1) * len(balances) + 1))
+        width, aw = config.get_output_widths((minaw, maxaw, maxaw), section='balance', fixed=(bw + 1) * len(balances) + 1)
         fmt = ('%{bw}s ' * len(balances) + ' %.{aw}s').format(**locals())
         if config.heading:
             yield config.heading.center(width)

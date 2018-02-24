@@ -57,6 +57,7 @@ class Config(object):
         self.chart_file_path = None
         self.heading = None
         self.width = None
+        self.maximum_output_width = {}
         text = os.environ.get('ABO_WIDTH')
         if text is not None:
             try:
@@ -89,6 +90,7 @@ class Config(object):
             parser.add_keyword('journal', self._set_journal)
             parser.add_keyword('heading', self._set_heading)
             parser.add_keyword('checkpoint', self._set_checkpoint)
+            parser.add_section_keyword('maximum-output-width', self._set_maximum_output_width)
             parser.parse()
         return self
 
@@ -102,6 +104,12 @@ class Config(object):
 
     def _set_checkpoint(self, parser, word):
         self.checkpoint_file_paths += glob.glob(os.path.join(parser.basedir, word))
+
+    def _set_maximum_output_width(self, parser, word, section):
+        try:
+            self.maximum_output_width[section] = uint(word)
+        except ValueError as e:
+            raise ConfigException("invalid width: " + e)
 
     def apply_options(self, opts):
         if opts['--wide']:
@@ -150,15 +158,42 @@ class Config(object):
     def balance_column_width(self):
         return self.money_column_width() + 1
 
-    def output_width(self):
-        if self.width is not None:
-            return self.width
-        if sys.stdout.isatty():
+    def get_output_widths(self, *args, section=None, fixed=0):
+        minimum = fixed
+        natural = fixed
+        for minw, natw, maxw in args:
+            assert minw <= natw, 'minw=%r natw=%r' % (minw, natw)
+            assert maxw is None or minw <= maxw, 'minw=%r maxw=%r' % (minw, maxw)
+            minimum += minw
+            natural += natw
+        if self.width: # --width=N option
+            if self.width < minimum:
+                raise InvalidOption('--width', 'minimum width is %d' % minimum)
+            width = self.width
+        elif sys.stdout.isatty():
             try:
-                return uint(os.environ['COLUMNS'])
+                width = uint(os.environ['COLUMNS'])
+                if width:
+                    width = max(width, minimum)
+                    maxwidth = self.maximum_output_width.get(section)
+                    if maxwidth:
+                        width = min(width, maxwidth)
             except (ValueError, KeyError):
                 pass
-        return 80
+        else:
+            width = natural
+        surplus = width - minimum
+        widths = [width]
+        for minw, natw, maxw in args:
+            if surplus > 0:
+                wid = minw + surplus
+                if maxw and wid > maxw:
+                    wid = maxw
+                surplus -= wid - minw
+            else:
+                wid = minw
+            widths.append(wid)
+        return widths
 
     def cache_dir_path(self):
         return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo')
@@ -175,6 +210,7 @@ class Parser(object):
         self.lex.whitespace_split = True
         self.error_leader = self.lex.error_leader()
         self.keywords = {}
+        self.section_keywords = {}
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -183,6 +219,9 @@ class Parser(object):
 
     def add_keyword(self, keyword, handler):
         self.keywords[keyword] = handler
+
+    def add_section_keyword(self, keyword, handler):
+        self.section_keywords[keyword] = handler
 
     def get_token(self):
         err = self.lex.error_leader()
@@ -197,16 +236,27 @@ class Parser(object):
             while self.tok is not None:
                 handler = self.keywords.get(self.tok)
                 if handler is not None:
-                    self.get_token()
-                    while self.tok is not None and self.tok != ';':
-                        handler(self, self.tok)
-                        self.get_token()
-                    if self.tok != ';':
-                        raise ConfigException("expecting ';', got " + ('EOF' if self.tok is None else repr(self.tok)))
-                    self.get_token()
-                else:
-                    break
+                    self.parse_values(handler)
+                    continue
+                try:
+                    section, tok = self.tok.split('.', 1)
+                    handler = self.section_keywords.get(tok)
+                    if handler is not None:
+                        self.parse_values(handler, section=section)
+                        continue
+                except TypeError:
+                    pass
+                break
             if self.tok is not None:
                 raise ConfigException("unexpected token: %r" % self.tok)
         except ConfigException as e:
             raise ConfigException(self.error_leader + str(e))
+
+    def parse_values(self, handler, **kwargs):
+        self.get_token()
+        while self.tok is not None and self.tok != ';':
+            handler(self, self.tok, **kwargs)
+            self.get_token()
+        if self.tok != ';':
+            raise ConfigException("expecting ';', got " + ('EOF' if self.tok is None else repr(self.tok)))
+        self.get_token()
