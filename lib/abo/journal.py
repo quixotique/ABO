@@ -290,7 +290,7 @@ class Journal(object):
                     del entry['line']
                 kwargs['is_projection'] = in_projection
                 try:
-                    yield Transaction(**kwargs)
+                    yield Transaction(config=self.config, **kwargs)
                 except:
                     abo.text.raise_with_context(line)
                     raise

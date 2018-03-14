@@ -256,7 +256,7 @@ class Transaction(abo.base.Base):
     transaction for humans, and a list of two or more Entries.
     """
 
-    def __init__(self, date=None, edate=None, who=None, what=None, is_projection=False, entries=()):
+    def __init__(self, date=None, edate=None, who=None, what=None, is_projection=False, entries=(), config=None):
         """Construct a new Transaction object, given its date, optional control
         date, description, and list of Entry objects.
         """
@@ -265,7 +265,7 @@ class Transaction(abo.base.Base):
         self.date = date
         self.edate = edate if edate is not None else date
         self.who = who
-        self.what = self._expand(what, date=date) if what else what
+        self.what = self._expand(what, config=config) if what else what
         self.is_projection = is_projection
         # Construct member Entry objects and ensure that they sum to zero.
         ents = []
@@ -363,14 +363,20 @@ class Transaction(abo.base.Base):
 
     _regex_expand_field = re.compile(r'%{(\w+)([+-]\d+)?}')
 
-    def _expand(self, text, date):
+    def _expand(self, text, config=None):
         def repl(m):
+            d = None
             if m.group(1) == 'date':
-                d = date
-                if m.group(2):
-                    d += datetime.timedelta(int(m.group(2)))
-                return d.strftime(r'%-d-%b-%Y')
-            return text
+                d = self.date
+            elif m.group(1) == 'edate':
+                d = self.edate
+            else:
+                return m.group(0)
+            if m.group(2):
+                d += datetime.timedelta(int(m.group(2)))
+            return config.format_date_short(d, relative_to=self.date) \
+                   if config is not None \
+                   else d.strftime(r'%-d-%b-%Y')
         return self._regex_expand_field.sub(repl, text)
 
 def _divide_entries(entries, amount):
