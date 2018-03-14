@@ -765,7 +765,7 @@ class Chart(object):
                 account = Account(name=name, label=label, parent=parent, atype=atype, tags=tags, wild=wild)
                 try:
                     self._add_account(account)
-                except KeyError as e:
+                except (KeyError, ValueError) as e:
                     raise abo.text.LineError(str(e), line=line)
                 stack.append(account)
 
