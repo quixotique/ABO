@@ -702,6 +702,8 @@ def get_transactions(chart, config, opts):
         transactions += cache.transactions()
     if not opts['--projection']:
         transactions = [t for t in transactions if not t.is_projection]
+    if opts['--reduce']:
+        transactions = [t.reduce() for t in transactions]
     datekey = transaction_datekey(config, opts)
     transactions.sort(key=lambda t: datekey(t) + (t.who or '', t.what or '', -t.amount()))
     if opts['--remove']:

@@ -41,6 +41,7 @@ if __name__ == "__main__":
 import re
 import datetime
 from itertools import chain
+from collections import defaultdict
 import abo.base
 
 def sign(number):
@@ -378,6 +379,45 @@ class Transaction(abo.base.Base):
                    if config is not None \
                    else d.strftime(r'%-d-%b-%Y')
         return self._regex_expand_field.sub(repl, text)
+
+    def reduce(self):
+        """Return a Transaction that is a reduction of this transaction into
+        the minimum possible number of entries, by combining entries that have
+        the same account and cdate into one.  If this transaction cannot be
+        reduced any further, then simply returns self.
+        >>> t = Transaction(date=1, who='Someone', what='something',
+        ...         entries=({'account':'a2', 'amount':-503, 'detail':'old'},
+        ...                  {'account':'a2', 'amount':-473},
+        ...                  {'account':'a1', 'amount':247, 'detail':'blue'},
+        ...                  {'account':'a1', 'amount':729, 'detail':'else'}))
+        >>> t1 = t.reduce()
+        >>> t1 #doctest: +NORMALIZE_WHITESPACE
+        Transaction(date=1, who='Someone', what='something',
+                    entries=(Entry(account='a2', amount=-976),
+                             Entry(account='a1', amount=976)))
+        >>> t2 = t1.reduce()
+        >>> t2 is t1
+        True
+        """
+        entry_map = defaultdict(lambda: [])
+        for e in self.entries:
+            entry_map[(e.cdate, e.account)].append(e)
+        if max(map(len, entry_map.values())) == 1:
+            return self
+        reduced_entries = []
+        for v in entry_map.values():
+            if len(v) == 1:
+                reduced_entries.append(v[0])
+            else:
+                amount = sum(e.amount for e in v)
+                if amount != 0:
+                    reduced_entries.append({'cdate': v[0].cdate, 'account': v[0].account, 'amount': amount})
+        return Transaction(date= self.date,
+                           edate= self.edate,
+                           who= self.who,
+                           what= self.what,
+                           is_projection= self.is_projection,
+                           entries=reduced_entries)
 
 def _divide_entries(entries, amount):
     entries = sorted(entries, key=lambda e: (abs(e.amount), e.account))
