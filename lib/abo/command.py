@@ -99,10 +99,11 @@ def cmd_acc(config, opts):
     common_root_account = abo.account.common_root(accounts)
     logging.debug('common_root_account = %r' % common_root_account)
     all_transactions = get_transactions(chart, config, opts)
+    datekey = transaction_datekey(config, opts)
     range, bf, transactions = filter_period(chart, all_transactions, opts)
     if opts['--control']:
         entries = [e for e in chain(*(t.entries for t in all_transactions)) if chart[e.account] in accounts and (e.cdate or e.transaction.date) in range]
-        entries.sort(key=lambda e: e.cdate or e.transaction.date)
+        entries.sort(key=lambda e: ((e.cdate,) if e.cdate else tuple()) + datekey(e.transaction))
     else:
         entries = [e for e in chain(*(t.entries for t in transactions)) if chart[e.account] in accounts]
     if opts['--omit-empty'] and not entries:
@@ -169,7 +170,7 @@ def cmd_acc(config, opts):
                 yield line
     for entry in entries:
         acc = chart[entry.account]
-        date = entry.cdate if opts['--control'] and entry.cdate else entry.transaction.edate if opts['--effective'] else entry.transaction.date
+        date = entry.cdate if opts['--control'] and entry.cdate else datekey(entry.transaction)[0]
         tally.balance += entry.amount
         if entry.amount < 0:
             tally.totdb += entry.amount
@@ -203,7 +204,7 @@ def cmd_acc(config, opts):
             desc = chart[oe.account].bare_name()
         # In control accounts, or if sorting by effective date, prepend the
         # actual date of the transaction to the description.
-        if opts['--control'] or (opts['--effective'] and entry.transaction.edate != entry.transaction.date):
+        if entry.transaction.date != date:
             desc = config.format_date_short(entry.transaction.date, relative_to=date) + ' ' + desc
         # Wrap the description onto one or more lines.
         desc = textwrap.wrap(desc, width=pw)
@@ -690,16 +691,18 @@ def cmd_mako(config, opts):
 def get_chart(config, opts):
     return abo.cache.chart_cache(config, opts).get()
 
+def transaction_datekey(config, opts):
+    if opts['--effective']:
+        return lambda t: (t.edate, t.date)
+    return lambda t: (t.date, t.edate)
+
 def get_transactions(chart, config, opts):
     transactions = []
     for cache in abo.cache.transaction_caches(chart, config, opts):
         transactions += cache.transactions()
     if not opts['--projection']:
         transactions = [t for t in transactions if not t.is_projection]
-    if opts['--effective']:
-        datekey = lambda t: (t.edate, t.date)
-    else:
-        datekey = lambda t: (t.date, t.edate)
+    datekey = transaction_datekey(config, opts)
     transactions.sort(key=lambda t: datekey(t) + (t.who or '', t.what or '', -t.amount()))
     if opts['--remove']:
         for text in opts['--remove']:
