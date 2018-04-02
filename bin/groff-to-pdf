@@ -19,8 +19,8 @@ groff_to_pdf() {
       ;;
    esac
    case "$2" in
-   -) groff -Kutf-8 -Tps "$src" | ps2pdf - -;;
-   *) groff -Kutf-8 -Tps "$src" | ps2pdf - "$2";;
+   -) groff -dpaper=a4 -Kutf-8 -Tps "$src" | ps2pdf - -;;
+   *) groff -dpaper=a4 -Kutf-8 -Tps "$src" | ps2pdf - "$2";;
    esac
    popd >/dev/null
 }
