@@ -368,6 +368,23 @@ class Money(object):
     ...    currency = Currency.AUD
     >>> AUD(140)
     AUD(140.00)
+    >>> AUD(140.01)
+    Traceback (most recent call last):
+    ValueError: invalid literal for Currency.AUD: 140.01
+    >>> AUD.from_text('140.01')
+    Money.AUD(140.01)
+    >>> AUD(70) + AUD(30)
+    AUD(100.00)
+    >>> AUD(70) + 30
+    AUD(100.00)
+    >>> 70 + AUD(30)
+    AUD(100.00)
+    >>> AUD(70) * 2
+    AUD(140.00)
+    >>> AUD(70) * 2.5
+    AUD(175.00)
+    >>> AUD(70) / 2
+    AUD(35.00)
     '''
 
     def __init__(self, amount):
@@ -426,6 +443,8 @@ class Money(object):
         '''
         if currency is None:
             currency, number = Currency.extract_currency(text)
+            if currency is None:
+                currency = getattr(cls, 'currency')
             if currency is None:
                 raise ValueError('invalid literal for %s.from_text(currency=None): %r' % (cls.__name__, text,))
         else:
@@ -513,15 +532,17 @@ class Money(object):
         return type(self)(self._unmoney(other, '{1} - {0}') - self.amount)
 
     def __mul__(self, other):
-        other = self._unmoney(other, '{1} * {0}')
-        if isinstance(other, float):
-            value = decimal.Decimal(other * float(self.amount)).quantize(self.currency.zero)
-        else:
-            value = other * self.amount
-        return type(self)(value)
+        if isinstance(other, (float, int)):
+            return type(self)(decimal.Decimal(float(self.amount) * other).quantize(self.currency.zero))
+        return NotImplemented
 
     def __rmul__(self, other):
         return self.__mul__(other)
+
+    def __truediv__(self, other):
+        if isinstance(other, (float, int)):
+            return type(self)(self.amount / other)
+        return NotImplemented
 
 Money.register(Currency('AUD', 2, '$', True).register())
 Money.register(Currency('EUR', 2, '€', False, True).register())
