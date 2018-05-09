@@ -11,40 +11,13 @@ from collections import defaultdict
 
 def main():
     locale.setlocale(locale.LC_ALL, '')
+    # process all input files
     result = Result()
     for path in sys.argv[1:]:
         result += process(path)
-    all_labels = set(result.totals.labels)
-    for report in result.reports.values():
-        all_labels |= set(report.labels)
-    wds = 's' if result.working_days != 1 else ''
-    dps = 's' if result.days_present != 1 else ''
-    print pfmt % ('', '------')
-    print pfmt % ('TOTAL', Duration.format(result.totals.minutes))
-    if result.working_days:
-        print pfmt % ('AVERAGE', Duration.format(result.totals.minutes / result.working_days)) + ' per day over %u working day%s' % (result.working_days, wds)
-    if result.days_present:
-        print pfmt % ('AVERAGE', Duration.format(result.totals.minutes / result.days_present)) + ' per day over %u day%s present' % (result.days_present, dps)
-    w = str(max(map(len, all_labels)))
-    fmt = '%-' + w + '.' + w + 's  %8.8s' + ' %8.8s' * len(result.reports)
-    print
-    print fmt % (('', '') + tuple(result.reports))
-    print fmt % (('', '--------') + ('--------',) * len(result.reports))
-    def format_duration_or_none(minutes):
-        return Duration.format(minutes) if minutes is not None else '-'
-    total = 0
-    rtotal = [0] * len(result.reports)
-    for label in sorted(all_labels):
-        minutes = result.totals.labels.get(label)
-        rminutes = [v.labels.get(label) for v in result.reports.values()]
-        total += minutes
-        rtotal = [t + (m or 0) for t, m in zip(rtotal, rminutes)]
-        if [m for m in [minutes] + rminutes if m]:
-            print fmt % ((label, format_duration_or_none(minutes)) + tuple(format_duration_or_none(m) for m in rminutes))
-    print fmt % (('', '--------') + ('--------',) * len(result.reports))
-    print fmt % (('TOTAL', Duration.format(total)) + tuple(Duration.format(t) for t in rtotal))
-
-pfmt = '%-16.16s  %6s'
+    # print reports
+    print_calendar_report(result)
+    print_task_report(result)
 
 def process(path):
     # First pass to discover all the labels to exclude.
@@ -64,7 +37,7 @@ def process(path):
                 continue
             total = Total.parse(cursor)
             if total is not None:
-                running = result.totals - result.totals.slice(excluded_labels)
+                running = result.present - result.present.slice(excluded_labels)
                 if total.minutes != running.minutes:
                     raise ParseError('TOTAL [%s] does not equal running total [%s]' % (
                                 Duration.format(total.minutes), Duration.format(running.minutes)),
@@ -72,27 +45,73 @@ def process(path):
                 continue
             day = Day.parse(cursor)
             if day is not None:
-                notes = []
-                if day.is_pubhol:
-                    notes.append(' - public holiday')
-                elif day.is_weekend:
-                    notes.append(' - weekend')
-                print pfmt % (
-                        day.date.strftime('%a %_d %b %Y'),
-                        Duration.format(day.totals.minutes) if day.totals.minutes else 'no hours'
-                    ) + ''.join(notes)
+                day.excluded = day.present.slice(excluded_labels)
                 result.add_day(day)
                 continue
             raise ParseError('malformed line', line=cursor.current())
-        exclude = result.totals.slice(excluded_labels)
-        for label, minutes in exclude.labels.iteritems():
-            if minutes:
-                print pfmt % ('EXCLUDE', '-' + Duration.format(minutes)) + ' = ' + label
-        result.totals -= exclude
         return result
     except ParseError, e:
         print >>sys.stderr, unicode(e)
         sys.exit(1)
+
+def format_duration_or_none(minutes):
+    return Duration.format(minutes) if minutes is not None else '-'
+
+def print_calendar_report(result):
+    fmt = '%-16.16s ' + ' %8.8s' * (3 + len(result.reported)) + ' %-25s'
+    avfmt = '%-16.16s ' + ' %8.8s' * 2 + ' %s'
+    reportkeys = sorted(result.reported)
+    print fmt % (('', 'Present', 'Spent', 'Reported') + tuple(reportkeys) + ('',))
+    print fmt % (('',) + ('--------',) * (3 + len(reportkeys)) + ('',))
+    for day in sorted(result.days):
+        notes = []
+        if day.is_pubhol:
+            notes.append('public holiday')
+        elif day.is_weekend:
+            notes.append('weekend')
+        reported_minutes = [day.reported[k].sum_labels() if k in day.reported else None for k in reportkeys]
+        print fmt % ((day.date.strftime('%a %_d %b %Y'),
+                      Duration.format(day.present.minutes) if day.present.minutes else '-',
+                      Duration.format(day.spent.minutes) if day.spent.minutes else '-',
+                      format_duration_or_none(sum(m or 0 for m in reported_minutes) or None)) +
+                      tuple(format_duration_or_none(m) for m in reported_minutes) +
+                      (', '.join(notes)[:25],))
+    print fmt % (('',) + ('--------',) * (3 + len(reportkeys)) + ('',))
+    print fmt % (('TOTAL',
+                  Duration.format(result.present.minutes),
+                  Duration.format(result.spent.minutes)) +
+                  ('',) * (2 + len(reportkeys)))
+    if result.working_days:
+        s = 's' if result.working_days != 1 else ''
+        print avfmt % ('AVERAGE',
+                       Duration.format(result.present.minutes / result.working_days),
+                       Duration.format(result.spent.minutes / result.working_days),
+                       'per day over %u working day%s' % (result.working_days, s))
+    if result.days_present:
+        s = 's' if result.days_present != 1 else ''
+        print avfmt % ('AVERAGE',
+                       Duration.format(result.present.minutes / result.days_present),
+                       Duration.format(result.spent.minutes / result.days_present),
+                       'per day over %u day%s present' % (result.days_present, s))
+
+def print_task_report(result):
+    w = str(max(map(len, result.all_labels)))
+    fmt = '%-' + w + '.' + w + 's ' + ' %8.8s' * (len(result.reported) + 2)
+    print
+    print fmt % (('', 'Spent', 'Reported') + tuple(result.reported))
+    print fmt % (('',) + ('--------',) * (len(result.reported) + 2))
+    total_spent = 0
+    total_reported = [0] * len(result.reported)
+    for label in sorted(result.all_labels):
+        spent_minutes = result.spent.labels.get(label)
+        report_minutes = [v.labels.get(label) for v in result.reported.values()]
+        total_spent += spent_minutes or 0
+        total_reported = [t + (m or 0) for t, m in zip(total_reported, report_minutes)]
+        if [m for m in [spent_minutes] + report_minutes if m]:
+            reported_minutes = sum(m or 0 for m in report_minutes) or None
+            print fmt % ((label, format_duration_or_none(spent_minutes), format_duration_or_none(reported_minutes)) + tuple(format_duration_or_none(m) for m in report_minutes))
+    print fmt % (('',) + ('--------',) * (len(result.reported) + 2))
+    print fmt % (('TOTAL', Duration.format(total_spent), Duration.format(sum(total_reported))) + tuple(Duration.format(t) for t in total_reported))
 
 class Line(unicode):
 
@@ -217,7 +236,11 @@ class TotalMinutes(object):
         if other.minutes is not None:
             self.minutes = (self.minutes or 0) - other.minutes
         for label, minutes in other.labels.iteritems():
-            self.labels[label] = self.labels.get(label, 0) - minutes
+            m = self.labels.get(label, 0) - minutes
+            if m:
+                self.labels[label] = m
+            else:
+                del self.labels[label]
         return self
 
     def add(self, minutes, label=None):
@@ -235,14 +258,14 @@ class TotalMinutes(object):
         for label in labels:
             if label in self.labels:
                 slc.add(self.labels[label], label)
-        if self.minutes is not None:
-            slc.minutes = slc.sum_labels()
+        slc.minutes = slc.sum_labels()
         return slc
 
     def validate_sum(self):
-        lsum = self.sum_labels()
-        if self.minutes is not None and lsum != self.minutes:
-            raise ValueError('labels [%s] do not sum to total [%s]' % (Duration.format(lsum), Duration.format(self.minutes)))
+        if self.minutes is not None:
+            lsum = self.sum_labels()
+            if lsum != self.minutes:
+                raise ValueError('labels [%s] do not sum to total [%s]' % (Duration.format(lsum), Duration.format(self.minutes)))
 
 class Total(object):
 
@@ -268,8 +291,18 @@ class Day(object):
         self.blocks = []
         self.is_pubhol = False
         self.is_weekend = False
-        self.totals = TotalMinutes()
-        self.reports = defaultdict(TotalMinutes)
+        self.present = TotalMinutes()
+        self.excluded = TotalMinutes()
+        self.reported = defaultdict(TotalMinutes)
+
+    @property
+    def spent(self):
+        return self.present - self.excluded
+
+    def __lt__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return self.date < other.date
 
     @classmethod
     def parse(cls, cursor):
@@ -283,39 +316,56 @@ class Day(object):
         except ValueError:
             raise ParseError('malformed date: %s' % (' '.join(words[:4])), line=line)
         day.is_pubhol = 'public holiday' in ' '.join(words[4:]).lower()
-        day.is_weekend = 'weekend' in ' '.join(words[4:]).lower()
+        day.is_weekend = day.date.weekday() >= 5
         cursor.advance()
         for block in Block.parseiter(cursor):
             day.blocks.append(block)
-            day.totals += block.totals
+            day.present += block.totals
             for label in block.reports:
-                day.reports[label] += block.reports[label]
+                day.reported[label] += block.reports[label]
         return day
 
 class Result(object):
 
     def __init__(self):
-        self.totals = TotalMinutes()
-        self.reports = defaultdict(TotalMinutes)
+        self.days = []
+        self.present = TotalMinutes()
+        self.excluded = TotalMinutes()
+        self.reported = defaultdict(TotalMinutes)
         self.working_days = 0
         self.days_present = 0
 
+    @property
+    def spent(self):
+        return self.present - self.excluded
+
     def __iadd__(self, other):
-        self.totals += other.totals
-        for label in other.reports:
-            self.reports[label] += other.reports[label]
+        self.days += other.days
+        self.present += other.present
+        self.excluded += other.excluded
+        for label in other.reported:
+            self.reported[label] += other.reported[label]
         self.working_days += other.working_days
         self.days_present += other.days_present
         return self
 
     def add_day(self, day):
-        self.totals += day.totals
-        for label in day.reports:
-            self.reports[label] += day.reports[label]
+        self.days.append(day)
+        self.present += day.present
+        self.excluded += day.excluded
+        for label in day.reported:
+            self.reported[label] += day.reported[label]
         if not day.is_pubhol and not day.is_weekend:
             self.working_days += 1
-        if day.totals:
+        if day.present:
             self.days_present += 1
+
+    @property
+    def all_labels(self):
+        all_labels = set(self.present.labels)
+        for report in self.reported.values():
+            all_labels |= set(report.labels)
+        return all_labels
 
 class Block(object):
 
@@ -354,17 +404,17 @@ class Block(object):
             cursor.advance()
         if block.wildlabel:
             if block.totals.minutes is None:
-                raise ParseError('missing total hours, cannot compute [*]', line=firstline)
+                raise ParseError('missing total hours, cannot compute %s [*]' % block.wildlabel, line=firstline)
             lsum = block.totals.sum_labels()
             if lsum >= block.totals.minutes:
-                raise ParseError('no hours to allocate to [*]', line=firstline)
+                raise ParseError('no hours to allocate to %s [*]' % block.wildlabel, line=firstline)
             block.totals.add(block.totals.minutes - lsum, label=block.wildlabel)
+        if block.totals.minutes is None:
+            block.totals.minutes = block.totals.sum_labels()
         try:
             block.totals.validate_sum()
         except ValueError, e:
             raise ParseError(str(e), line=firstline)
-        if block.totals.minutes is None:
-            block.totals.minutes = block.totals.sum_labels()
         return block
 
 class BlockLine(object):
