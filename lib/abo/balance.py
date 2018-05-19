@@ -2,6 +2,8 @@
 #
 # Copyright 2013 Andrew Bettison
 
+import datetime
+
 """A Balance is an immutable object representing the state of a set of accounts
 at the end of a range of time.
 
@@ -174,23 +176,67 @@ def iter_lineage(account):
 
 class Range(object):
 
-    def __init__(self, first, last):
+    _undef = object()
+
+    def __init__(self, first=None, last=None):
+        if first is self._undef:
+            assert last is None
+        elif last is self._undef:
+            assert first is None
+        else:
+            assert first is None or last is None or first <= last
         self.first = first
         self.last = last
-        assert self.first is None or self.last is None or self.first <= self.last
+
+    @classmethod
+    def past(cls):
+        return cls(first=cls._undef)
+
+    @classmethod
+    def future(cls):
+        return cls(last=cls._undef)
 
     def __repr__(self):
         return 'Range(%r, %r)' % (self.first, self.last)
 
     def __contains__(self, item):
+        if self.first is self._undef or self.last is self._undef:
+            return False
         if self.first is not None and item < self.first:
             return False
         if self.last is not None and item > self.last:
             return False
         return True
 
-    _undef = object()
+    def preceding(self):
+        if self.first is self._undef:
+            return self
+        if self.last is self._undef:
+            return type(self)()
+        if self.first is None:
+            return self.past()
+        return type(self)(last=predecessor(self.first))
 
-    def replace(self, first=_undef, last=_undef):
-        return type(self)(first= self.first if first is self._undef else first,
-                          last= self.last if last is self._undef else last)
+    def following(self):
+        if self.last is self._undef:
+            return self
+        if self.first is self._undef:
+            return type(self)()
+        if self.last is None:
+            return self.future()
+        return type(self)(first=successor(self.last))
+
+def successor(value):
+    if isinstance(value, datetime.date):
+        return value + datetime.timedelta(days=1)
+    if isinstance(value, (datetime.time, datetime.datetime)):
+        return value + datetime.timedelta(seconds=1)
+    return value + 1
+
+def predecessor(value):
+    if isinstance(value, datetime.date):
+        return value - datetime.timedelta(days=1)
+    if isinstance(value, (datetime.time, datetime.datetime)):
+        return value - datetime.timedelta(seconds=1)
+    return value - 1
+

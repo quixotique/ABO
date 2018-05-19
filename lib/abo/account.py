@@ -791,7 +791,7 @@ class ChartCache(abo.cache.FileCache):
     def chart(self, **kwargs):
         accounts = self.get(**kwargs)
 
-def remove_account(chart, pred, transactions):
+def remove_account(chart, pred, transactions, cancel_only=False):
     from itertools import chain
     from collections import defaultdict
     logging.debug("remove")
@@ -842,6 +842,10 @@ def remove_account(chart, pred, transactions):
             remove_amount = remove_by_sign[-1].amount
             remove = remove_by_sign[-1].entries
         else:
+            done.append(t)
+            logging.debug("   done %r" % (done[-1],))
+            continue
+        if cancel_only:
             done.append(t)
             logging.debug("   done %r" % (done[-1],))
             continue

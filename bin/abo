@@ -5,6 +5,7 @@
 r'''Usage:
     abo bsheet [-efWpqDs] [--fullnames] [--labels] [--bare] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]
     abo profloss [-efWpqDs] [--fullnames] [--labels] [--bare] [--tax] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
+    abo cashflow [-efWpqDs] [--fullnames] [--labels] [--bare] [--depth=N] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<period>...]
     abo acc [-bcefwWpqD] [--bare] [--omit-empty] [--short] [--reduce] [--remove=ACC...] [--width=COLUMNS] [--title=TEXT] <PRED> [<period>...]
     abo due [-fWpqD] [--over] [--labels] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [--detail] [<when>...]
     abo table [-fWpqD] [--over] [--labels] [--select=PRED] [--remove=PRED...] [--width=COLUMNS] [<when>...]

@@ -242,16 +242,16 @@ def filter_display_accounts(accounts, opts):
 
 class Formatter(object):
 
-    def __init__(self, config, section, opts, accounts, ncolumns):
+    def __init__(self, config, section, opts, accounts, ncolumns, minaw=10, elide_zero=False):
         self.config = config
         self.opts = opts # TODO get rid of this, only needed to pass to filter_display_accounts()
+        self.elide_zero = elide_zero
         self.opt_bare = bool(opts['--bare'])
         self.opt_fullnames = bool(opts['--fullnames'])
         self.opt_subtotals = bool(opts['--subtotals'])
         self.num_columns = ncolumns
         self.labelwid = max(chain([8], (len(a.label or '') for a in accounts)))
         self.balwid = self.config.balance_column_width()
-        minaw = 10
         if self.config.width:
             maxaw = None
         elif self.opt_fullnames:
@@ -337,7 +337,8 @@ class Formatter(object):
             columns = []
             for acol in amount_columns:
                 if (account is None or self.opt_subtotals or not is_subaccount) and account in acol:
-                    columns.append(self.config.format_money(acol[account]))
+                    amount = acol[account]
+                    columns.append(self.config.format_money(amount) if amount or not self.elide_zero else '')
                 else:
                     columns.append('')
             yield self.fmt(text + ' ', ((' ' + c if c else '') for c in columns),
@@ -409,6 +410,47 @@ def cmd_profloss(config, opts):
             yield f.rule()
     if not f.opt_bare:
         yield f.fmt('NET PROFIT/-LOSS', (config.format_money(b.balance(None)) for b in balances))
+
+def cmd_cashflow(config, opts):
+    if opts['--bare']:
+        sections = (
+            Section(1, None, '', (lambda a, m: True)),
+        )
+    else:
+        sections = (
+            Section(1, None, 'Received', (lambda a, m: m > 0)),
+            Section(1, None, 'Spent', (lambda a, m: m < 0)),
+        )
+    ranges = parse_ranges(opts)
+    chart = get_chart(config, opts)
+    selected_accounts = select_accounts(chart, opts)
+    transactions = get_transactions(chart, config, opts)
+    cashpred = lambda a: 'cash' in a.tags and a in selected_accounts
+    noncashpred = lambda a: 'cash' not in a.tags and a in selected_accounts
+    transactions = abo.account.remove_account(chart, noncashpred, transactions, cancel_only=True)
+    cash_balances = [struct(open=abo.balance.Balance(transactions, date_range=r.preceding(), chart=chart, acc_pred=cashpred, use_edate=opts['--effective']),
+                            close=abo.balance.Balance(transactions, date_range=r.following().preceding(), chart=chart, acc_pred=cashpred, use_edate=opts['--effective']))
+                     for r in ranges]
+    non_cash_balances = [abo.balance.Balance(transactions, date_range=r, chart=chart, acc_pred=noncashpred, use_edate=opts['--effective']) for r in ranges]
+    make_sections(sections, non_cash_balances)
+    all_accounts = set(chain(*(s.accounts for s in sections)))
+    f = Formatter(config, 'cashflow', opts, all_accounts, len(non_cash_balances), minaw=19, elide_zero=True)
+    if not f.opt_bare:
+        if config.heading:
+            yield f.centre(config.heading)
+        yield f.centre('CASH FLOW STATEMENT')
+        yield f.fmt('', (b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '' for b in non_cash_balances))
+        yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in non_cash_balances))
+        yield f.rule()
+    for section in sections:
+        columns = [dict((a, section.sign * b.balance(a)) for a in chain(section.accounts, [None])) for b in section.balances]
+        yield from f.tree(section.title, section.accounts, columns, depth=section.depth)
+        if not f.opt_bare:
+            yield f.rule()
+    if not f.opt_bare:
+        yield f.fmt('OPENING CASH', (config.format_money(-b.open.balance(None)) for b in cash_balances))
+        yield f.fmt('NET RECEIVED/-SPENT', (config.format_money(b.balance(None)) for b in non_cash_balances))
+        yield f.fmt('CLOSING CASH', (config.format_money(-b.close.balance(None)) for b in cash_balances))
 
 def cmd_bsheet(config, opts):
     plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss
