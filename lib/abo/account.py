@@ -800,14 +800,14 @@ def remove_account(chart, pred, transactions):
     done = []
     while todo:
         t = todo.pop(0)
-        remove = defaultdict(lambda: struct(amount=0, entries=[]))
+        remove_by_sign = defaultdict(lambda: struct(amount=0, entries=[]))
         keep = []
         keep_total = 0
         for e in t.entries:
             if pred(chart[e.account]):
                 s = sign(e.amount)
-                remove[s].amount += e.amount
-                remove[s].entries.append(e)
+                remove_by_sign[s].amount += e.amount
+                remove_by_sign[s].entries.append(e)
             else:
                 keep.append(e)
                 keep_total += e.amount
@@ -817,8 +817,8 @@ def remove_account(chart, pred, transactions):
             continue
         # Cancel removed entries against each other, leaving removable entries
         # with only one sign.
-        if remove[1].entries and remove[-1].entries:
-            remove_amount = remove[-1].amount + remove[1].amount
+        if remove_by_sign[1].entries and remove_by_sign[-1].entries:
+            remove_amount = remove_by_sign[-1].amount + remove_by_sign[1].amount
             assert remove_amount == -keep_total
             if remove_amount == 0:
                 assert keep
@@ -828,100 +828,96 @@ def remove_account(chart, pred, transactions):
                 continue
             else:
                 s = sign(remove_amount)
-                e1, e2 = abo.transaction._divide_entries(remove[s].entries, -remove[-s].amount)
+                e1, e2 = abo.transaction._divide_entries(remove_by_sign[s].entries, -remove_by_sign[-s].amount)
                 assert e1
                 assert e2
-                assert sum(e.amount for e in e1) == -remove[-s].amount
+                assert sum(e.amount for e in e1) == -remove_by_sign[-s].amount
                 assert sum(e.amount for e in e2) == remove_amount
                 remove = e2
                 t = t.replace(entries= chain(e2 + keep))
-        elif remove[1].entries:
-            remove_amount = remove[1].amount
-            remove = remove[1].entries
-        elif remove[-1].entries:
-            remove_amount = remove[-1].amount
-            remove = remove[-1].entries
+        elif remove_by_sign[1].entries:
+            remove_amount = remove_by_sign[1].amount
+            remove = remove_by_sign[1].entries
+        elif remove_by_sign[-1].entries:
+            remove_amount = remove_by_sign[-1].amount
+            remove = remove_by_sign[-1].entries
         else:
             done.append(t)
             logging.debug("   done %r" % (done[-1],))
             continue
         logging.debug("remove %u entries from t = %s %s" % (len(remove), t.amount(), t.date))
-        while remove:
-            account = remove[0].account
-            entries = [e for e in remove if e.account == account]
-            assert entries
-            remove = [e for e in remove if e.account != account]
-            assert t is not None
-            assert frozenset(entries) == frozenset(e for e in t.entries if e.account == account), \
-                    "entries=\n   %s,\nshould be \n   %s" % ('\n   '.join(map(repr, entries)), '\n   '.join([repr(e) for e in t.entries if e.account == account]))
-            amount = sum(e.amount for e in entries)
-            assert sign(amount) == sign(remove_amount)
-            assert abs(amount) <= abs(remove_amount)
-            # If this account is not the only one to be removed from this
-            # transaction, then split this transaction into one containing only
-            # this account and a remainder containg all the other removable
-            # accounts.
-            if remove:
-                k1, k2 = abo.transaction._divide_entries(keep, -amount)
+        # Only remove one account at a time.
+        account = remove[0].account
+        entries = [e for e in remove if e.account == account]
+        assert entries
+        remove = [e for e in remove if e.account != account]
+        assert frozenset(entries) == frozenset(e for e in t.entries if e.account == account), \
+                "entries=\n   %s,\nshould be \n   %s" % ('\n   '.join(map(repr, entries)), '\n   '.join([repr(e) for e in t.entries if e.account == account]))
+        amount = sum(e.amount for e in entries)
+        assert sign(amount) == sign(remove_amount)
+        assert abs(amount) <= abs(remove_amount)
+        # If this account is not the only one to be removed from this
+        # transaction, then split this transaction into one containing only
+        # this account and a remainder containing all the other removable
+        # accounts.
+        if remove:
+            k1, k2 = abo.transaction._divide_entries(keep, -amount)
+            assert sum(e.amount for e in k1) == -amount
+            assert k2
+            todo.insert(0, t.replace(entries= chain(remove + k2)))
+            t = t.replace(entries= chain(entries + k1))
+        queue = queues[account]
+        if not queue or sign(queue[0].amount) == sign(amount):
+            logging.debug("   enqueue %s" % (account,))
+            queue.append(struct(amount=amount, transaction=t)) # TODO sort by due date
+        else:
+            while queue and abs(queue[0].amount) <= abs(amount):
+                logging.debug("   amount=%s queue[0].amount=%s" % (amount, queue[0].amount))
+                assert sign(queue[0].amount) != sign(amount)
+                if abs(queue[0].amount) == abs(amount):
+                    k1, keep = keep, None
+                else:
+                    k1, k2 = abo.transaction._divide_entries(keep, queue[0].amount)
+                    assert k1
+                    assert k2
+                    assert len(k1) <= len(keep)
+                    keep = k2
+                    keep_total = sum(e.amount for e in keep)
+                assert sum(e.amount for e in k1) == queue[0].amount
+                done.append(t.replace(entries= [e for e in chain(k1, queue[0].transaction.entries) if e.account != account]))
+                logging.debug("   done %r" % (done[-1],))
+                amount += queue[0].amount
+                e1, e2 = abo.transaction._divide_entries(entries, -queue[0].amount)
+                assert sum(e.amount for e in e1) == -queue[0].amount
+                assert sum(e.amount for e in e2) == amount
+                entries = e2
+                queue.pop(0)
+            if amount and queue:
+                assert entries
+                assert keep
+                logging.debug("   amount=%s queue[0].amount=%s" % (amount, queue[0].amount))
+                assert abs(amount) < abs(queue[0].amount)
+                assert sign(amount) != sign(queue[0].amount)
+                assert abs(amount) <= abs(keep_total)
+                if keep_total == -amount:
+                    k1, keep = keep, None
+                else:
+                    k1, k2 = abo.transaction._divide_entries(keep, -amount)
+                    assert k1
+                    assert k2
+                    assert len(k1) <= len(keep)
+                    keep = k2
                 assert sum(e.amount for e in k1) == -amount
-                assert k2
-                tr = t.replace(entries= chain(entries + k1))
-                t = t.replace(entries= chain(remove + k2))
-            else:
-                tr, t = t, None
-            assert tr is not None
-            queue = queues[account]
-            if not queue or sign(queue[0].amount) == sign(amount):
-                logging.debug("   enqueue %s" % (account,))
-                queue.append(struct(amount=amount, transaction=tr)) # TODO sort by due date
-            else:
-                while queue and abs(queue[0].amount) <= abs(amount):
-                    logging.debug("   amount=%s queue[0].amount=%s" % (amount, queue[0].amount))
-                    assert sign(queue[0].amount) != sign(amount)
-                    if abs(queue[0].amount) == abs(amount):
-                        k1, keep = keep, None
-                    else:
-                        k1, k2 = abo.transaction._divide_entries(keep, queue[0].amount)
-                        assert k1
-                        assert k2
-                        assert len(k1) <= len(keep)
-                        keep = k2
-                        keep_total = sum(e.amount for e in keep)
-                    assert sum(e.amount for e in k1) == queue[0].amount
-                    done.append(tr.replace(entries= [e for e in chain(k1, queue[0].transaction.entries) if e.account != account]))
-                    logging.debug("   done %r" % (done[-1],))
-                    amount += queue[0].amount
-                    e1, e2 = abo.transaction._divide_entries(entries, -queue[0].amount)
-                    assert sum(e.amount for e in e1) == -queue[0].amount
-                    assert sum(e.amount for e in e2) == amount
-                    entries = e2
-                    queue.pop(0)
-                if amount and queue:
-                    assert entries
-                    assert keep
-                    logging.debug("   amount=%s queue[0].amount=%s" % (amount, queue[0].amount))
-                    assert abs(amount) < abs(queue[0].amount)
-                    assert sign(amount) != sign(queue[0].amount)
-                    assert abs(amount) <= abs(keep_total)
-                    if keep_total == -amount:
-                        k1, keep = keep, None
-                    else:
-                        k1, k2 = abo.transaction._divide_entries(keep, -amount)
-                        assert k1
-                        assert k2
-                        assert len(k1) <= len(keep)
-                        keep = k2
-                    assert sum(e.amount for e in k1) == -amount
-                    qa = [e for e in queue[0].transaction.entries if e.account == account]
-                    qo = [e for e in queue[0].transaction.entries if e.account != account]
-                    assert sum(e.amount for e in qa) == queue[0].amount
-                    assert sum(e.amount for e in qo) == -queue[0].amount
-                    qa1, qa2 = abo.transaction._divide_entries(qa, -amount)
-                    qo1, qo2 = abo.transaction._divide_entries(qo, amount)
-                    assert sum(e.amount for e in qa1) == -amount
-                    assert sum(e.amount for e in qo1) == amount
-                    done.append(tr.replace(entries= list(chain(k1, qo1))))
-                    logging.debug("   done %r" % (done[-1],))
-                    queue[0].amount += amount
-                    queue[0].transaction = tr.replace(entries= list(chain(qa2, qo2)))
+                qa = [e for e in queue[0].transaction.entries if e.account == account]
+                qo = [e for e in queue[0].transaction.entries if e.account != account]
+                assert sum(e.amount for e in qa) == queue[0].amount
+                assert sum(e.amount for e in qo) == -queue[0].amount
+                qa1, qa2 = abo.transaction._divide_entries(qa, -amount)
+                qo1, qo2 = abo.transaction._divide_entries(qo, amount)
+                assert sum(e.amount for e in qa1) == -amount
+                assert sum(e.amount for e in qo1) == amount
+                done.append(t.replace(entries= list(chain(k1, qo1))))
+                logging.debug("   done %r" % (done[-1],))
+                queue[0].amount += amount
+                queue[0].transaction = t.replace(entries= list(chain(qa2, qo2)))
     return done
