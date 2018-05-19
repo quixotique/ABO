@@ -399,7 +399,7 @@ def cmd_profloss(config, opts):
     if not f.opt_bare:
         if config.heading:
             yield f.centre(config.heading)
-        yield f.centre('PROFIT LOSS STATEMENT')
+        yield f.centre(('PROJECTED ' if opts['--projection'] else '') + 'PROFIT LOSS STATEMENT')
         yield f.fmt('', (b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '' for b in balances))
         yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
         yield f.rule()
@@ -438,7 +438,7 @@ def cmd_cashflow(config, opts):
     if not f.opt_bare:
         if config.heading:
             yield f.centre(config.heading)
-        yield f.centre('CASH FLOW STATEMENT')
+        yield f.centre(('PROJECTED ' if opts['--projection'] else '') + 'CASH FLOW STATEMENT')
         yield f.fmt('', (b.date_range.first.strftime(r'%_d-%b-%Y') if b.date_range.first else '' for b in non_cash_balances))
         yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in non_cash_balances))
         yield f.rule()
@@ -487,7 +487,7 @@ def cmd_bsheet(config, opts):
     if not f.opt_bare:
         if config.heading:
             yield f.centre(config.heading)
-        yield f.centre('BALANCE SHEET')
+        yield f.centre(('PROJECTED ' if opts['--projection'] else '') + 'BALANCE SHEET')
         yield f.fmt('Account', (b.date_range.last.strftime(r'%_d-%b-%Y') if b.date_range.last else '' for b in balances))
         yield f.rule()
     for section in sections:
@@ -557,13 +557,13 @@ def compute_due_accounts(chart, transactions, selected_accounts=None):
                 accounts[account].append(e)
     return dict((account, entries) for account, entries in accounts.items() if account in due_accounts)
 
-def compute_dues(due_accounts, when):
+def compute_dues(due_accounts, when=None):
     due_all = []
     for account, entries in due_accounts.items():
         entries.sort(key=lambda e: e.cdate or e.transaction.date)
         due = defaultdict(lambda: struct(account=account, entries=[]))
         for e in entries:
-            date = e.cdate or when #e.transaction.date
+            date = e.cdate or when or e.transaction.date
             amount = e.amount
             while amount and due:
                 earliest = sorted(due)[0]
@@ -742,7 +742,9 @@ def get_transactions(chart, config, opts):
     transactions = []
     for cache in abo.cache.transaction_caches(chart, config, opts):
         transactions += cache.transactions()
-    if not opts['--projection']:
+    if opts['--projection']:
+        transactions += pay_when_due(chart, transactions)
+    else:
         transactions = [t for t in transactions if not t.is_projection]
     if opts['--reduce']:
         transactions = [t.reduce() for t in transactions]
@@ -756,6 +758,18 @@ def get_transactions(chart, config, opts):
                 raise InvalidOption('--remove', e)
             transactions = abo.account.remove_account(chart, pred, transactions)
     return transactions
+
+def pay_when_due(chart, transactions):
+    projected = []
+    if 'proj' in chart:
+        proj = chart['proj']
+        for date, due in compute_dues(compute_due_accounts(chart, transactions)):
+            for e in due.entries:
+                projected.append(abo.transaction.Transaction(date= date,
+                                                             is_projection= True,
+                                                             entries= ({'account': e.account, 'amount': -e.amount},
+                                                                       {'account': proj, 'amount': e.amount})))
+    return projected
 
 def select_accounts(chart, opts):
     try:
