@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+# vim: sw=4 sts=4 et fileencoding=utf8 nomod
+# Copyright 2013-2014 Andrew Bettison
+
+import sys
+import re
+
+_rexp_aud = r'(-?\d*\.\d\d|\d+)'
+_re_aud = re.compile(_rexp_aud)
+
+class Line(object):
+
+    def __init__(self, pre, amount, post='', tag=''):
+        self.tag = tag
+        self.pre = pre
+        self.amount = amount
+        self.post = post
+
+    def __str__(self):
+        return '{0.tag}{0.pre}{0.amount}{0.post}'.format(self)
+
+
+_re_new = re.compile(r'^(\s+\S+\s{2,})' + _rexp_aud + r'(.*)$')
+
+def parse_new(text):
+    m = _re_new.match(text)
+    return Line(pre=m.group(1), amount=float(m.group(2)), post=m.group(3)) if m else None
+
+_re_old_item = re.compile(r'^(\S+)(\s+\S+\s+)' + _rexp_aud + r'(.*)$')
+_re_old_amt = re.compile(r'^(amt)(\s+)' + _rexp_aud + r'(.*)$')
+
+def parse_old(text):
+    m = _re_old_amt.match(text) or _re_old_item.match(text)
+    return Line(tag=m.group(1), pre=m.group(2), amount=float(m.group(3)), post=m.group(4)) if m else None
+
+def parse_amt(text):
+    p = parse_new(text)
+    if p and p.amount > 0:
+        return p.amount
+    p = parse_old(text)
+    if p and p.tag == 'amt' and p.amount > 0:
+        return p.amount
+    return None
+
+def parse_item(text):
+    p = parse_new(text)
+    if p and p.amount < 0:
+        p.amount = -p.amount
+        p.pre += '-'
+        return p
+    p = parse_old(text)
+    if p and p.tag in ('item', 'db', 'cr') and p.amount > 0:
+        return p
+    return None
+
+def main():
+    amt = None
+    lines = list(sys.stdin)
+    for line in lines:
+        p = parse_amt(line)
+        if p:
+            if amt:
+                fail("duplicate 'amt' lines")
+            amt = p
+    if amt:
+        total = 0.0
+        newlines = []
+        for line in lines:
+            p = parse_item(line)
+            if p:
+                total += p.amount
+                newlines.append(p)
+            else:
+                newlines.append(line)
+        if total:
+            lines = []
+            remain_items = total
+            remain_amt = amt
+            n = len([p for p in newlines if isinstance(p, Line)])
+            for p in newlines:
+                if isinstance(p, Line):
+                    assert n >= 1
+                    if n > 1:
+                        ratio = remain_amt / remain_items
+                        remain_items -= p.amount
+                        p.amount = '%.2f' % (p.amount * ratio)
+                        remain_amt -= float(p.amount)
+                    else:
+                        p.amount = '%.2f' % remain_amt
+                    n -= 1
+            assert n == 0
+            for p in newlines:
+                if isinstance(p, Line):
+                    lines.append(str(p) + '\n')
+                else:
+                    lines.append(p)
+    print(''.join(lines), end='')
+
+def fail(message):
+    print('%s: %s' % (sys.argv[0], message), file=sys.stderr)
+    sys.exit(1)
+
+if __name__ == '__main__':
+    main()
