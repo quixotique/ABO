@@ -588,7 +588,7 @@ def compute_dues(due_accounts, when=None):
 def cmd_due(config, opts):
     chart = get_chart(config, opts)
     selected_accounts = select_accounts(chart, opts)
-    when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
+    when = parse_when(opts)
     transactions = (t for t in get_transactions(chart, config, opts))
     due_accounts = compute_due_accounts(chart, transactions, selected_accounts)
     bw = config.money_column_width()
@@ -620,7 +620,7 @@ def cmd_due(config, opts):
 def cmd_table(config, opts):
     chart = get_chart(config, opts)
     selected_accounts = select_accounts(chart, opts)
-    when = abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
+    when = parse_when(opts)
     transactions = (t for t in get_transactions(chart, config, opts))
     due_accounts = compute_due_accounts(chart, transactions, selected_accounts)
     # Accumulate due amounts into the table
@@ -800,13 +800,25 @@ def leafset(accounts):
     leaves = set(accounts)
     return leaves.difference(parentset(leaves))
 
+def parse_when(opts):
+    try:
+        return abo.period.parse_when(opts['<when>']) if opts['<when>'] else datetime.date.today()
+    except ValueError as e:
+        raise InvalidArg('<when>', e)
+
 def parse_whens(opts):
-    whens = abo.period.parse_whens(opts['<when>']) if opts['<when>'] else [datetime.date.today()]
+    try:
+        whens = abo.period.parse_whens(opts['<when>']) if opts['<when>'] else [datetime.date.today()]
+    except ValueError as e:
+        raise InvalidArg('<when>', e)
     return [abo.balance.Range(None, when) for when in whens]
 
 def parse_ranges(opts):
     if opts['<period>']:
-        periods = abo.period.parse_periods(opts['<period>'])
+        try:
+            periods = abo.period.parse_periods(opts['<period>'])
+        except ValueError as e:
+            raise InvalidArg('<period>', e)
     else:
         periods = [(None, None)]
     return [abo.balance.Range(p[0], p[1] if p[1] is not None else datetime.date.today()) for p in periods]
@@ -814,7 +826,7 @@ def parse_ranges(opts):
 def parse_range(words):
     periods = abo.period.parse_periods(words)
     if len(periods) > 1:
-        raise ValueError('too many periods')
+        raise InvalidArg('too many periods')
     period = periods[0]
     return abo.balance.Range(period[0], period[1])
 
