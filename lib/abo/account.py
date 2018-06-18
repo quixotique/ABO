@@ -205,20 +205,29 @@ class Account(object):
     def is_substantial(self):
         return self._childcount == 0
 
+    def is_equity(self):
+        return self.atype is AccountType.Equity
+
+    def is_profitloss(self):
+        return self.atype is AccountType.ProfitLoss
+
+    def is_assetliability(self):
+        return self.atype is AccountType.AssetLiability
+
     def is_receivable(self):
-        return self.atype is AccountType.AssetLiability and 'rec' in self.tags
+        return self.is_assetliability() and 'rec' in self.tags
 
     def is_payable(self):
-        return self.atype is AccountType.AssetLiability and 'pay' in self.tags
+        return self.is_assetliability() and 'pay' in self.tags
 
     def is_accrual(self):
         return self.is_receivable() or self.is_payable()
 
     def is_cash(self):
-        return self.atype is AccountType.AssetLiability and 'cash' in self.tags
+        return self.is_assetliability() and 'cash' in self.tags
 
     def is_loan(self):
-        return self.atype is AccountType.AssetLiability and 'loans' in self.tags
+        return self.is_assetliability() and 'loans' in self.tags
 
     def full_name_tuple(self):
         return (self.parent.full_name_tuple() if self.parent else ()) + (self.bare_name(),)

@@ -182,7 +182,7 @@ def cmd_acc(config, opts):
                 config= config)
         # Prefix the description with the bare name of the payable/receivable
         # account.
-        alacc = single_accrual_account(chart, entry.transaction)
+        alacc = invoice_bill_account(chart, entry.transaction)
         if alacc is not None and not alacc.is_cash() and alacc is not common_root_account:
             desc = '; '.join(filter(len, [alacc.bare_name(), desc]))
         # Prefix the description with the sub-account name.
@@ -223,13 +223,27 @@ def cmd_acc(config, opts):
             '')
     yield fmt % ('', 'Balance', '', '', config.format_money(tally.balance))
 
-def single_accrual_account(chart, transaction):
-    accrual_accounts = []
+def invoice_bill_account(chart, transaction):
+    # Treat this transaction as an invoice, bill, remittance or payment if
+    # it mentions exactly one single accrual account...
+    accrual_account = None
+    accrual_sign = None
     for e in transaction.entries:
         acc = chart[e.account]
         if acc.is_accrual():
-            accrual_accounts.append(acc)
-    return accrual_accounts[0] if len(accrual_accounts) == 1 else None
+            if accrual_account is not None:
+                return None
+            accrual_account = acc
+            accrual_sign = sign(e.amount)
+    if accrual_account is None:
+        return None
+    # ... and there are no other same-sign credits/debits to any other
+    # asset/liability account.
+    for e in transaction.entries:
+        acc = chart[e.account]
+        if acc is not accrual_account and acc.is_assetliability() and sign(e.amount) == accrual_sign:
+            return None
+    return accrual_account
 
 # TODO refactor filter_display_accounts() as method of Formatter
 def filter_display_accounts(accounts, opts):
