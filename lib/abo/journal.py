@@ -346,6 +346,15 @@ class Journal(object):
             if total == 0:
                 raise ParseException(noamt['line'], 'other entries sum to zero')
             noamt['amount'] = -total
+        else:
+            total_db = sum(-entry['amount'] for entry in entries if entry['amount'] < 0)
+            total_cr = sum(entry['amount'] for entry in entries if entry['amount'] > 0)
+            if total_db != total_cr:
+                raise ParseException(ledger_what, 'debits (%s) sum %s credits (%s) by %s' % (
+                                                      total_db,
+                                                      'above' if total_db > total_cr else 'below',
+                                                      total_cr,
+                                                      abs(total_db - total_cr)))
         kwargs = {}
         kwargs['date'], kwargs['edate'] = ledger_date
         kwargs['who'] = who
