@@ -132,7 +132,7 @@ def cmd_acc(config, opts):
     if bf:
         def bflines():
             for account in accounts:
-                if account.is_substantial() and account.atype is not abo.account.AccountType.ProfitLoss or opts['--bring-forward']:
+                if account.is_substantial() and not account.is_profitloss() or opts['--bring-forward']:
                     if opts['--control']:
                         amount = bf.cbalance(account)
                         if amount != 0:
@@ -405,7 +405,7 @@ def cmd_profloss(config, opts):
     chart = get_chart(config, opts)
     selected_accounts = select_accounts(chart, opts)
     transactions = get_transactions(chart, config, opts)
-    plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss and a in selected_accounts
+    plpred = lambda a: a.is_profitloss() and a in selected_accounts
     balances = [abo.balance.Balance(transactions, date_range=r, chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for r in ranges]
     make_sections(sections, balances)
     all_accounts = set(chain(*(s.accounts for s in sections)))
@@ -467,10 +467,10 @@ def cmd_cashflow(config, opts):
         yield f.fmt('CLOSING CASH', (config.format_money(-b.close.balance(None)) for b in cash_balances))
 
 def cmd_bsheet(config, opts):
-    plpred = lambda a: a.atype == abo.account.AccountType.ProfitLoss
-    alpred = lambda a: a.atype == abo.account.AccountType.AssetLiability
+    plpred = abo.account.Account.is_profitloss
+    alpred = abo.account.Account.is_assetliability
     netpred = lambda a: plpred(a) or alpred(a)
-    eqpred = lambda a: a.atype == abo.account.AccountType.Equity
+    eqpred = abo.account.Account.is_equity
     sections = (
         Section(-1, None, 'Assets', lambda a, m: alpred(a) and m < 0),
         Section(1, None, 'Liabilities', lambda a, m: alpred(a) and m > 0),
@@ -489,7 +489,7 @@ def cmd_bsheet(config, opts):
             parent = a.loan_parent()
         if parent is not None and parent is not a:
             amap[a] = parent
-    pred = lambda a: a.atype != abo.account.AccountType.ProfitLoss and a in selected_accounts
+    pred = lambda a: not a.is_profitloss() and a in selected_accounts
     balances = [abo.balance.Balance(all_transactions, date_range=r, chart=chart,
                                     acc_pred=pred,
                                     acc_map=lambda a: retained if plpred(a) else amap.get(a, a),
@@ -566,7 +566,7 @@ def compute_due_accounts(chart, transactions, selected_accounts=None):
                 if account.is_accrual():
                     account = account.accrual_parent()
                     due_accounts.add(account)
-                elif account.atype is abo.account.AccountType.AssetLiability and e.cdate:
+                elif account.is_assetliability() and e.cdate:
                     due_accounts.add(account)
                 accounts[account].append(e)
     return dict((account, entries) for account, entries in accounts.items() if account in due_accounts)
