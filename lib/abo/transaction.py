@@ -251,13 +251,27 @@ class Entry(abo.base.Base):
         e2 = t2.entries[t2.entries.index(entry2)] if t2 is not None else None
         return e1, e2
 
+    # Interface used by predicate functions:
+
+    def is_called(self, chart, name):
+        return chart[self.account].is_called(chart, name)
+
+    def is_tagged(self, chart, tag):
+        return tag in self.transaction.tags or chart[self.account].is_tagged(chart, tag)
+
+    def is_matching(self, chart, pattern):
+        return chart[self.account].is_matching(chart, pattern)
+
+    def is_within(self, chart, other):
+        return chart[self.account].is_within(chart, other)
+
 class Transaction(abo.base.Base):
     """A Transaction is an immutable object that has a date, an optional
     control date, "who" and "what" strings that together describe the
     transaction for humans, and a list of two or more Entries.
     """
 
-    def __init__(self, date=None, edate=None, who=None, what=None, is_projection=False, entries=(), config=None):
+    def __init__(self, date=None, edate=None, who=None, what=None, tags=(), is_projection=False, entries=(), config=None):
         """Construct a new Transaction object, given its date, optional control
         date, description, and list of Entry objects.
         """
@@ -267,6 +281,7 @@ class Transaction(abo.base.Base):
         self.edate = edate if edate is not None else date
         self.who = who
         self.what = self._expand(what, config=config) if what else what
+        self.tags = frozenset(tags)
         self.is_projection = is_projection
         # Construct member Entry objects and ensure that they sum to zero.
         ents = []
@@ -290,6 +305,8 @@ class Transaction(abo.base.Base):
             r.append(('who', self.who))
         if self.what:
             r.append(('what', self.what))
+        if self.tags:
+            r.append(('tags', tuple(sorted(self.tags))))
         r.append(('entries', self.entries))
         return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % i for i in r))
 

@@ -56,7 +56,7 @@
 ... acc account2
 ... amt 81.11
 ...
-... 7/5/2013=1/1/2013 Somebody; Modern text
+... 7/5/2013=1/1/2013 Somebody; =second Modern text =first
 ...  account one  45.06 ; comment
 ...  account two  -60.00 ; another comment {31/5/2013}
 ...  account three ; {+15}
@@ -90,6 +90,7 @@
     edate=datetime.date(2013, 1, 1),
     who='Somebody',
     what='Modern text',
+    tags=('first', 'second'),
     entries=(Entry(account='account two', amount=Money.AUD(-60.00), cdate=datetime.date(2013, 5, 31), detail='another comment'),
              Entry(account='account three', amount=Money.AUD(14.94), cdate=datetime.date(2013, 5, 22)),
              Entry(account='account one', amount=Money.AUD(45.06), detail='comment')))]
@@ -122,7 +123,6 @@ import datetime
 import copy
 from abo.transaction import Transaction
 import abo.account
-import abo.text
 import abo.text
 from abo.types import struct
 
@@ -183,6 +183,7 @@ class Journal(object):
             'due': None,
             'who': None,
             'what': None,
+            'tag': [],
             'db': [],
             'cr': [],
             'acc': None,
@@ -199,7 +200,7 @@ class Journal(object):
             ledger_date = None
             ledger_what = None
             ledger_lines = []
-            tags = copy.deepcopy(template)
+            keys = copy.deepcopy(template)
             percent_block = None
             for line in block:
                 words = line.split(None, 1)
@@ -211,17 +212,17 @@ class Journal(object):
                     percent_block = True
                 if words[0] == '%default':
                     try:
-                        self._parse_line_tagtext(line, words[1])
+                        self._parse_line_keytext(line, words[1])
                     except ParseException:
                         raise ParseException(line, 'in %default: ' + e)
-                    if line.tag not in defaults:
-                        raise ParseException(line, 'invalid %%default tag %r' % line.tag)
+                    if line.key not in defaults:
+                        raise ParseException(line, 'invalid %%default key %r' % line.key)
                     if not line.text:
-                        defaults[line.tag] = None
-                    elif type(template[line.tag]) is list:
-                        defaults[line.tag] = [line]
+                        defaults[line.key] = None
+                    elif type(template[line.key]) is list:
+                        defaults[line.key] = [line]
                     else:
-                        defaults[line.tag] = line
+                        defaults[line.key] = line
                 elif words[0] == '%period':
                     self._period = None
                     if len(words) > 1:
@@ -258,28 +259,28 @@ class Journal(object):
                     else:
                         raise ParseException(line, 'should be indented')
                 else:
-                    self._parse_line_tagtext(line, line)
-                    if line.tag in tags:
+                    self._parse_line_keytext(line, line)
+                    if line.key in keys:
                         if not firstline:
                             firstline = line
-                        if type(tags[line.tag]) is list:
-                            tags[line.tag].append(line)
-                        elif tags[line.tag] is None:
-                            tags[line.tag] = line
+                        if type(keys[line.key]) is list:
+                            keys[line.key].append(line)
+                        elif keys[line.key] is None:
+                            keys[line.key] = line
                         else:
-                            raise ParseException(line, 'duplicate tag %r' % line.tag)
+                            raise ParseException(line, 'duplicate key %r' % line.key)
                         continue
                     elif not firstline:
                         try:
-                            ledger_date = self._parse_date_edate(line.tag)
+                            ledger_date = self._parse_date_edate(line.key)
                             ledger_what = line.text
                         except ValueError:
-                            raise ParseException(line, 'invalid date %r' % line.tag)
+                            raise ParseException(line, 'invalid date %r' % line.key)
                     else:
-                        raise ParseException(line, 'invalid tag %r' % line.tag)
+                        raise ParseException(line, 'invalid key %r' % line.key)
             kwargs = None
             if firstline:
-                kwargs = self._parse_legacy_block(firstline, tags, defaults)
+                kwargs = self._parse_legacy_block(firstline, keys, defaults)
             elif ledger_date:
                 kwargs = self._parse_ledger_block(ledger_date, ledger_what, ledger_lines)
             if kwargs:
@@ -298,11 +299,12 @@ class Journal(object):
     _regex_ledger_due = re.compile(r'\s*{([^}]*)}\s*')
 
     def _parse_ledger_block(self, ledger_date, ledger_what, ledger_lines):
-        if ';' in ledger_what:
-            who, what = map(str.strip, str(ledger_what).split(';', 1))
+        what, tags = abo.account.Chart.parse_tags(ledger_what)
+        if ';' in what:
+            who, what = map(str.strip, str(what).split(';', 1))
         else:
             who = None
-            what = str(ledger_what).strip()
+            what = str(what).strip()
         entries = []
         noamt = None
         for line in ledger_lines:
@@ -359,49 +361,52 @@ class Journal(object):
         kwargs['date'], kwargs['edate'] = ledger_date
         kwargs['who'] = who
         kwargs['what'] = what
+        kwargs['tags'] = tags
         kwargs['entries'] = entries
         return kwargs
 
-    def _parse_legacy_block(self, firstline, tags, defaults):
-        used = dict((tag, False) for tag in tags if tags[tag])
-        def tagline(tag, optional=False):
-            line = tags[tag]
+    def _parse_legacy_block(self, firstline, keys, defaults):
+        used = dict((key, False) for key in keys if keys[key])
+        def keyline(key, optional=False):
+            line = keys[key]
             if line is None or (type(line) is list and not line):
-                line = defaults[tag]
-            #print 'tag=%r line=%r' % (tag, line,)
+                line = defaults[key]
+            #print 'key=%r line=%r' % (key, line,)
             if not line and not optional:
-                raise ParseException(firstline, 'missing tag %r' % tag)
-            used[tag] = True
+                raise ParseException(firstline, 'missing key %r' % key)
+            used[key] = True
             return line
-        meth = getattr(self, '_parse_type_' + tagline('type').text, None)
+        meth = getattr(self, '_parse_type_' + keyline('type').text, None)
         if not meth:
-            raise ParseException(tags['type'], 'unknown type %r' % (tags['type'].text,))
+            raise ParseException(keys['type'], 'unknown type %r' % (keys['type'].text,))
         kwargs = {}
-        kwargs['date'], kwargs['edate'] = self._parse_date_edate(tagline('date').text)
-        who = tagline('who', optional=True)
+        kwargs['date'], kwargs['edate'] = self._parse_date_edate(keyline('date').text)
+        who = keyline('who', optional=True)
         kwargs['who'] = str(who.text) if who else None
-        what = tagline('what', optional=True)
+        what = keyline('what', optional=True)
         kwargs['what'] = str(what.text) if what else None
-        kwargs['entries'] = meth(firstline, kwargs, tagline)
-        for tag in used:
-            if not used[tag]:
-                line = tags[tag]
+        tags = keyline('tag', optional=True)
+        kwargs['tags'] = (line.text for line in tags)
+        kwargs['entries'] = meth(firstline, kwargs, keyline)
+        for key in used:
+            if not used[key]:
+                line = keys[key]
                 if type(line) is list:
                     line = line[0]
-                raise ParseException(line, 'spurious %r tag' % (tag,))
+                raise ParseException(line, 'spurious %r key' % (key,))
         return kwargs
 
-    def _parse_line_tagtext(cls, line, text):
+    def _parse_line_keytext(cls, line, text):
         words = text.split(None, 1)
         if len(words) == 2:
-            line.tag, line.text = str(words[0]), words[1]
+            line.key, line.text = str(words[0]), words[1]
         elif len(words) == 1:
-            line.tag, line.text = str(words[0]), ''
+            line.key, line.text = str(words[0]), ''
         else:
-            raise ParseException(line, 'expecting <tag> [value]')
+            raise ParseException(line, 'expecting <key> [value]')
 
-    def _parse_type_transaction(self, firstline, kwargs, tagline):
-        amt = tagline('amt', optional=True)
+    def _parse_type_transaction(self, firstline, kwargs, keyline):
+        amt = keyline('amt', optional=True)
         amount = self._parse_money(amt) if amt else None
         if amount is not None and amount < 0:
             raise ParseException(amt, 'negative amount not allowed: %s' % amount)
@@ -409,9 +414,9 @@ class Journal(object):
         totals = {'db': 0, 'cr': 0}
         entries_noamt = {'db': None, 'cr': None}
         for dbcr, sign in (('db', -1), ('cr', 1)):
-            for line in tagline(dbcr):
+            for line in keyline(dbcr):
                 if not line.text:
-                    raise ParseException(line, 'empty tag %r' % line.tag)
+                    raise ParseException(line, 'empty key %r' % line.key)
                 entry = self._parse_dbcr(line)
                 if 'amount' in entry:
                     totals[dbcr] += entry['amount']
@@ -438,18 +443,18 @@ class Journal(object):
                 raise ParseException(entries_noamt[dbcr]['line'], 'nil entry; %ss already sum to amount (%s)' % (desc, amount,))
         return entries
 
-    def _parse_invoice_bill(self, firstline, kwargs, tagline, sign):
-        due = tagline('due', optional=True)
+    def _parse_invoice_bill(self, firstline, kwargs, keyline, sign):
+        due = keyline('due', optional=True)
         cdate = self._parse_date(due.text, relative_to=kwargs['date']) if due else None
-        amt = tagline('amt', optional=True)
+        amt = keyline('amt', optional=True)
         amount = self._parse_money(amt) if amt else None
         if amount is not None and amount == 0:
             raise ParseException(amt, 'zero amount not allowed: %s' % amount)
         entries = []
-        acc = tagline('acc', optional=True)
+        acc = keyline('acc', optional=True)
         account = self._parse_account_label(acc.text)
         total = 0
-        gst = tagline('gst', optional=True)
+        gst = keyline('gst', optional=True)
         gst_amount = self._parse_money(gst) if gst else None
         if gst_amount is not None:
             if gst_amount == 0:
@@ -458,7 +463,7 @@ class Journal(object):
             total += gst_amount
             entries.append({'line': gst, 'account': gst_account, 'amount': gst_amount * -sign})
         entry_noamt = None
-        for line in tagline('item'):
+        for line in keyline('item'):
             entry = self._parse_dbcr(line)
             if 'amount' in entry:
                 total += entry['amount']
@@ -483,28 +488,28 @@ class Journal(object):
         entries.append({'line': acc, 'account': account, 'amount': amount * sign, 'cdate': cdate})
         return entries
 
-    def _parse_type_invoice(self, firstline, kwargs, tagline):
-        return self._parse_invoice_bill(firstline, kwargs, tagline, -1)
+    def _parse_type_invoice(self, firstline, kwargs, keyline):
+        return self._parse_invoice_bill(firstline, kwargs, keyline, -1)
 
-    def _parse_type_bill(self, firstline, kwargs, tagline):
-        return self._parse_invoice_bill(firstline, kwargs, tagline, 1)
+    def _parse_type_bill(self, firstline, kwargs, keyline):
+        return self._parse_invoice_bill(firstline, kwargs, keyline, 1)
 
-    def _parse_remittance_receipt(self, firstline, kwargs, tagline, sign):
-        amount = self._parse_money(tagline('amt'))
-        acc = tagline('acc')
+    def _parse_remittance_receipt(self, firstline, kwargs, keyline, sign):
+        amount = self._parse_money(keyline('amt'))
+        acc = keyline('acc')
         account = self._parse_account_label(acc.text)
-        bank = tagline('bank')
+        bank = keyline('bank')
         bank_account = self._parse_account_label(bank.text)
         entries = []
         entries.append({'line': acc, 'account': account, 'amount': amount * sign})
         entries.append({'line': bank, 'account': bank_account, 'amount': amount * -sign})
         return entries
 
-    def _parse_type_remittance(self, firstline, kwargs, tagline):
-        return self._parse_remittance_receipt(firstline, kwargs, tagline, -1)
+    def _parse_type_remittance(self, firstline, kwargs, keyline):
+        return self._parse_remittance_receipt(firstline, kwargs, keyline, -1)
 
-    def _parse_type_receipt(self, firstline, kwargs, tagline):
-        return self._parse_remittance_receipt(firstline, kwargs, tagline, 1)
+    def _parse_type_receipt(self, firstline, kwargs, keyline):
+        return self._parse_remittance_receipt(firstline, kwargs, keyline, 1)
 
     _regex_relative = re.compile(r'^[+-]\d+$')
 
@@ -648,12 +653,13 @@ __test__ = {
 ... date 21/2/2013
 ... who Somebody
 ... what something
+... tag wah
 ... db food
 ... cr bank
 ... amt 10.00
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 21),
-    who='Somebody', what='something',
+    who='Somebody', what='something', tags=('wah',),
     entries=(Entry(account='food', amount=Money.AUD(-10.00)),
              Entry(account='bank', amount=Money.AUD(10.00))))]
 
@@ -662,12 +668,14 @@ __test__ = {
 ... date 22/2/2013
 ... who Somebody Else
 ... what another thing
+... tag first
 ... db food 7
 ... db drink 3 beer
 ... cr bank 10
+... tag second
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 [Transaction(date=datetime.date(2013, 2, 22),
-    who='Somebody Else', what='another thing',
+    who='Somebody Else', what='another thing', tags=('first', 'second'),
     entries=(Entry(account='food', amount=Money.AUD(-7.00)),
              Entry(account='drink', amount=Money.AUD(-3.00), detail='beer'),
              Entry(account='bank', amount=Money.AUD(10.00))))]
@@ -718,7 +726,7 @@ __test__ = {
 ... db
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 Traceback (most recent call last):
-abo.journal.ParseException: "wah", 21: empty tag 'db'
+abo.journal.ParseException: "wah", 21: empty key 'db'
 
 >>> list(Journal(_testconfig, r'''
 ... type transaction
@@ -731,7 +739,7 @@ abo.journal.ParseException: "wah", 21: empty tag 'db'
 ... amt 10.00
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 Traceback (most recent call last):
-abo.journal.ParseException: StringIO, 4: spurious 'due' tag
+abo.journal.ParseException: StringIO, 4: spurious 'due' key
 
 >>> list(Journal(_testconfig, r'''
 ... type transaction
@@ -744,7 +752,7 @@ abo.journal.ParseException: StringIO, 4: spurious 'due' tag
 ... amt 10.00
 ... ''').transactions()) #doctest: +NORMALIZE_WHITESPACE
 Traceback (most recent call last):
-abo.journal.ParseException: StringIO, 8: spurious 'item' tag
+abo.journal.ParseException: StringIO, 8: spurious 'item' key
 
 >>> list(Journal(_testconfig, r'''
 ... %default due 21/3/2013

@@ -403,10 +403,15 @@ def cmd_profloss(config, opts):
         )
     ranges = parse_ranges(opts)
     chart = get_chart(config, opts)
-    selected_accounts = select_accounts(chart, opts)
     transactions = get_transactions(chart, config, opts)
-    plpred = lambda a: a.is_profitloss() and a in selected_accounts
-    balances = [abo.balance.Balance(transactions, date_range=r, chart=chart, acc_pred=plpred, use_edate=opts['--effective']) for r in ranges]
+    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    plpred = lambda e: chart[e.account].is_profitloss()
+    balances = [abo.balance.Balance(transactions,
+                                    date_range=r,
+                                    chart=chart,
+                                    entry_pred=lambda e: plpred(e) and selectpred(e),
+                                    use_edate=opts['--effective'])
+                                for r in ranges]
     make_sections(sections, balances)
     all_accounts = set(chain(*(s.accounts for s in sections)))
     f = Formatter(config, 'profloss', opts, all_accounts, len(balances))
@@ -437,15 +442,27 @@ def cmd_cashflow(config, opts):
         )
     ranges = parse_ranges(opts)
     chart = get_chart(config, opts)
-    selected_accounts = select_accounts(chart, opts)
     transactions = get_transactions(chart, config, opts)
-    cashpred = lambda a: 'cash' in a.tags and a in selected_accounts
-    noncashpred = lambda a: 'cash' not in a.tags and a in selected_accounts
-    transactions = abo.account.remove_account(chart, noncashpred, transactions, cancel_only=True)
-    cash_balances = [struct(open=abo.balance.Balance(transactions, date_range=r.preceding(), chart=chart, acc_pred=cashpred, use_edate=opts['--effective']),
-                            close=abo.balance.Balance(transactions, date_range=r.following().preceding(), chart=chart, acc_pred=cashpred, use_edate=opts['--effective']))
+    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    cashpred = lambda e: chart[e.account].is_tagged(chart, 'cash')
+    noncashpred = lambda e: not cashpred(e)
+    transactions = abo.account.remove_account(chart, lambda a: not a.is_tagged(chart, 'cash'), transactions, cancel_only=True)
+    cash_balances = [struct(open=abo.balance.Balance(transactions,
+                                                     date_range=r.preceding(),
+                                                     chart=chart,
+                                                     entry_pred=lambda e: cashpred(e) and selectpred(e),
+                                                     use_edate=opts['--effective']),
+                            close=abo.balance.Balance(transactions,
+                                                      date_range=r.following().preceding(),
+                                                      chart=chart,
+                                                      entry_pred=lambda e: cashpred(e) and selectpred(e),
+                                                      use_edate=opts['--effective']))
                      for r in ranges]
-    non_cash_balances = [abo.balance.Balance(transactions, date_range=r, chart=chart, acc_pred=noncashpred, use_edate=opts['--effective']) for r in ranges]
+    non_cash_balances = [abo.balance.Balance(transactions,
+                                             date_range=r,
+                                             chart=chart,
+                                             entry_pred=lambda e: noncashpred(e) and selectpred(e),
+                                             use_edate=opts['--effective']) for r in ranges]
     make_sections(sections, non_cash_balances)
     all_accounts = set(chain(*(s.accounts for s in sections)))
     f = Formatter(config, 'cashflow', opts, all_accounts, len(non_cash_balances), minaw=19, elide_zero=True)
@@ -479,20 +496,18 @@ def cmd_bsheet(config, opts):
     )
     chart = get_chart(config, opts)
     retained = chart.get_or_create(name='retained profit(-loss)', atype=abo.account.AccountType.Equity)
-    selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
-    amap = {}
-    for a in fullset(selected_accounts):
+    def amap(a):
         parent = a.accrual_parent()
         if parent is None or parent is a:
             parent = a.loan_parent()
-        if parent is not None and parent is not a:
-            amap[a] = parent
-    pred = lambda a: not a.is_profitloss() and a in selected_accounts
+        return parent if parent is not None and parent is not a else a
+    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    notplpred = lambda e: not chart[e.account].is_profitloss()
     balances = [abo.balance.Balance(all_transactions, date_range=r, chart=chart,
-                                    acc_pred=pred,
-                                    acc_map=lambda a: retained if plpred(a) else amap.get(a, a),
+                                    entry_pred=lambda e: notplpred(e) and selectpred(e),
+                                    acc_map=lambda a: retained if plpred(a) else amap(a),
                                     use_edate=opts['--effective'])
                 for r in ranges]
     make_sections(sections, balances)
@@ -512,10 +527,15 @@ def cmd_bsheet(config, opts):
 
 def cmd_balance(config, opts):
     chart = get_chart(config, opts)
-    selected_accounts = select_accounts(chart, opts)
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
-    balances = [abo.balance.Balance(all_transactions, date_range=r, chart=chart, acc_pred=lambda a: a in selected_accounts, use_edate=opts['--effective']) for r in ranges]
+    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    balances = [abo.balance.Balance(all_transactions,
+                                    date_range=r,
+                                    chart=chart,
+                                    entry_pred=selectpred,
+                                    use_edate=opts['--effective'])
+                                for r in ranges]
     if opts['--journal']:
         for b in balances:
             yield ''
@@ -552,17 +572,16 @@ def cmd_balance(config, opts):
                 yield fmt % (tuple(config.format_money(bal) for bal in amts) + (str(account),))
                 for b, amt in zip(balances, amts):
                     balance_check[b] += amt
-        for b in balances:
-            assert balance_check[b] == 0, 'balance_check[%r] = %s' % (b, balance_check[b])
         yield fmt % (('-' * bw,) * len(balances) + ('-' * aw,))
+        yield fmt % (tuple(config.format_money(bal) for bal in balance_check.values()) + ('BALANCE',))
 
-def compute_due_accounts(chart, transactions, selected_accounts=None):
+def compute_due_accounts(chart, transactions, entry_pred=None):
     due_accounts = set()
     accounts = defaultdict(lambda: [])
     for t in transactions:
         for e in t.entries:
-            account = chart[e.account]
-            if not selected_accounts or account in selected_accounts:
+            if entry_pred is None or entry_pred(e):
+                account = chart[e.account]
                 if account.is_accrual():
                     account = account.accrual_parent()
                     due_accounts.add(account)
@@ -601,10 +620,10 @@ def compute_dues(due_accounts, when=None):
 
 def cmd_due(config, opts):
     chart = get_chart(config, opts)
-    selected_accounts = select_accounts(chart, opts)
     when = parse_when(opts)
     transactions = (t for t in get_transactions(chart, config, opts))
-    due_accounts = compute_due_accounts(chart, transactions, selected_accounts)
+    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    due_accounts = compute_due_accounts(chart, transactions, selectpred)
     bw = config.money_column_width()
     fmt = '%s %s %{bw}s  %s'.format(**locals())
     for date, due in compute_dues(due_accounts, when):
@@ -633,10 +652,10 @@ def cmd_due(config, opts):
 
 def cmd_table(config, opts):
     chart = get_chart(config, opts)
-    selected_accounts = select_accounts(chart, opts)
     when = parse_when(opts)
     transactions = (t for t in get_transactions(chart, config, opts))
-    due_accounts = compute_due_accounts(chart, transactions, selected_accounts)
+    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    due_accounts = compute_due_accounts(chart, transactions, selectpred)
     # Accumulate due amounts into the table
     slot_headings = ['1+ year',    '6+ months',    '3+ months',    '2+ months',    '1+ month',    '< 1 month', 'future']
     slot_whens =    ['1 year ago', '6 months ago', '3 months ago', '2 months ago', '1 month ago', 'today']

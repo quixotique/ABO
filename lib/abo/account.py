@@ -298,6 +298,21 @@ class Account(object):
     def make_child(self, name=None, label=None, atype=None, tags=()):
         return type(self)(name=name, label=label, atype=self.atype, tags=tags, parent=self)
 
+    # Interface used by predicate functions:
+
+    def is_called(self, chart, name):
+        return self.name == name or self.label == name
+
+    def is_tagged(self, chart, tag):
+        atype = tag_to_atype.get(tag)
+        return atype == self.atype if atype is not None else tag in self.tags
+
+    def is_matching(self, chart, pattern):
+        return pattern in self.full_name().lower()
+
+    def is_within(self, chart, other):
+        return self in other
+
 def common_root(accounts):
     r'''
     >>> a = Account(label='a')
@@ -655,25 +670,22 @@ class Chart(object):
             m = self._regex_cond_pattern.match(text, 2)
             if m:
                 part = m.group()
-                return (lambda a: a.name == part or a.label == part), text[m.end():]
+                return (lambda a: a.is_called(self, part)), text[m.end():]
         if text.startswith('='):
             m = self._regex_cond_tag.match(text, 1)
             if m:
                 tag = m.group()
-                atype = tag_to_atype.get(tag)
-                if atype is not None:
-                    return (lambda a: atype == a.atype), text[m.end():]
-                return (lambda a: tag in a.tags), text[m.end():]
+                return (lambda a: a.is_tagged(self, tag)), text[m.end():]
         if text.startswith('/'):
             m = self._regex_cond_pattern.match(text, 1)
             if m:
                 pattern = m.group().lower()
-                return (lambda a: pattern in a.full_name().lower()), text[m.end():]
+                return (lambda a: a.is_matching(self, pattern)), text[m.end():]
         m = self._regex_cond_pattern.match(text)
         if m:
             try:
                 account = self[m.group()]
-                return (lambda a: a in account, text[m.end():])
+                return (lambda a: a.is_within(self, account)), text[m.end():]
             except KeyError:
                 raise InvalidAccountPredicate(m.group())
         raise InvalidAccountPredicate(text)
@@ -685,6 +697,18 @@ class Chart(object):
         +   r'\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
     _regex_label = re.compile(r'\[(' + Account._rxpat_label + r')]')
     _regex_tag = re.compile(r'\s*=(' + Account.rxpat_tag + ')\s*')
+
+    @classmethod
+    def parse_tags(cls, text):
+        tags = set()
+        text_without_tags = ''
+        offset = 0
+        for m in cls._regex_tag.finditer(text):
+            tags.add(m.group(1))
+            text_without_tags += text[offset:m.start(0)] + ' '
+            offset = m.end(0)
+        text_without_tags += text[offset:]
+        return text_without_tags.strip(), tags
 
     def _parse(self, source_file):
         self._accounts = {}
@@ -740,20 +764,16 @@ class Chart(object):
             else:
                 label = None
                 atype = None
-                line_without_tags = ''
-                offset = 0
-                for m in self._regex_tag.finditer(line):
+                line_notags, tags = self.parse_tags(line)
+                for tag in tags:
                     try:
-                        tag_atype = tag_to_atype[m.group(1)]
+                        tag_atype = tag_to_atype[tag]
                         if atype is not None and atype != tag_atype:
                             raise abo.text.LineError('conflicting account types (%s) (%s)' % (atype_to_tag[atype], atype_to_tag[tag_atype]), line=line)
                         atype = tag_atype
                     except KeyError:
-                        tags.add(m.group(1))
-                    line_without_tags += line[offset:m.start(0)] + ' '
-                    offset = m.end(0)
-                line_without_tags += line[offset:]
-                line = line_without_tags.strip()
+                        pass
+                line = line_notags
                 if atype is None and stack:
                     atype = stack[-1].atype
                 if line == '*':
