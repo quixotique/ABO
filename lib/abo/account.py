@@ -279,6 +279,12 @@ class Account(object):
     def loan_parent(self):
         return None if not self.is_loan() else self if self.parent is None or not self.parent.is_loan() else self.parent.loan_parent()
 
+    def report_account(self):
+        a = self.accrual_parent()
+        if a is None or a is self:
+            a = self.loan_parent()
+        return a if a is not None and a is not a else a
+
     def all_bare_names(self):
         if self.label:
             yield self.label

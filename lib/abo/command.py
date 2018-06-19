@@ -462,7 +462,9 @@ def cmd_cashflow(config, opts):
                                              date_range=r,
                                              chart=chart,
                                              entry_pred=lambda e: noncashpred(e) and selectpred(e),
-                                             use_edate=opts['--effective']) for r in ranges]
+                                             acc_map=abo.account.Account.report_account,
+                                             use_edate=opts['--effective'])
+                                        for r in ranges]
     make_sections(sections, non_cash_balances)
     all_accounts = set(chain(*(s.accounts for s in sections)))
     f = Formatter(config, 'cashflow', opts, all_accounts, len(non_cash_balances), minaw=19, elide_zero=True)
@@ -498,16 +500,11 @@ def cmd_bsheet(config, opts):
     retained = chart.get_or_create(name='retained profit(-loss)', atype=abo.account.AccountType.Equity)
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
-    def amap(a):
-        parent = a.accrual_parent()
-        if parent is None or parent is a:
-            parent = a.loan_parent()
-        return parent if parent is not None and parent is not a else a
     selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
-    notplpred = lambda e: not chart[e.account].is_profitloss()
+    notplpred = lambda e: not plpred(chart[e.account])
     balances = [abo.balance.Balance(all_transactions, date_range=r, chart=chart,
                                     entry_pred=lambda e: notplpred(e) and selectpred(e),
-                                    acc_map=lambda a: retained if plpred(a) else amap(a),
+                                    acc_map=lambda a: retained if plpred(a) else a.report_account(),
                                     use_edate=opts['--effective'])
                 for r in ranges]
     make_sections(sections, balances)
