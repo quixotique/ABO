@@ -8,10 +8,15 @@ two or more Entry objects.  The debits and credits of all the Entries in a
 Transaction must balance to zero, and no Entry can be for a zero amount.
 
 >>> t1 = Transaction(date=1, edate=3, who="Someone", what="something",
+...         tags=('one', 'two'),
 ...         entries=({'account':'a2', 'amount':14.56, 'detail':'else'},
 ...                  {'account':'a1', 'amount':-14.56}))
 >>> t1.description()
 'Someone; something'
+>>> for line in t1.journal_lines(): print(line)
+1=3 Someone; something =one =two
+   a1  -14.56
+   a2  14.56 ; else
 >>> t1.entries[0].transaction is t1
 True
 >>> t1.entries[0].account
@@ -20,8 +25,11 @@ True
 -14.56
 >>> t1.entries[1].description()
 'Someone; something, else'
->>> t1
-Transaction(date=1, edate=3, who='Someone', what='something', entries=(Entry(account='a1', amount=-14.56), Entry(account='a2', amount=14.56, detail='else')))
+>>> t1 #doctest: +NORMALIZE_WHITESPACE
+Transaction(date=1, edate=3, who='Someone', what='something',
+            tags=('one', 'two'),
+            entries=(Entry(account='a1', amount=-14.56),
+                     Entry(account='a2', amount=14.56, detail='else')))
 >>> t2 = Transaction(date=2, edate=4, who="Them", what="whatever", entries=t1.entries)
 >>> t2.entries[0].transaction is t2
 True
@@ -74,6 +82,18 @@ class Entry(abo.base.Base):
         if self.detail:
             r.append(('detail', self.detail))
         return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % i for i in r))
+
+    def journal_line(self):
+        def line():
+            yield str(self.account) + '  ' + (self.amount.format(symbol=False) if hasattr(self.amount, 'format') else str(self.amount))
+            sep = ' ;'
+            if self.cdate and self.cdate != self.transaction.date:
+                yield sep + ' {' + self.cdate.strftime('%-d/%-m/%Y') + '}'
+                sep = ''
+            if self.detail:
+                yield sep + ' ' + self.detail
+                sep = ''
+        return ''.join(line())
 
     def __hash__(self):
         return hash(self.account) ^ hash(self.amount) ^ hash(self.cdate) ^ hash(self.detail)
@@ -309,6 +329,28 @@ class Transaction(abo.base.Base):
             r.append(('tags', tuple(sorted(self.tags))))
         r.append(('entries', self.entries))
         return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % i for i in r))
+
+    def journal_lines(self):
+        def firstline():
+            yield self.date.strftime('%-d/%-m/%Y') if isinstance(self.date, datetime.date) else str(self.date)
+            if self.edate != self.date:
+                if isinstance(self.date, datetime.date):
+                    yield self.edate.strftime('=%-d/')
+                    if self.edate.month != self.date.month:
+                        yield self.edate.strftime('%-m')
+                    yield '/'
+                    if self.edate.year != self.date.year:
+                        yield self.edate.strftime('%Y')
+                else:
+                    yield '=' + str(self.edate)
+            if self.who:
+                yield ' ' + self.who + ';'
+            yield ' ' + self.what
+            for tag in sorted(self.tags):
+                yield ' =' + tag
+        yield ''.join(firstline())
+        for e in self.entries:
+            yield '   ' + e.journal_line()
 
     def amount(self):
         """Return the absolute (positive) sum of all credits in this transaction.

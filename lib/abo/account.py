@@ -826,15 +826,27 @@ class ChartCache(abo.cache.FileCache):
     def chart(self, **kwargs):
         accounts = self.get(**kwargs)
 
+def log_transaction(t, indent='', indent1=None):
+    i = indent1 if indent1 is not None else indent
+    for line in t.journal_lines():
+        logging.debug(i + line)
+        i = indent
+
+def log_entries(entries, indent='', indent1=None):
+    i = indent1 if indent1 is not None else indent
+    for e in entries:
+        logging.debug(i + e.journal_line())
+        i = indent
+
 def remove_account(chart, pred, transactions, cancel_only=False):
     from itertools import chain
     from collections import defaultdict
-    logging.debug("remove")
     queues = defaultdict(list)
     todo = list(transactions)
     done = []
     while todo:
         t = todo.pop(0)
+        log_transaction(t, indent1="remove ", indent="   ")
         remove_by_sign = defaultdict(lambda: struct(amount=0, entries=[]))
         keep = []
         keep_total = 0
@@ -859,7 +871,8 @@ def remove_account(chart, pred, transactions, cancel_only=False):
                 assert keep
                 assert keep_total == 0
                 done.append(t.replace(entries=keep))
-                logging.debug("   done %r" % (done[-1],))
+                logging.debug("   cancelled whole transaction")
+                log_transaction(done[-1], indent1="   ", indent="      ")
                 continue
             else:
                 s = sign(remove_amount)
@@ -870,6 +883,7 @@ def remove_account(chart, pred, transactions, cancel_only=False):
                 assert sum(e.amount for e in e2) == remove_amount
                 remove = e2
                 t = t.replace(entries= chain(e2 + keep))
+                log_transaction(t, indent1="   cancelled to ", indent="      ")
         elif remove_by_sign[1].entries:
             remove_amount = remove_by_sign[1].amount
             remove = remove_by_sign[1].entries
@@ -878,13 +892,14 @@ def remove_account(chart, pred, transactions, cancel_only=False):
             remove = remove_by_sign[-1].entries
         else:
             done.append(t)
-            logging.debug("   done %r" % (done[-1],))
+            logging.debug("   keep unchanged transaction")
             continue
         if cancel_only:
             done.append(t)
-            logging.debug("   done %r" % (done[-1],))
+            logging.debug("   done cancelled transaction")
+            log_transaction(done[-1], indent1="   ", indent="      ")
             continue
-        logging.debug("remove %u entries from t = %s %s" % (len(remove), t.amount(), t.date))
+        logging.debug("   remove %u entries" % (len(remove),))
         # Only remove one account at a time.
         account = remove[0].account
         entries = [e for e in remove if e.account == account]
@@ -907,8 +922,8 @@ def remove_account(chart, pred, transactions, cancel_only=False):
             t = t.replace(entries= chain(entries + k1))
         queue = queues[account]
         if not queue or sign(queue[0].amount) == sign(amount):
-            logging.debug("   enqueue %s" % (account,))
             queue.append(struct(amount=amount, transaction=t)) # TODO sort by due date
+            log_transaction(queue[-1].transaction, indent1="   enqueue amount=%s " % (queue[-1].amount,), indent="      ")
         else:
             while queue and abs(queue[0].amount) <= abs(amount):
                 logging.debug("   amount=%s queue[0].amount=%s" % (amount, queue[0].amount))
@@ -917,6 +932,8 @@ def remove_account(chart, pred, transactions, cancel_only=False):
                     k1, keep = keep, None
                 else:
                     k1, k2 = abo.transaction._divide_entries(keep, queue[0].amount)
+                    log_entries(k1, indent1= "   divide k1 ", indent="             ")
+                    log_entries(k2, indent1= "          k2 ", indent="             ")
                     assert k1
                     assert k2
                     assert len(k1) <= len(keep)
@@ -924,7 +941,7 @@ def remove_account(chart, pred, transactions, cancel_only=False):
                     keep_total = sum(e.amount for e in keep)
                 assert sum(e.amount for e in k1) == queue[0].amount
                 done.append(t.replace(entries= [e for e in chain(k1, queue[0].transaction.entries) if e.account != account]))
-                logging.debug("   done %r" % (done[-1],))
+                log_transaction(done[-1], indent1="   done ", indent="      ")
                 amount += queue[0].amount
                 e1, e2 = abo.transaction._divide_entries(entries, -queue[0].amount)
                 assert sum(e.amount for e in e1) == -queue[0].amount
@@ -956,7 +973,7 @@ def remove_account(chart, pred, transactions, cancel_only=False):
                 assert sum(e.amount for e in qa1) == -amount
                 assert sum(e.amount for e in qo1) == amount
                 done.append(t.replace(entries= list(chain(k1, qo1))))
-                logging.debug("   done %r" % (done[-1],))
+                log_transaction(done[-1], indent1="   done ", indent="      ")
                 queue[0].amount += amount
                 queue[0].transaction = t.replace(entries= list(chain(qa2, qo2)))
     return done
