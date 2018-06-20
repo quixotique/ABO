@@ -485,7 +485,7 @@ def _divide_entries(entries, amount):
     entries1 = []
     entries2 = []
     while len(entries) > 1:
-        assert abs(total1) < abs(totale)
+        assert abs(total1) < abs(totale), 'total1=%s totale=%s' % (total1, totale)
         ratio = float(abs(total1)) / float(abs(totale))
         assert 0 <= ratio <= 1.0
         e = entries.pop(0)

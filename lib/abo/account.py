@@ -919,7 +919,11 @@ def remove_account(chart, pred, transactions, cancel_only=False):
             assert sum(e.amount for e in k1) == -amount
             assert k2
             todo.insert(0, t.replace(entries= chain(remove + k2)))
-            t = t.replace(entries= chain(entries + k1))
+            todo.insert(0, t.replace(entries= chain(entries + k1)))
+            logging.debug("   divide into:")
+            log_transaction(todo[0], indent1= "      todo[0] ", indent="         ")
+            log_transaction(todo[1], indent1= "      todo[1] ", indent="         ")
+            continue
         queue = queues[account]
         if not queue or sign(queue[0].amount) == sign(amount):
             queue.append(struct(amount=amount, transaction=t)) # TODO sort by due date
@@ -939,14 +943,17 @@ def remove_account(chart, pred, transactions, cancel_only=False):
                     assert len(k1) <= len(keep)
                     keep = k2
                     keep_total = sum(e.amount for e in keep)
-                assert sum(e.amount for e in k1) == queue[0].amount
+                assert sum(e.amount for e in k1) == queue[0].amount, 'k1=%r, queue[0]=%r' % (k1, queue[0])
                 done.append(t.replace(entries= [e for e in chain(k1, queue[0].transaction.entries) if e.account != account]))
                 log_transaction(done[-1], indent1="   done ", indent="      ")
                 amount += queue[0].amount
-                e1, e2 = abo.transaction._divide_entries(entries, -queue[0].amount)
-                assert sum(e.amount for e in e1) == -queue[0].amount
-                assert sum(e.amount for e in e2) == amount
-                entries = e2
+                if amount:
+                    e1, entries = abo.transaction._divide_entries(entries, -queue[0].amount)
+                    assert sum(e.amount for e in e1) == -queue[0].amount
+                    assert sum(e.amount for e in entries) == amount
+                else:
+                    assert sum(e.amount for e in entries) == -queue[0].amount
+                    entries = []
                 queue.pop(0)
             if amount and queue:
                 assert entries
