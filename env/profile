@@ -4,5 +4,5 @@
 
 __shellboost_include libsh/searchpath.sh
 
-searchpath_prepend GROFF_TMAC_PATH $ABO_HOME/tmac
+searchpath_prepend GROFF_TMAC_PATH "$ABO_HOME/tmac"
 export GROFF_TMAC_PATH
