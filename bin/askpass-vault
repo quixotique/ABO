@@ -1,0 +1,54 @@
+#!/bin/bash
+
+set -e
+shopt -s extglob
+
+# Ensure that the encfs_root env var is present (should be supplied by encfs).
+if [ -z "$encfs_root" ]; then
+    echo "$0: env var encfs_root not set" >&2
+    exit 1
+fi
+if ! [ -d "$encfs_root" ]; then
+    echo "$0: directory not found: $encfs_root" >&2
+    exit 1
+fi
+
+# The lockfile is the same path as the raw directory, with ".lock" appended.
+lockfile="${encfs_root%/}"
+
+# Form the name from the stem of the raw directory name.
+name="${lockfile##*/}"
+name="${name#.}"
+
+# Only wait a finite time for input.
+timeout=90 #seconds
+
+# If askpass-vault is already executing, then exit immediately.  This prevents
+# the encfs fork-bomb effect that spawns an askpass for every single attempted
+# access to a locked vault.  Only the first askpass process will return
+# successfully.
+if [ -x /usr/bin/lockfile-create ]; then
+    /usr/bin/lockfile-create --retry 0 "$lockfile" || exit $?
+    trap '/usr/bin/lockfile-remove "$lockfile"' EXIT
+    trap '/usr/bin/lockfile-remove "$lockfile"; exit 1' HUP INT QUIT USR1 USR2 TERM
+fi
+
+# If there is a valid $DISPLAY in the environment, then we are in an X
+# Windows GUI context, so we use a pop-up GUI dialog with a 10 second
+# timeout.  Otherwise, we present a dialog on the terminal (stdin/stdout).
+# If no response within the timeout time, give up.
+case $DISPLAY in
+    *:+([0-9])?(.+([0-9])) )
+    /usr/bin/zenity \
+            --entry --title "${0##*/}" \
+            --text "Enter $name pass phrase:" \
+            --timeout=$timeout \
+            --hide-text
+    ;;
+*)
+    /usr/bin/dialog \
+            --timeout $timeout --insecure \
+            --passwordbox "Enter $name pass phrase:" 8 72 \
+            </dev/tty 2>&1 >/dev/tty
+    ;;
+esac

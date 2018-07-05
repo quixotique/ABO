@@ -1,0 +1,194 @@
+#!/bin/bash
+
+set -e
+shopt -s extglob
+
+source "$SHELLBOOST/libsh/path.sh"
+
+me="${0##*/}"
+
+usage() {
+    echo -n "\
+Usage: $me open [--mount DIR] [--raw DIR] [--timeout MIN] [--browse]
+       $me close [--mount DIR]
+Options:
+  -m,--mount DIR       mount point for decrypted files
+  -r,--raw DIR         directory containing encrypted files
+  -t,--timeout MIN     lock after MIN idle minutes
+  -b,--browse          start file browser if open successful
+  -h,--help            print this message on standard output
+"
+}
+
+fatal() {
+    echo "$me: $*" >&2
+    exit 1
+}
+
+bad_usage() {
+    echo "$me: $*" >&2
+    echo "Try '$me --help' for more information." >&2
+    exit 1
+}
+
+is_integer() {
+    [ -n "$1" -a "${1#*[!0-9]}" = "$1" ]
+}
+
+main() {
+    if [ $# -eq 0 ]; then
+        usage
+        exit 0
+    fi
+
+    action="$1"
+    shift
+    if [ "$(type -t "action_$action")" != function ]; then
+        fatal "unsupported action: $action"
+    fi
+
+    opt_mount="$HOME/Vault"
+    opt_raw=
+    opt_timeout=30 # minutes
+    opt_browse=false
+    while [ $# -ne 0 ]; do
+        local arg="$1"
+        case "$arg" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --mount=*)
+            opt_mount="${arg#*=}"
+            ;;
+        --mount|-m)
+            shift
+            [ $# -ne 0 ] || bad_usage "missing argument to $arg"
+            opt_mount="$1"
+            ;;
+        --raw=*)
+            opt_raw="${arg#*=}"
+            ;;
+        --raw|-r)
+            shift
+            [ $# -ne 0 ] || bad_usage "missing argument to $arg"
+            opt_raw="$1"
+            ;;
+        --timeout=*)
+            opt_timeout="${arg#*=}";
+            is_integer "$opt_timeout" || bad_usage "invalid argument to ${arg%%=*}: $opt_timeout"
+            ;;
+        --timeout|-t)
+            shift
+            [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_timeout="$1"
+            is_integer "$opt_timeout" || bad_usage "invalid argument to $arg: $opt_timeout"
+            ;;
+        --browse|-b)
+            opt_browse=true
+            ;;
+        -*)
+            bad_usage "unsupported option: $arg"
+            exit 1
+            ;;
+        *)
+            bad_usage "unsupported argument: $arg"
+            exit 1
+            ;;
+        esac
+        shift
+    done
+
+    if ! MOUNT="$(try_realpath_physical "$opt_mount")"; then
+        fatal "not accessible: $opt_mount"
+    fi
+
+    action_$action
+}
+
+action_open() {
+    # Only mount if not currently being (un)mounted.
+    lock || exit 4
+    trap "unlock; exit 1" 1 2 15
+    trap "unlock" 0
+
+    # If the vault is already mounted, then simply touch it to reset the
+    # idle timer.  Otherwise, mount it.  Retry in case a bad password is
+    # given.
+    if is_encfs_mounted "$MOUNT"; then
+        echo "$MOUNT/*" >/dev/null # touch to reset idle timer
+    else
+        # Ensure that FUSE is available in the kernel.
+        /sbin/modprobe fuse
+        if [ ! -w /dev/fuse ]; then
+            sudo /bin/chgrp fuse /dev/fuse
+        fi
+
+        # If the raw directory was not specified, then form it by prefixing the
+        # mount directory's name with a dot.
+        if [ -z "$opt_raw" ]; then
+            opt_raw="${MOUNT%/*}/.${MOUNT##*/}"
+        fi
+        if ! RAW="$(try_realpath_physical "$opt_raw")"; then
+            fatal "not accessible: $opt_raw"
+        fi
+        if ! [ -d "$RAW" ]; then
+            fatal "not a directory: $RAW"
+        fi
+
+        # Ensure the mount point exists.
+        if [ ! -d "$MOUNT" ]; then
+            mkdir -m 700 -p "$MOUNT"
+        fi
+
+        /usr/bin/encfs --idle=$opt_timeout --ondemand \
+                        --extpass="${0%/*}/askpass-vault" \
+                        "$RAW" \
+                        "$MOUNT"
+    fi
+
+    if $opt_browse && [ "$(type -t x-file-browser)" = file ]; then
+        x-file-browser "$MOUNT" &
+    fi
+}
+
+action_close() {
+    # Only unmount if not currently being (un)mounted.
+    lock || exit 4
+    trap "unlock; exit 1" 1 2 15
+    trap "unlock" 0
+
+    if is_encfs_mounted "$MOUNT"; then
+        fusermount -u "$MOUNT" || exit $?
+        exit 0
+    else
+        exit 1
+    fi
+}
+
+is_encfs_mounted()
+{
+    /bin/mount | grep "^encfs on $1 type fuse\.encfs " >/dev/null
+}
+
+lock()
+{
+    if [ -x /usr/bin/lockfile-create ]; then
+        errs=$(/usr/bin/lockfile-create --retry 0 "$MOUNT" 2>&1 1>/dev/null)
+        case $? in
+        0) return 0;;
+        4) return 1;;
+        *) echo "$errs" >&2; exit 1;;
+        esac
+    else
+        return 0
+    fi
+}
+
+unlock()
+{
+    if [ -x /usr/bin/lockfile-remove ]; then
+        /usr/bin/lockfile-remove "$MOUNT"
+    fi
+}
+
+main "$@"

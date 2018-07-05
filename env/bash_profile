@@ -11,3 +11,5 @@ COMP_WORDBREAKS=${COMP_WORDBREAKS//:}
 COMP_WORDBREAKS=${COMP_WORDBREAKS//=}
 
 complete -o nospace -C 'abo compa' abo
+
+complete -W 'open close' vault
