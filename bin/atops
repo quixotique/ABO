@@ -37,8 +37,8 @@ fatal() {
 }
 
 font_size=9
-paper_length=28.8c
-top_margin=1.0c
+paper_length=27.8c
+top_margin=1.5c
 page_offset=1.5c
 line_length=19.3c
 
