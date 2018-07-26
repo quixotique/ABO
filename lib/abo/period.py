@@ -117,8 +117,14 @@ def parse_periods(args):
     >>> parse_periods(['latest', 'six', 'months'])
     [(datetime.date(2012, 9, 1), datetime.date(2013, 2, 28))]
 
+    >>> parse_periods(['coming', 'six', 'months'])
+    [(datetime.date(2013, 4, 1), datetime.date(2013, 9, 30))]
+
     >>> parse_periods(['last', '30', 'days'])
     [(datetime.date(2013, 2, 19), datetime.date(2013, 3, 20))]
+
+    >>> parse_periods(['next', '30', 'days'])
+    [(datetime.date(2013, 3, 20), datetime.date(2013, 4, 18))]
 
     >>> parse_periods(['last', 'year', 'quarterly']) #doctest: +NORMALIZE_WHITESPACE
     [(datetime.date(2012, 1, 1), datetime.date(2012, 3, 31)),
@@ -401,11 +407,21 @@ def _parse_period(args):
             return parse_latest(word, args)
     elif args[0] == 'next':
         which = args[0]
-        args.pop(0)
-        return parse_next(args)
+        word = args.pop(0)
+        if len(args) < 1:
+            raise ValueError("missing argument after 'next'")
+        oargs = list(args)
+        try:
+            return parse_next(args)
+        except ValueError:
+            args[:] = oargs
+            return parse_coming(word, args)
     elif args[0] == 'latest':
         word = args.pop(0)
         return parse_latest(word, args)
+    elif args[0] == 'coming':
+        word = args.pop(0)
+        return parse_coming(word, args)
     elif args[0] == 'from':
         args.pop(0)
         if not args:
@@ -734,6 +750,19 @@ def parse_latest(word, args):
     tomorrow = _today() + timedelta(1)
     start = enclosing_range(advance_date_unit(tomorrow, unit, -amount), unit)[0]
     end = enclosing_range(tomorrow, unit)[0] - timedelta(1)
+    return start, end
+
+def parse_coming(word, args):
+    if len(args) < 1:
+        raise ValueError("missing amount after %r", word)
+    if len(args) < 2:
+        raise ValueError("missing unit after %r %r" % (word, args[0],))
+    amount = parse_amount(args.pop(0))
+    unit = args.pop(0)
+    # Range should include today but not yesterday
+    yesterday = _today() - timedelta(1)
+    start = enclosing_range(yesterday, unit)[1] + timedelta(1)
+    end = enclosing_range(advance_date_unit(yesterday, unit, amount), unit)[1]
     return start, end
 
 def advance_date_unit(start, unit, amount):
