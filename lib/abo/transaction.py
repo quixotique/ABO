@@ -345,7 +345,8 @@ class Transaction(abo.base.Base):
                     yield '=' + str(self.edate)
             if self.who:
                 yield ' ' + self.who + ';'
-            yield ' ' + self.what
+            if self.what:
+                yield ' ' + self.what
             for tag in sorted(self.tags):
                 yield ' =' + tag
         yield ''.join(firstline())
