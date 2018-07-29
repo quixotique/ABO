@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import os.path
+
+try:
+    import mako
+except ImportError:
+    abo_lib = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib')
+    sys.path += [abo_lib, os.path.join(abo_lib, 'mako')]
+    import mako
+
+from mako.lookup import TemplateLookup
+from mako.template import Template
+
+def usage(f):
+    myname = os.path.basename(sys.argv[0])
+    print(r'''Usage: {} template.mako [ args ... ]'''.format(myname), file=f)
+
+def main():
+    if len(sys.argv) < 2:
+        usage(sys.stderr)
+        sys.exit(1)
+    lookup = TemplateLookup(directories=['.', '/'])
+    output = Template(filename=os.path.abspath(sys.argv[1]), lookup=lookup).render_unicode(*sys.argv[2:])
+    print(''.join(output), end='')
+    sys.exit(0)
+
+if __name__ == '__main__':
+    main()
