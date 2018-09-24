@@ -9,8 +9,18 @@ import datetime
 from abo.money import Money
 import abo.trybooking.csv_reader as csv_reader
 
+def clean_address(text):
+    text = re.sub(r'(\d+)\s*([A-Za-z]{2,})', r'\1 \2', text)
+    text = re.sub(r'(\d+)\s+([A-Z])\b', r'\1\2', text)
+    return text
+
+def capitalise_word(word):
+    if re.fullmatch(r'\d+[A-Za-z]', word):
+        return word.upper()
+    return word.capitalize()
+
 def capitalise_words(text):
-    return ''.join(map(str.capitalize, re.split(r'(\W+)', text.lower())))
+    return ''.join(map(capitalise_word, re.split(r'(\W+)', text.lower())))
 
 def parse_boolean(text):
     return text.strip().lower() in ('yes', 'on', 'true', '1')
@@ -27,8 +37,8 @@ class Booking(object):
         return cls(id = row.booking_id,
                    first_name = capitalise_words(row.booking_first_name),
                    last_name = capitalise_words(row.booking_last_name),
-                   address_1 = capitalise_words(row.booking_address_1),
-                   address_2 = capitalise_words(row.booking_address_2),
+                   address_1 = capitalise_words(clean_address(row.booking_address_1)),
+                   address_2 = capitalise_words(clean_address(row.booking_address_2)),
                    suburb = capitalise_words(row.booking_suburb),
                    state = row.booking_state.upper(),
                    post_code = int(row.booking_post_code),
