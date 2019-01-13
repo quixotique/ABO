@@ -309,6 +309,54 @@ def parse_whens(args):
      datetime.date(2013, 5, 31),
      datetime.date(2013, 6, 14),
      datetime.date(2013, 6, 28)]
+    >>> parse_whens(['last', 'thursday', 'in', 'this', 'fy', 'monthly']) #doctest: +NORMALIZE_WHITESPACE
+    [datetime.date(2012, 7, 26),
+     datetime.date(2012, 8, 30),
+     datetime.date(2012, 9, 27),
+     datetime.date(2012, 10, 25),
+     datetime.date(2012, 11, 29),
+     datetime.date(2012, 12, 27),
+     datetime.date(2013, 1, 31),
+     datetime.date(2013, 2, 28),
+     datetime.date(2013, 3, 28),
+     datetime.date(2013, 4, 25),
+     datetime.date(2013, 5, 30),
+     datetime.date(2013, 6, 27)]
+    >>> parse_whens(['every', 'workday', 'this', 'month']) #doctest: +NORMALIZE_WHITESPACE
+    [datetime.date(2013, 3, 1),
+     datetime.date(2013, 3, 4),
+     datetime.date(2013, 3, 5),
+     datetime.date(2013, 3, 6),
+     datetime.date(2013, 3, 7),
+     datetime.date(2013, 3, 8),
+     datetime.date(2013, 3, 11),
+     datetime.date(2013, 3, 12),
+     datetime.date(2013, 3, 13),
+     datetime.date(2013, 3, 14),
+     datetime.date(2013, 3, 15),
+     datetime.date(2013, 3, 18),
+     datetime.date(2013, 3, 19),
+     datetime.date(2013, 3, 20),
+     datetime.date(2013, 3, 21),
+     datetime.date(2013, 3, 22),
+     datetime.date(2013, 3, 25),
+     datetime.date(2013, 3, 26),
+     datetime.date(2013, 3, 27),
+     datetime.date(2013, 3, 28),
+     datetime.date(2013, 3, 29)]
+    >>> parse_whens(['first', 'mon,', 'wed,', 'or', 'fri', 'this', 'year', 'monthly']) #doctest: +NORMALIZE_WHITESPACE
+    [datetime.date(2013, 1, 2),
+     datetime.date(2013, 2, 1),
+     datetime.date(2013, 3, 1),
+     datetime.date(2013, 4, 1),
+     datetime.date(2013, 5, 1),
+     datetime.date(2013, 6, 3),
+     datetime.date(2013, 7, 1),
+     datetime.date(2013, 8, 2),
+     datetime.date(2013, 9, 2),
+     datetime.date(2013, 10, 2),
+     datetime.date(2013, 11, 1),
+     datetime.date(2013, 12, 2)]
     """
     whens = _parse_whens(args)
     if args:
@@ -550,44 +598,57 @@ def _parse_whens(args):
             periods = _parse_periods(args)
             whens += (period[1] if startend == 'end' else period[0] for period in periods)
         else:
+            consumed = []
             try:
-                ordinal = ''
-                which = 1
-                if args[0] != 'last':
-                    which = parse_ordinal(args[0])
-                    ordinal = args.pop(0)
+                if args[0] == 'every':
+                    which = None
+                elif args[0] == 'last':
+                    which = -1
+                else:
+                    which = parse_ordinal(args[0]) - 1
+                consumed.append(args.pop(0))
             except (IndexError, ValueError):
                 whens.append(parse_date(args))
             else:
-                last = ''
-                if args and args[0] == 'last':
-                    last = args.pop(0)
-                if not args:
-                    raise ValueError('missing day name after ' + ' '.join(repr(w) for w in [ordinal, last] if w))
-                weekday = parse_weekday_name(args[0])
-                weekday_name = args.pop(0)
-                of = ''
+                weekdays = set()
+                another = True
+                while another:
+                    another = False
+                    if not args:
+                        raise ValueError('missing day name after ' + ' '.join(repr(w) for w in consumed))
+                    weekday_name = args[0]
+                    if weekday_name.endswith(','):
+                        another = True
+                        weekday_name = weekday_name.rstrip(',')
+                    if weekday_name == 'workday':
+                        weekdays.update([0, 1, 2, 3, 4])
+                    else:
+                        weekdays.add(parse_weekday_name(weekday_name))
+                    consumed.append(args.pop(0))
+                    if args and args[0] == 'or':
+                        another = True
+                        consumed.append(args.pop(0))
                 if args and args[0] in ('in', 'of'):
-                    of = args.pop(0)
+                    consumed.append(args.pop(0))
                 if not args:
-                    raise ValueError('missing period after ' + ' '.join(repr(w) for w in [ordinal, last, weekday_name, of] if w))
+                    raise ValueError('missing period after ' + ' '.join(repr(w) for w in consumed))
                 periods = _parse_periods(args)
                 for start, end in periods:
-                    if last:
-                        day = end - timedelta((start.weekday() - weekday + 7) % 7) - timedelta(7) * (which - 1)
-                        if day < start:
-                            raise ValueError('no %s in period from %s to %s' % (
-                                ' '.join(w for w in [ordinal, last, weekday_name] if w),
-                                start.strftime('%-d/%-m/%Y'),
-                                end.strftime('%-d/%-m/%Y')))
+                    days = []
+                    day = start
+                    while day <= end:
+                        if day.weekday() in weekdays:
+                            days.append(day)
+                        day += timedelta(1)
+                    if which is None:
+                        whens += days
+                    elif which >= len(days):
+                        raise ValueError('no %s in period from %s to %s' % (
+                            ' '.join(consumed),
+                            start.strftime('%-d/%-m/%Y'),
+                            end.strftime('%-d/%-m/%Y')))
                     else:
-                        day = start + timedelta((weekday + 7 - start.weekday()) % 7) + timedelta(7) * (which - 1)
-                        if day > end:
-                            raise ValueError('no %s in period from %s to %s' % (
-                                ' '.join(w for w in [ordinal, weekday_name] if w),
-                                start.strftime('%-d/%-m/%Y'),
-                                end.strftime('%-d/%-m/%Y')))
-                    whens.append(day)
+                        whens.append(days[which])
     return whens
 
 def parse_fromto(args):
