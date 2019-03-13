@@ -448,8 +448,6 @@ class Journal(object):
         cdate = self._parse_date(due.text, relative_to=kwargs['date']) if due else None
         amt = keyline('amt', optional=True)
         amount = self._parse_money(amt) if amt else None
-        if amount is not None and amount == 0:
-            raise ParseException(amt, 'zero amount not allowed: %s' % amount)
         entries = []
         acc = keyline('acc', optional=True)
         account = self._parse_account_label(acc.text)
@@ -485,7 +483,8 @@ class Journal(object):
                 raise ParseException(firstline, 'items (%s) sum below amount (%s) by %s' % (total, amount, amount - total))
         elif entry_noamt is not None:
             raise ParseException(entry_noamt['line'], 'nil entry; items already sum to amount (%s)' % (amount,))
-        entries.append({'line': acc, 'account': account, 'amount': amount * sign, 'cdate': cdate})
+        if amount:
+            entries.append({'line': acc, 'account': account, 'amount': amount * sign, 'cdate': cdate})
         return entries
 
     def _parse_type_invoice(self, firstline, kwargs, keyline):
