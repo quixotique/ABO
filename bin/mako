@@ -4,12 +4,10 @@ import sys
 import os
 import os.path
 
-try:
-    import mako
-except ImportError:
-    abo_lib = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib')
-    sys.path += [abo_lib, os.path.join(abo_lib, 'mako')]
-    import mako
+bin_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+sys.path.remove(bin_dir)
+lib_dir = os.path.join(bin_dir, '..', 'lib')
+sys.path += [os.path.join(lib_dir, 'mako'), lib_dir]
 
 from mako.lookup import TemplateLookup
 from mako.template import Template
