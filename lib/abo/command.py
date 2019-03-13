@@ -184,7 +184,8 @@ def cmd_acc(config, opts):
         # account.
         alacc = invoice_bill_account(chart, entry.transaction)
         if alacc is not None and not alacc.is_cash() and alacc is not common_root_account:
-            desc = '; '.join(filter(len, [alacc.bare_name(), desc]))
+            if not desc.startswith(alacc.bare_name()):
+                desc = '; '.join(filter(len, [alacc.bare_name(), desc]))
         # Prefix the description with the sub-account name.
         if not opts['--short'] and acc is not common_root_account:
             rel = []
