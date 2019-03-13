@@ -9,6 +9,12 @@ import datetime
 from abo.money import Money
 import abo.trybooking.csv_reader as csv_reader
 
+def optional(func):
+    try:
+        return func()
+    except AttributeError:
+        return None
+
 def clean_address(text):
     text = re.sub(r'(\d+)\s*([A-Za-z]{2,})', r'\1 \2', text)
     text = re.sub(r'(\d+)\s+([A-Z])\b', r'\1\2', text)
@@ -25,8 +31,18 @@ def capitalise_words(text):
 def parse_boolean(text):
     return text.strip().lower() in ('yes', 'on', 'true', '1')
 
+def parse_telephone(text):
+    digits = re.sub(r'\D', '', text.strip().lower())
+    if len(digits) == 8:
+        return digits[:4] + ' ' + digits[4:]
+    if len(digits) == 9 and digits[0] == '4':
+        digits = '0' + digits
+    if len(digits) == 11 and digits[:2] == '61':
+        digits = '0' + digits[2:]
+    return re.sub(r'(\d{3})(\d{3})$', ' \\1 \\2', digits)
+
 def parse_optional_text(text):
-    if re.sub(r'[^a-z]', '', text.lower()) in ('', 'no', 'none', 'na', 'nil'):
+    if re.sub(r'[^0-9a-z]', '', text.lower()) in ('', 'no', 'none', 'na', 'nil'):
         return None
     return text
 
@@ -42,8 +58,9 @@ class Booking(object):
                    suburb = capitalise_words(row.booking_suburb),
                    state = row.booking_state.upper(),
                    post_code = int(row.booking_post_code),
-                   telephone = re.sub(r'(\d{3})(\d{3})$', ' \\1 \\2', re.sub(r'\D', '', row.booking_telephone,)),
+                   telephone = parse_telephone(row.booking_telephone),
                    email = row.booking_email,
+                   emergency_contact = optional(lambda: parse_telephone(row.booking_data_emergency_contact)),
                    payment = Money.AUD.from_text(row.payment_received),
                    discount = Money.AUD.from_text(row.discount_amount),
                    processing_fees = Money.AUD.from_text(row.processing_fees),
@@ -60,10 +77,11 @@ class Booking(object):
                        post_code,
                        telephone,
                        email,
+                       emergency_contact,
                        payment,
                        discount,
                        processing_fees,
-                       datetime):
+                       datetime,):
         self.id = id
         self.first_name = first_name
         self.last_name = last_name
@@ -74,6 +92,7 @@ class Booking(object):
         self.post_code = post_code
         self.telephone = telephone
         self.email = email
+        self.emergency_contact = emergency_contact
         self.payment = payment
         self.discount = discount
         self.processing_fees = processing_fees
@@ -100,14 +119,10 @@ class Ticket(object):
 
     @classmethod
     def from_csv_row(cls, row):
-        def optional(func):
-            try:
-                return func()
-            except AttributeError:
-                return None
         return cls( type = row.ticket_type,
                     price = Money.AUD.from_text(row.ticket_price),
-                    name = optional(lambda: row.ticket_data_name),
+                    first_name = capitalise_words(row.ticket_data_attendee_first_name),
+                    last_name = capitalise_words(row.ticket_data_attendee_last_name),
                     age = optional(lambda: int(row.ticket_data_age)),
                     instrument = optional(lambda: capitalise_words(row.ticket_data_instrument)),
                     photo_consent = optional(lambda: parse_boolean(row.ticket_data_photo_consent)),
@@ -116,19 +131,25 @@ class Ticket(object):
 
     def __init__(self, type,
                        price,
-                       name = None,
+                       first_name,
+                       last_name,
                        age = None,
                        instrument = None,
                        photo_consent = None,
                        health_concerns = None):
         self.type = type
         self.price = price
-        self.name = name
+        self.first_name = first_name
+        self.last_name = last_name
         self.age = age
         self.instrument = instrument
         self.photo_consent = photo_consent
         self.health_concerns = health_concerns
         self._booking = None
+
+    @property
+    def name(self):
+        return ' '.join(filter(bool, [self.first_name, self.last_name]))
 
     @property
     def booking(self):
