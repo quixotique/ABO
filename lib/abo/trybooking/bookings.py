@@ -31,6 +31,9 @@ def capitalise_words(text):
 def parse_boolean(text):
     return text.strip().lower() in ('yes', 'on', 'true', '1')
 
+def extract_int(text):
+    return int(re.sub(r'\D*(\d+).*', r'\1', text))
+
 def parse_telephone(text):
     digits = re.sub(r'\D', '', text.strip().lower())
     if len(digits) == 8:
@@ -123,7 +126,7 @@ class Ticket(object):
                     price = Money.AUD.from_text(row.ticket_price),
                     first_name = capitalise_words(row.ticket_data_attendee_first_name),
                     last_name = capitalise_words(row.ticket_data_attendee_last_name),
-                    age = optional(lambda: int(row.ticket_data_age)),
+                    age = optional(lambda: extract_int(row.ticket_data_age)),
                     instrument = optional(lambda: capitalise_words(row.ticket_data_instrument)),
                     photo_consent = optional(lambda: parse_boolean(row.ticket_data_photo_consent)),
                     health_concerns = optional(lambda: parse_optional_text(row.ticket_data_health_concerns)),
