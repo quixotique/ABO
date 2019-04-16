@@ -166,6 +166,17 @@ class Bookings(object):
     def __init__(self):
         self._bookings = []
         self._tickets = []
+        sys.path.append('.')
+        try:
+            import extra_bookings
+            extra_bookings.main(self)
+            self._sort()
+        except ImportError:
+            pass
+
+    def _sort(self):
+        self._tickets.sort(key= lambda t: (t.booking.datetime, t.name))
+        self._bookings.sort(key= lambda b: b.datetime)
 
     def read_csv(self, path):
         reader = csv_reader.reader(open(path, newline='', encoding='utf-8-sig'))
@@ -180,9 +191,13 @@ class Bookings(object):
                 booking_by_id[booking.id] = booking
                 self._bookings.append(booking)
             booking.add_ticket(ticket)
-        self._tickets.sort(key= lambda t: (t.booking.datetime, t.name))
-        self._bookings.sort(key= lambda b: b.datetime)
+        self._sort()
         return self
+
+    def add_booking(self, booking):
+        self._bookings.append(booking)
+        for ticket in booking.tickets:
+            self._tickets.append(ticket)
 
     @property
     def tickets(self):
