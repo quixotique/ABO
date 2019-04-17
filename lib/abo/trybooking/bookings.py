@@ -9,11 +9,11 @@ import datetime
 from abo.money import Money
 import abo.trybooking.csv_reader as csv_reader
 
-def optional(func):
+def optional(func, fallback=None):
     try:
         return func()
     except AttributeError:
-        return None
+        return fallback
 
 def clean_address(text):
     text = re.sub(r'(\d+)\s*([A-Za-z]{2,})', r'\1 \2', text)
@@ -67,7 +67,7 @@ class Booking(object):
                    payment = Money.AUD.from_text(row.payment_received),
                    discount = Money.AUD.from_text(row.discount_amount),
                    processing_fees = Money.AUD.from_text(row.processing_fees),
-                   datetime = datetime.datetime.strptime(row.date_booked + ' ' + row.time_booked, '%d/%m/%Y %I:%M:%S %p')
+                   datetime = datetime.datetime.strptime(row.date_booked + ' ' + row.time_booked, '%d/%m/%Y %I:%M:%S %p'),
                 )
 
     def __init__(self, id,
@@ -84,7 +84,8 @@ class Booking(object):
                        payment,
                        discount,
                        processing_fees,
-                       datetime,):
+                       datetime
+                ):
         self.id = id
         self.first_name = first_name
         self.last_name = last_name
@@ -130,6 +131,7 @@ class Ticket(object):
                     instrument = optional(lambda: capitalise_words(row.ticket_data_instrument)),
                     photo_consent = optional(lambda: parse_boolean(row.ticket_data_photo_consent)),
                     health_concerns = optional(lambda: parse_optional_text(row.ticket_data_health_concerns)),
+                    void = optional(lambda: parse_boolean(row.void), False)
                 )
 
     def __init__(self, type,
@@ -139,7 +141,8 @@ class Ticket(object):
                        age = None,
                        instrument = None,
                        photo_consent = None,
-                       health_concerns = None):
+                       health_concerns = None,
+                       void = False):
         self.type = type
         self.price = price
         self.first_name = first_name
@@ -148,6 +151,7 @@ class Ticket(object):
         self.instrument = instrument
         self.photo_consent = photo_consent
         self.health_concerns = health_concerns
+        self.void = void
         self._booking = None
 
     @property
