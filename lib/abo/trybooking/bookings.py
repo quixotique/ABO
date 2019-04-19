@@ -20,6 +20,10 @@ def clean_address(text):
     text = re.sub(r'(\d+)\s+([A-Z])\b', r'\1\2', text)
     return text
 
+def clean_money(text):
+    text = re.sub(r'(\d+\.\d\d)00', r'\1', text)
+    return text
+
 def capitalise_word(word):
     if re.fullmatch(r'\d+[A-Za-z]', word):
         return word.upper()
@@ -97,9 +101,13 @@ class Booking(object):
         self.telephone = telephone
         self.email = email
         self.emergency_contact = emergency_contact
-        self.payment = payment
-        self.discount = discount
-        self.processing_fees = processing_fees
+        self._payment = payment
+        self._real_payment = None
+        self._discount = discount
+        self._real_discount = None
+        self._processing_fees = processing_fees
+        self._real_processing_fees = None
+        self._refund = None
         self.datetime = datetime
         self._tickets = []
 
@@ -109,12 +117,51 @@ class Booking(object):
         self._tickets.append(ticket)
 
     @property
-    def tickets(self):
-        return iter(self._tickets)
+    def payment(self):
+        # Trybooking omits refunded tickets it its reported booking payment, so reconstruct the
+        # original payment by summing all the ticket prices, less their discounts, and less the
+        # (correct) processing fees.
+        if self._real_payment is None:
+            self._real_payment = sum(t.price - t.discount for t in self._tickets) - self.processing_fees
+            if self._payment != self._real_payment:
+                print(f'correct payment {self._payment} to {self._real_payment}: {self.first_name} {self.last_name} {self.datetime.date()}', file=sys.stderr)
+        return self._real_payment
 
     @property
-    def ticket_count(self):
-        return len(self._tickets)
+    def discount(self):
+        # A booking's discount should equal the sum of the discounts of all its tickets, including
+        # refunded ones.
+        if self._real_discount is None:
+            self._real_discount = sum(t.discount for t in self._tickets)
+            if self._discount != self._real_discount:
+                print(f'correct discount {self._discount} to {self._real_discount}: {self.first_name} {self.last_name} {self.datetime.date()}', file=sys.stderr)
+        return self._real_discount
+
+    @property
+    def processing_fees(self):
+        if self._real_processing_fees is None:
+            # Trybooking sometimes reports an erroneous processing fees amount (out by 0.01), so
+            # calculate the correct processing fees by summing the prices of all non-refunded
+            # tickets, less their discounts, and taking the difference between that and the reported
+            # booking payment, which is correct.
+            calculated_payment = sum(t.price - t.discount for t in self._tickets if not t.refunded)
+            self._real_processing_fees = calculated_payment - self._payment
+            if self._processing_fees != self._real_processing_fees:
+                print(f'correct processing fee {self._processing_fees} to {self._real_processing_fees}: {self.first_name} {self.last_name} {self.datetime.date()}', file=sys.stderr)
+        return self._real_processing_fees
+
+    @property
+    def refund(self):
+        # The refunded amount is the difference between the original payment and the reported
+        # payment.
+        if self._refund is None:
+            self._refund = self.payment - self._payment
+            print(f'calculate refund of {self._refund}: {self.first_name} {self.last_name}', file=sys.stderr)
+        return self._refund
+
+    @property
+    def tickets(self):
+        return list(self._tickets)
 
     def __repr__(self):
         return self.__class__.__name__ + '(' + ', '.join('%s=%r' % (a, v) for a, v in self.__dict__.items() if not a.startswith('_')) + ')'
@@ -122,29 +169,45 @@ class Booking(object):
 class Ticket(object):
 
     @classmethod
-    def from_csv_row(cls, row):
+    def from_csv_row(cls, row, discount_codes={}):
+        price = Money.AUD.from_text(row.ticket_price)
+        code = row.promotion_discount_code
+        discount = discount_codes[code] if code else Money.AUD(0)
+        # Trybooking omits the discount from the ticket price and the refunded amount if a refund
+        # has been made, so we have to deduce the original ticket price ourselves.
+        refunded = optional(lambda: row.ticket_status.strip().lower() == 'refunded', False)
+        refunded_amount = None
+        if refunded:
+            refunded_amount = Money.AUD.from_text(clean_money(row.ticket_refunded_amount)) - discount
         return cls( type = row.ticket_type,
-                    price = Money.AUD.from_text(row.ticket_price),
+                    price = price,
+                    discount = discount,
                     first_name = capitalise_words(row.ticket_data_attendee_first_name),
                     last_name = capitalise_words(row.ticket_data_attendee_last_name),
                     age = optional(lambda: extract_int(row.ticket_data_age)),
                     instrument = optional(lambda: capitalise_words(row.ticket_data_instrument)),
                     photo_consent = optional(lambda: parse_boolean(row.ticket_data_photo_consent)),
                     health_concerns = optional(lambda: parse_optional_text(row.ticket_data_health_concerns)),
-                    void = optional(lambda: parse_boolean(row.void), False)
+                    void = optional(lambda: parse_boolean(row.void), False),
+                    refunded = refunded,
+                    refunded_amount = refunded_amount,
                 )
 
     def __init__(self, type,
                        price,
+                       discount,
                        first_name,
                        last_name,
                        age = None,
                        instrument = None,
                        photo_consent = None,
                        health_concerns = None,
-                       void = False):
+                       void = False,
+                       refunded = False,
+                       refunded_amount = None):
         self.type = type
         self.price = price
+        self.discount = discount
         self.first_name = first_name
         self.last_name = last_name
         self.age = age
@@ -152,6 +215,8 @@ class Ticket(object):
         self.photo_consent = photo_consent
         self.health_concerns = health_concerns
         self.void = void
+        self.refunded = refunded
+        self.refunded_amount = refunded_amount
         self._booking = None
 
     @property
@@ -167,9 +232,11 @@ class Ticket(object):
 
 class Bookings(object):
 
-    def __init__(self):
+    def __init__(self, with_extra_bookings=True):
+        self._with_extra_bookings = with_extra_bookings
         self._bookings = []
         self._tickets = []
+        self._discount_codes = {}
         sys.path.append('.')
         try:
             import extra_bookings
@@ -178,15 +245,15 @@ class Bookings(object):
         except ImportError:
             pass
 
-    def _sort(self):
-        self._tickets.sort(key= lambda t: (t.booking.datetime, t.name))
-        self._bookings.sort(key= lambda b: b.datetime)
+    def add_discount_code(self, code, amount):
+        assert code != ''
+        self._discount_codes[code] = Money.AUD(amount)
 
     def read_csv(self, path):
         reader = csv_reader.reader(open(path, newline='', encoding='utf-8-sig'))
         booking_by_id = dict()
         for row in reader:
-            ticket = Ticket.from_csv_row(row)
+            ticket = Ticket.from_csv_row(row, self._discount_codes)
             booking = Booking.from_csv_row(row)
             self._tickets.append(ticket)
             if booking.id in booking_by_id:
@@ -198,10 +265,15 @@ class Bookings(object):
         self._sort()
         return self
 
-    def add_booking(self, booking):
-        self._bookings.append(booking)
-        for ticket in booking.tickets:
-            self._tickets.append(ticket)
+    def add_extra_booking(self, booking):
+        if self._with_extra_bookings:
+            self._bookings.append(booking)
+            for ticket in booking.tickets:
+                self._tickets.append(ticket)
+
+    def _sort(self):
+        self._tickets.sort(key= lambda t: (t.booking.datetime, t.name))
+        self._bookings.sort(key= lambda b: b.datetime)
 
     @property
     def tickets(self):
