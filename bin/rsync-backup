@@ -1,0 +1,210 @@
+#!/bin/bash
+#
+# Perform incremental rsync backup copy of the given labelled directory trees
+# on the given hosts (default local).
+
+set -e
+shopt -s extglob nullglob lastpipe
+
+usage() {
+    echo "Usage: Push: ${0##*/} [-n] [-q] [RSYNC-OPTS] [--] [[USER@]HOST:]DESTDIR              LABEL[=SOURCEDIR] ..."
+    echo "       Pull: ${0##*/} [-n] [-q] [RSYNC-OPTS] [--]               DESTDIR [[USER@]HOST:LABEL[=SOURCEDIR] ..."
+}
+
+main() {
+    OPT_ECHO=true
+    OPT_TEST=false
+    OPT_DRY_RUN=false
+    OPTS_RSYNC=()
+    while [[ $# -ne 0 ]]; do
+            case "$1" in
+            -h|-\?|--help) usage; exit 0;;
+            -t) OPT_TEST=true;;
+            -n) OPT_DRY_RUN=true;;
+            -q) OPT_ECHO=false;;
+            -*) OPTS_RSYNC+=("$1");;
+            --) shift; break;;
+            *) break;;
+            esac
+            shift
+    done
+
+    LOCAL_HOST_FQ="$(/bin/hostname --fqdn)"
+    [[ -n $LOCAL_HOST_FQ ]] || fatal "cannot determine default hostname"
+
+    [[ $# -ge 2 ]] || fatal_usage "missing argument(s)"
+    parse_rsync_endpoint DEST "$1" # sets DESTUSER DESTHOSTFQ DESTHOST DESTDIR
+    [[ -z $DESTHOST && ! -d $DESTDIR ]] && fatal "missing destination directory: $DESTDIR"
+    shift
+
+    DATEREXP='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+    DATE=`/bin/date '+%Y-%m-%d'` || exit 2
+    ERR="/tmp/${0##*/}-$$.err"
+
+    PASSWORD=
+    if [[ $DESTHOSTFQ != $LOCAL_HOST_FQ ]]; then
+        read -s -p "Password for $DESTUSER@$DESTHOST:" PASSWORD
+        echo >&2
+    fi
+
+    SRCPATHS=()
+    for src
+    do
+        local SRCUSER
+        local SRCHOSTFQ
+        local SRCHOST
+        local SRCDIR
+        parse_rsync_endpoint SRC "$src" # sets SRCUSER SRCHOSTFQ SRCHOST SRCDIR
+
+        if [[ $DESTHOSTFQ != $LOCAL_HOST_FQ && $SRCHOSTFQ != $LOCAL_HOST_FQ ]]; then
+            fatal_usage "cannot push to remote destination from remote source: $src"
+        fi
+
+        local SRCLABEL="$SRCDIR"
+        local SRCPATH
+
+        case "$SRCDIR" in
+        ?*=*)   SRCPATH="${SRCDIR#*=}"
+                SRCPATH="${SRCPATH%%+(/)}"
+                SRCLABEL="${SRCDIR%%=*}"
+                ;;
+        boot)   SRCPATH=/boot;;
+        etc)    SRCPATH=/etc;;
+        root)   SRCPATH=/;;
+        home)   SRCPATH=/home;;
+        bulk)   SRCPATH=/bulk;;
+        music)  SRCPATH=/bulk/media/Music;;
+        photos) SRCPATH=/bulk/media/Photos;;
+        *)      fatal "unsupported label: $SRCDIR";;
+        esac
+
+        [[ $SRCHOSTFQ = $LOCAL_HOST_FQ && ! -d $SRCPATH ]] && fatal "missing source directory: $SRCPATH"
+
+        LINK_DEST=-
+        if [[ $DESTHOSTFQ = $LOCAL_HOST_FQ ]]; then
+            if pushd "$DESTDIR" >/dev/null 2>/dev/null; then
+                local prev="$(ls -r | sed -n -e "/-$DATE-/d;/^$SRCHOST-$DATEREXP-$SRCLABEL\$/{p;q}")"
+                [[ -d $prev ]] && LINK_DEST="$prev"
+                popd >/dev/null
+            fi
+        else
+            local rsync_output
+            rsync_output="$(echo "$PASSWORD" | rsync --password-file - "$DESTUSER@$DESTHOSTFQ::$DESTDIR/")" || fatal "rsync failed"
+            local prev="$(echo "$rsync_output" |
+                          sed -n -e "/-$DATE-/d;s/^.* \($SRCHOST-$DATEREXP-$SRCLABEL\)\$/\1/p" |
+                          sort -r |
+                          head -n 1)"
+            [[ -n $prev ]] && LINK_DEST="$prev"
+        fi
+
+        SRCPATHS+=("$SRCUSER $SRCHOST $SRCHOSTFQ $SRCLABEL ${LINK_DEST:--} $SRCPATH")
+    done
+
+    for src in "${SRCPATHS[@]}"; do
+        echo "$src"
+    done |
+    while read SRCUSER SRCHOST SRCHOSTFQ SRCLABEL LINK_DEST SRCPATH; do
+        #echo "SRCUSER=$SRCUSER SRCHOST=$SRCHOST SRCHOSTFQ=$SRCHOSTFQ SRCLABEL=$SRCLABEL LINK_DEST=$LINK_DEST SRCPATH=$SRCPATH"
+
+        local src
+        local dst
+        local opts
+
+        opts=()
+        if $OPT_DRY_RUN; then
+            opts+=("--dry-run")
+        fi
+
+        src="$SRCPATH"
+        if [[ $SRCHOSTFQ != $LOCAL_HOST_FQ ]]; then
+            src="$SRCUSER@$SRCHOSTFQ::$src"
+        fi
+
+        dst="$DESTDIR/$SRCHOST-$DATE-$SRCLABEL"
+        if [[ $DESTHOSTFQ != $LOCAL_HOST_FQ ]]; then
+            dst="$DESTUSER@$DESTHOSTFQ::$dst"
+            opts+=("--password-file" "-")
+        fi
+
+        if [[ -n $LINK_DEST && $LINK_DEST != - ]]; then
+            opts+=("--link-dest=../$LINK_DEST/")
+        fi
+
+        if ! echo "$PASSWORD" |
+             run rsync --verbose --human-readable \
+                --one-file-system --archive --hard-links --inplace --delete \
+                --exclude '/lost+found' --delete-excluded \
+                --filter="dir-merge,- .rsync-backup-exclude" \
+                "${opts[@]}" "${OPTS_RSYNC[@]}" "$src/" "$dst/" \
+                2>"$ERR"
+        then
+            rsync_stat=$?
+            echo "exit status $rsync_stat"
+            return $rsync_stat
+        fi
+
+        cat "$ERR" >&2
+        echo
+    done
+}
+
+parse_rsync_endpoint() {
+    local -n __user="${1}USER"
+    local -n __hostfq="${1}HOSTFQ"
+    local -n __host="${1}HOST"
+    local -n __dir="${1}DIR"
+    case "$2" in
+    ?*:*)
+        __dir="${2#*:}"
+        __user="$LOGNAME"
+        __host="${2%%:*}"
+        case "$__host" in
+        *@*) __user="${__host%%@*}"; __host="${__host#*@}";;
+        esac
+        __hostfq="$(fqdn "$__host")" || fatal "cannot resolve host: $__host"
+        ;;
+    *)
+        __user="$LOGNAME"
+        __hostfq="$LOCAL_HOST_FQ"
+        __host="${__hostfq%%.*}"
+        __dir="$2"
+        ;;
+    esac
+}
+
+fatal() {
+    echo "${0##*/}: $1" >&2
+    shift
+    for arg; do echo "$arg" >&2; done
+    exit 1
+}
+
+fatal_usage() {
+    fatal "$1" "See \`${0##*/} --help' for more information."
+}
+
+run()
+{
+    if $OPT_ECHO; then
+        echo -n +
+        printf ' %q' "$@"
+        echo
+    fi
+    if $OPT_TEST; then
+        :
+    else
+        "$@"
+    fi
+}
+
+fqdn()
+{
+    if result=$(/usr/bin/host "$1"); then
+        case "$result" in
+        ?*" has address "*) echo "${result% has address *}"; return 0;;
+        esac
+    fi
+    return 1
+}
+
+main "$@"
