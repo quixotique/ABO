@@ -100,10 +100,16 @@ main() {
         SRCPATHS+=("$SRCUSER $SRCHOST $SRCHOSTFQ $SRCLABEL ${LINK_DEST:--} $SRCPATH")
     done
 
-    for src in "${SRCPATHS[@]}"; do
-        echo "$src"
-    done |
-    while read SRCUSER SRCHOST SRCHOSTFQ SRCLABEL LINK_DEST SRCPATH; do
+    local line
+    for line in "${SRCPATHS[@]}"; do
+	set -- $line
+	[[ $# -eq 6 ]] || fatal "Bug: \$#=$# \$line=$line"
+        SRCUSER="$1"
+	SRCHOST="$2"
+	SRCHOSTFQ="$3"
+	SRCLABEL="$4"
+	LINK_DEST="$5"
+	SRCPATH="$6"
         #echo "SRCUSER=$SRCUSER SRCHOST=$SRCHOST SRCHOSTFQ=$SRCHOSTFQ SRCLABEL=$SRCLABEL LINK_DEST=$LINK_DEST SRCPATH=$SRCPATH"
 
         local src
