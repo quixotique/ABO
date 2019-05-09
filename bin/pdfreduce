@@ -87,8 +87,6 @@ run gs \
       -sDEVICE=pdfwrite \
       -sOutputFile="$tmp" \
       -dCompatibilityLevel=1.4 -dNOPAUSE -dQUIET -dBATCH \
-      -sDownsampleColorImages=true \
-      -sColorConversionStrategy=/sRGB \
       ${quality:+-"dPDFSETTINGS=/$quality"} \
       ${resolution:+-"sColorImageResolution=$resolution"} \
       "$src"
