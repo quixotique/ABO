@@ -296,7 +296,7 @@ class Transaction(abo.base.Base):
         date, description, and list of Entry objects.
         """
         assert date is not None, 'missing date'
-        assert len(entries) >= 2, 'too few entries'
+        assert len(entries) >= 2, 'too few entries: %r' % (entries,)
         self.date = date
         self.edate = edate if edate is not None else date
         self.who = who
@@ -461,7 +461,7 @@ class Transaction(abo.base.Base):
         """
         entry_map = defaultdict(lambda: [])
         for e in self.entries:
-            entry_map[(e.cdate, e.account)].append(e)
+            entry_map[(e.cdate, e.account, sign(e.amount))].append(e)
         if max(map(len, entry_map.values())) == 1:
             return self
         reduced_entries = []
