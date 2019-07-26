@@ -104,7 +104,7 @@ def print_task_report(result):
     print fmt % (('',) + ('--------',) * (len(result.reported) + 2))
     total_spent = 0
     total_reported = [0] * len(result.reported)
-    for label in sorted(result.all_labels):
+    for label in sorted(result.all_labels, key=label_sort_key):
         spent_minutes = result.spent.labels.get(label)
         report_minutes = [v.labels.get(label) for v in result.reported.values()]
         total_spent += spent_minutes or 0
@@ -589,6 +589,11 @@ class Range(object):
         tr.end_minutes = endtime
         tr.minutes = endtime - starttime
         return tr
+
+_re_label_sort_key = re.compile(r'([A-Za-z_]+|\d+|[^A-Za-z_\d]+)')
+
+def label_sort_key(label):
+    return [(int(p) if p.isdecimal() else p.lower() if p.isalpha() else '') for p in _re_label_sort_key.split(label)]
 
 if __name__ == '__main__':
     main()
