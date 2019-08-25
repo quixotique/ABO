@@ -40,10 +40,7 @@ class Currency(object):
     """
 
     def __new__(cls, code, local_frac_digits=0, local_symbol=None, local_symbol_precedes=False, local_symbol_separated_by_space=False):
-        try:
-            currency = pycountry.currencies.get(alpha_3=code)
-        except KeyError:
-            currency = None
+        currency = pycountry.currencies.get(alpha_3=code)
         if not currency:
             raise ValueError('invalid ISO 4217 currency code: %r' % (code,))
         code = str(code)
@@ -161,16 +158,12 @@ class Currency(object):
         >>> Currency.extract_code('$AUD 100.71')
         (None, '$AUD 100.71')
         '''
-        try:
-            if pycountry.currencies.get(alpha_3=text[:3]).alpha_3 == text[:3]:
-                return str(text[:3]), text[3:].lstrip()
-        except KeyError:
-            pass
-        try:
-            if pycountry.currencies.get(alpha_3=text[-3:]).alpha_3 == text[-3:]:
-                return str(text[-3:]), text[:-3].rstrip()
-        except KeyError:
-            pass
+        currency = pycountry.currencies.get(alpha_3=text[:3])
+        if currency is not None and currency.alpha_3 == text[:3]:
+            return str(text[:3]), text[3:].lstrip()
+        currency = pycountry.currencies.get(alpha_3=text[-3:])
+        if currency is not None and currency.alpha_3 == text[-3:]:
+            return str(text[-3:]), text[:-3].rstrip()
         return None, text
 
     @classmethod
