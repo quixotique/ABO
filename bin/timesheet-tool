@@ -98,22 +98,32 @@ def print_calendar_report(result):
 
 def print_task_report(result):
     w = str(max(map(len, result.all_labels)))
-    fmt = '%-' + w + '.' + w + 's ' + ' %8.8s' * (len(result.reported) + 2)
+    fmt = '%-' + w + '.' + w + 's ' + ' %8.8s' * (len(result.reported) + 3)
     print
-    print fmt % (('', 'Spent', 'Reported') + tuple(result.reported))
-    print fmt % (('',) + ('--------',) * (len(result.reported) + 2))
+    print fmt % (('', 'Spent', 'Reported', 'Unreport') + tuple(result.reported))
+    print fmt % (('',) + ('--------',) * (len(result.reported) + 3))
     total_spent = 0
+    total_unreported = 0
     total_reported = [0] * len(result.reported)
     for label in sorted(result.all_labels, key=label_sort_key):
         spent_minutes = result.spent.labels.get(label)
         report_minutes = [v.labels.get(label) for v in result.reported.values()]
         total_spent += spent_minutes or 0
         total_reported = [t + (m or 0) for t, m in zip(total_reported, report_minutes)]
+        unreported_minutes = spent_minutes
         if [m for m in [spent_minutes] + report_minutes if m]:
             reported_minutes = sum(m or 0 for m in report_minutes) or None
-            print fmt % ((label, format_duration_or_none(spent_minutes), format_duration_or_none(reported_minutes)) + tuple(format_duration_or_none(m) for m in report_minutes))
-    print fmt % (('',) + ('--------',) * (len(result.reported) + 2))
-    print fmt % (('TOTAL', Duration.format(total_spent), Duration.format(sum(total_reported))) + tuple(Duration.format(t) for t in total_reported))
+            unreported_minutes = (spent_minutes or 0) - (reported_minutes or 0) or None
+            print fmt % ((label, format_duration_or_none(spent_minutes),
+                                 format_duration_or_none(reported_minutes),
+                                 format_duration_or_none(unreported_minutes)) +
+                                 tuple(format_duration_or_none(m) for m in report_minutes))
+        total_unreported += unreported_minutes or 0
+    print fmt % (('',) + ('--------',) * (len(result.reported) + 3))
+    print fmt % (('TOTAL', Duration.format(total_spent),
+                           Duration.format(sum(total_reported)),
+                           Duration.format(total_unreported)) +
+                           tuple(Duration.format(t) for t in total_reported))
 
 class Line(unicode):
 
