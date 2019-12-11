@@ -20,7 +20,7 @@ class Line(object):
         return '{0.tag}{0.pre}{0.amount}{0.post}'.format(self)
 
 
-_re_new = re.compile(r'^(\s+\S+\s{2,})' + _rexp_aud + r'(.*)$')
+_re_new = re.compile(r'^(\s+(?:\S+\s)+\s+)' + _rexp_aud + r'(.*)$')
 
 def parse_new(text):
     m = _re_new.match(text)
