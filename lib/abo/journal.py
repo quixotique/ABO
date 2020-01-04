@@ -24,6 +24,8 @@
 ... item income at last
 ... amt 100
 ...
+... %end defaults
+...
 ... type bill
 ... date 18/3/2013
 ... who Another body
@@ -48,12 +50,14 @@
 ... date 17/4/2013
 ... what Receipt text
 ... acc account1
+... bank cash
 ... amt 55.65
 ...
 ... type remittance
 ... date 18/4/2013=30/6/2012
 ... what Remittance text
 ... acc account2
+... bank cash
 ... amt 81.11
 ...
 ... 7/5/2013=1/1/2013 Somebody; =second Modern text =first
@@ -78,12 +82,12 @@
              Entry(account='gst', amount=Money.AUD(-8.12)),
              Entry(account='account two', amount=Money.AUD(81.18)))),
  Transaction(date=datetime.date(2013, 4, 17),
-    who='Some body', what='Receipt text',
+    what='Receipt text',
     entries=(Entry(account='cash', amount=Money.AUD(-55.65)),
              Entry(account='account1', amount=Money.AUD(55.65)))),
  Transaction(date=datetime.date(2013, 4, 18),
     edate=datetime.date(2012, 6, 30),
-    who='Some body', what='Remittance text',
+    what='Remittance text',
     entries=(Entry(account='account2', amount=Money.AUD(-81.11)),
              Entry(account='cash', amount=Money.AUD(81.11)))),
  Transaction(date=datetime.date(2013, 5, 7),
@@ -248,6 +252,8 @@ class Journal(object):
                         if not in_projection:
                             raise ParseException(line, 'unexpected %end projection (missing %projection?)')
                         in_projection = False
+                    elif words[1] == 'defaults':
+                        defaults = copy.deepcopy(template)
                     else:
                         raise ParseException(line, 'unsupported %end argument')
                 if words[0].startswith('%'):
