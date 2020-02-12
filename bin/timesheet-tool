@@ -562,9 +562,13 @@ class Duration(object):
 
     @staticmethod
     def format(minutes):
+        sign = ''
+        if minutes < 0:
+            sign = '-'
+            minutes = -minutes
         h = minutes // 60
         m = minutes % 60
-        return '%u:%02u' % (h, m)
+        return '%s%u:%02u' % (sign, h, m)
         #hs = 's' if h != 1 else ''
         #ms = 's' if m != 1 else ''
         #mstr = ' %u minute%s' % (m, ms) if m else ''
