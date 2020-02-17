@@ -120,10 +120,10 @@ def print_task_report(result):
                                  tuple(format_duration_or_none(m) for m in report_minutes))
         total_unreported += unreported_minutes or 0
     print fmt % (('',) + ('--------',) * (len(result.reported) + 3))
-    print fmt % (('TOTAL', Duration.format(total_spent),
-                           Duration.format(sum(total_reported)),
-                           Duration.format(total_unreported)) +
-                           tuple(Duration.format(t) for t in total_reported))
+    print fmt % (('TOTAL', format_duration_or_none(total_spent or None),
+                           format_duration_or_none(sum(total_reported) or None),
+                           format_duration_or_none(total_unreported or None)) +
+                           tuple(format_duration_or_none(t or None) for t in total_reported))
 
 class Line(unicode):
 
