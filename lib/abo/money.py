@@ -293,19 +293,21 @@ class Currency(object):
     def quantize(self, amount):
         r'''Convert the given number into a Decimal value with the correct
         number of decimal places for this currency.  Raise ValueError if the
-        given amount would have to be rounded (ie, has too many decimal
-        places).
+        given amount would have to be rounded by more than epsilon (ie, has too
+        many decimal places).
         >>> Currency.AUD.quantize(1)
         Decimal('1.00')
         >>> Currency.AUD.quantize(1.01)
         Decimal('1.01')
+        >>> Currency.AUD.quantize(1.13)
+        Decimal('1.13')
         >>> Currency.AUD.quantize(1.011)
         Traceback (most recent call last):
         ValueError: invalid literal for Currency.AUD: 1.011
         '''
         try:
             if isinstance(amount, float):
-                tmp = self.float_context.create_decimal_from_float(amount)
+                tmp = self.float_context.create_decimal(str(amount))
             else:
                 tmp = amount
             return self.decimal_context.quantize(tmp, self.zero)
@@ -362,8 +364,10 @@ class Money(object):
     >>> AUD(140)
     AUD(140.00)
     >>> AUD(140.01)
+    AUD(140.01)
+    >>> AUD(140.001)
     Traceback (most recent call last):
-    ValueError: invalid literal for Currency.AUD: 140.01
+    ValueError: invalid literal for Currency.AUD: 140.001
     >>> AUD.from_text('140.01')
     Money.AUD(140.01)
     >>> AUD(70) + AUD(30)
