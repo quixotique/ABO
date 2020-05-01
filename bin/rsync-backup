@@ -89,7 +89,7 @@ main() {
             fi
         else
             local rsync_output
-            rsync_output="$(echo "$PASSWORD" | rsync --password-file - "$DESTUSER@$DESTHOSTFQ::$DESTDIR/")" || fatal "rsync failed"
+            rsync_output="$(echo "$PASSWORD" | run rsync --password-file - "$DESTUSER@$DESTHOSTFQ::$DESTDIR/")" || fatal "rsync failed"
             local prev="$(echo "$rsync_output" |
                           sed -n -e "/-$DATE-/d;s/^.* \($SRCHOST-$DATEREXP-$SRCLABEL\)\$/\1/p" |
                           sort -r |
@@ -189,12 +189,14 @@ fatal_usage() {
     fatal "$1" "See \`${0##*/} --help' for more information."
 }
 
+exec 5>&1
+
 run()
 {
     if $OPT_ECHO; then
-        echo -n +
-        printf ' %q' "$@"
-        echo
+        echo -n + >&5
+        printf ' %q' "$@" >&5
+        echo >&5
     fi
     if $OPT_TEST; then
         :
@@ -205,9 +207,14 @@ run()
 
 fqdn()
 {
-    if result=$(/usr/bin/host "$1"); then
+    if result=$(/bin/ping -c 1 -w 1 "$1"); then
         case "$result" in
-        ?*" has address "*) echo "${result% has address *}"; return 0;;
+        "PING "*" ("[0-9]*)
+            result="${result#PING }"
+            result="${result%%[ (]*}"
+            echo "$result"
+            return 0
+            ;;
         esac
     fi
     return 1
