@@ -31,7 +31,7 @@ def boolean(value):
 def parse_json_date_time(text):
     # Trybooking represents all date/time values in the UTC time zone.  Return
     # a datetime object that is in the local time zone.
-    return datetime.datetime.strptime(text, r'%Y-%m-%dT%H:%M:%S') \
+    return datetime.datetime.strptime(text, r'%Y-%m-%dT%H:%M:%SZ') \
                 .replace(tzinfo=datetime.timezone.utc) \
                 .astimezone()
 
@@ -61,8 +61,8 @@ def capitalise_words(text):
 def parse_boolean(text):
     return text.strip().lower() in ('yes', 'on', 'true', '1')
 
-def extract_int(text):
-    return int(re.sub(r'\D*(\d+).*', r'\1', text))
+def extract_int(value):
+    return int(re.sub(r'\D*(\d+).*', r'\1', value)) if isinstance(value, str) else int(value)
 
 def parse_telephone(text):
     digits = re.sub(r'\D', '', text.strip().lower())
@@ -162,7 +162,6 @@ class Event(object):
                     contact_name =       json_data['contactName'],
                     contact_email =      json_data['contactEmail'],
                     contact_phone =      json_data['contactNumber'],
-                    contact_person =     json_data['contactPerson'],
                     is_public =          json_data['isPublic'],
                     is_open =            json_data['isOpen'],
                     allow_waiting_list = json_data['allowWaitingList'],
@@ -182,7 +181,6 @@ class Event(object):
                        contact_name,
                        contact_email,
                        contact_phone,
-                       contact_person,
                        is_public,
                        is_open,
                        allow_waiting_list,
@@ -196,7 +194,6 @@ class Event(object):
         self.contact_name = contact_name
         self.contact_email = contact_email
         self.contact_phone = parse_telephone(contact_phone)
-        self.contact_person = contact_person
         self.is_public = boolean(is_public)
         self.is_open = boolean(is_open)
         self.allow_waiting_list = boolean(allow_waiting_list)
@@ -300,7 +297,7 @@ class Booking(object):
                    telephone =          row.booking_telephone,
                    email =              row.booking_email,
                    emergency_contact =  row.booking_data_emergency_contact,
-                   payment =            Money.AUD.from_text(row.payment_received),
+                   payment =            Money.AUD.from_text(row.net_booking),
                    discount =           Money.AUD.from_text(row.discount_amount),
                    processing_fees =    Money.AUD.from_text(row.processing_fees),
                 )
@@ -329,7 +326,7 @@ class Booking(object):
         self.address_2 = capitalise_words(clean_address(address_2))
         self.suburb = capitalise_words(suburb)
         self.state = state.upper()
-        self.post_code = int(post_code)
+        self.post_code = int(post_code) if post_code else None
         self.telephone = parse_telephone(telephone)
         self.email = email
         self.emergency_contact = optional(lambda: parse_telephone(emergency_contact))
