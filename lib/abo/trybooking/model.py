@@ -4,10 +4,13 @@ import sys
 import os
 import re
 import datetime
+import logging
 import inspect
 
 from abo.money import Money
+import abo.trybooking.config as config
 import abo.trybooking.csv_reader as csv_reader
+import abo.trybooking.client as trybooking_client
 
 def non_blank_str(text):
     if not isinstance(text, str):
@@ -40,6 +43,9 @@ def optional(func, fallback=None):
         return func()
     except AttributeError:
         return fallback
+
+def clean_name(text):
+    return ' '.join(text.split())
 
 def clean_address(text):
     text = re.sub(r'(\d+)\s*([A-Za-z]{2,})', r'\1 \2', text)
@@ -88,9 +94,16 @@ def extract_collected_data(json_collected_data, key):
 def generic_repr(obj):
     if isinstance(obj, datetime.datetime):
         return 'datetime(' + obj.strftime(r'%d/%m/%Y %H:%M:%S (%z) %Z') + ')'
+    if isinstance(obj, list):
+        return '[' + ', '.join(shallow_repr(v) for v in obj) + ']'
     if hasattr(obj, '__dict__'):
-        return type(obj).__name__ + '(' + ', '.join('%s=%s' % (a, generic_repr(v)) for a, v in obj.__dict__.items() if not a.startswith('_')) + ')'
+        return type(obj).__name__ + '(' + ', '.join('%s=%s' % (a, shallow_repr(v)) for a, v in obj.__dict__.items()) + ')'
     return repr(obj)
+
+def shallow_repr(obj):
+    if getattr(obj, '__module__', '').startswith('abo.trybooking.'):
+        return type(obj).__name__
+    return generic_repr(obj)
 
 class Account(object):
 
@@ -252,6 +265,11 @@ class Session(object):
         self.capacity = non_negative_int(capacity)
         self.availability = non_negative_int(availability)
         self.booking_url = booking_url
+        self._event = None
+
+    @property
+    def event(self):
+        return self._event
 
     def __repr__(self):
         return generic_repr(self)
@@ -272,7 +290,7 @@ class Booking(object):
                       telephone =          json_data['bookingPhone'],
                       email =              json_data['bookingEmail'],
                       emergency_contact =  extract_collected_data(json_data['bookingDataCollections'], 'Emergency contact'),
-                      payment =            Money.AUD(json_data['totalAmount']),
+                      total_payment =      Money.AUD(json_data['totalAmount']),
                       discount =           Money.AUD(0), # accumulated below
                       processing_fees =    Money.AUD(json_data['totalProcessingFee']),
                      )
@@ -286,7 +304,7 @@ class Booking(object):
     @classmethod
     def from_csv_row(cls, row):
         return cls(id = row.booking_id,
-                   date_time =          datetime.datetime.strptime(row.date_booked + ' ' + row.time_booked, '%d/%m/%Y %I:%M:%S %p'),
+                   date_time =          datetime.datetime.strptime(row.date_booked + ' ' + row.time_booked, '%d/%m/%Y %I:%M:%S %p').astimezone(),
                    first_name =         row.booking_first_name,
                    last_name =          row.booking_last_name,
                    address_1 =          row.booking_address_1,
@@ -297,7 +315,7 @@ class Booking(object):
                    telephone =          row.booking_telephone,
                    email =              row.booking_email,
                    emergency_contact =  row.booking_data_emergency_contact,
-                   payment =            Money.AUD.from_text(row.net_booking),
+                   net_payment =        Money.AUD.from_text(row.net_booking),
                    discount =           Money.AUD.from_text(row.discount_amount),
                    processing_fees =    Money.AUD.from_text(row.processing_fees),
                 )
@@ -314,14 +332,15 @@ class Booking(object):
                        telephone,
                        email,
                        emergency_contact,
-                       payment,
                        discount,
-                       processing_fees
+                       processing_fees,
+                       total_payment = None,
+                       net_payment = None
                 ):
         self.id = id
         self.date_time = date_time
-        self.first_name = capitalise_words(first_name)
-        self.last_name = capitalise_words(last_name)
+        self.first_name = capitalise_words(clean_name(first_name))
+        self.last_name = capitalise_words(clean_name(last_name))
         self.address_1 = capitalise_words(clean_address(address_1))
         self.address_2 = capitalise_words(clean_address(address_2))
         self.suburb = capitalise_words(suburb)
@@ -330,8 +349,10 @@ class Booking(object):
         self.telephone = parse_telephone(telephone)
         self.email = email
         self.emergency_contact = optional(lambda: parse_telephone(emergency_contact))
-        self._payment = payment
-        self._real_payment = None
+        self._total_payment = total_payment
+        self._net_payment = net_payment
+        self._real_total_payment = None
+        self._real_net_payment = None
         self._discount = discount
         self._real_discount = None
         self._processing_fees = processing_fees
@@ -345,15 +366,22 @@ class Booking(object):
         self._tickets.append(ticket)
 
     @property
-    def payment(self):
+    def total_payment(self):
         # Trybooking omits refunded tickets it its reported booking payment, so reconstruct the
-        # original payment by summing all the ticket prices, less their discounts, and less the
-        # (correct) processing fees.
-        if self._real_payment is None:
-            self._real_payment = sum(t.price - t.discount for t in self._tickets) - self.processing_fees
-            if self._payment != self._real_payment:
-                print(f'correct payment {self._payment} to {self._real_payment}: {self.first_name} {self.last_name} {self.date_time.date()}', file=sys.stderr)
-        return self._real_payment
+        # original payment by summing all the ticket prices, less their discounts.
+        if self._real_total_payment is None:
+            self._real_total_payment = sum(t.price - t.discount for t in self._tickets)
+            if self._total_payment is not None and self._total_payment != self._real_total_payment:
+                logging.warn(f'correct total payment {self._total_payment} to {self._real_total_payment}: {self.first_name} {self.last_name} {self.date_time.date()}')
+        return self._real_total_payment
+
+    @property
+    def net_payment(self):
+        if self._real_net_payment is None:
+            self._real_net_payment = self.total_payment - self.processing_fees
+            if self._net_payment is not None and self._net_payment != self._real_net_payment:
+                logging.warn(f'correct net payment {self._net_payment} to {self._real_net_payment}: {self.first_name} {self.last_name} {self.date_time.date()}')
+        return self._real_net_payment
 
     @property
     def discount(self):
@@ -362,20 +390,23 @@ class Booking(object):
         if self._real_discount is None:
             self._real_discount = sum(t.discount for t in self._tickets)
             if self._discount != self._real_discount:
-                print(f'correct discount {self._discount} to {self._real_discount}: {self.first_name} {self.last_name} {self.date_time.date()}', file=sys.stderr)
+                logging.warn(f'correct discount {self._discount} to {self._real_discount}: {self.first_name} {self.last_name} {self.date_time.date()}')
         return self._real_discount
 
     @property
     def processing_fees(self):
         if self._real_processing_fees is None:
-            # Trybooking sometimes reports an erroneous processing fees amount (out by 0.01), so
-            # calculate the correct processing fees by summing the prices of all non-refunded
-            # tickets, less their discounts, and taking the difference between that and the reported
-            # booking payment, which is correct.
-            calculated_payment = sum(t.price - t.discount for t in self._tickets if not t.refunded)
-            self._real_processing_fees = calculated_payment - self._payment
-            if self._processing_fees != self._real_processing_fees:
-                print(f'correct processing fee {self._processing_fees} to {self._real_processing_fees}: {self.first_name} {self.last_name} {self.date_time.date()}', file=sys.stderr)
+            # Trybooking CSV files sometimes report an erroneous processing fees amount (out by
+            # 0.01), so calculate the correct processing fees by summing the prices of all
+            # non-refunded tickets, less their discounts, and taking the difference between that and
+            # the reported net booking payment, which is correct.
+            if self._net_payment is not None:
+                calculated_total_payment = sum(t.price - t.discount for t in self._tickets if not t.refunded)
+                self._real_processing_fees = calculated_total_payment - self._net_payment
+                if self._processing_fees != self._real_processing_fees:
+                    logging.warn(f'correct processing fee {self._processing_fees} to {self._real_processing_fees}: {self.first_name} {self.last_name} {self.date_time.date()}')
+            else:
+                self._real_processing_fees = self._processing_fees
         return self._real_processing_fees
 
     @property
@@ -384,7 +415,7 @@ class Booking(object):
         # payment.
         if self._refund is None:
             self._refund = self.payment - self._payment
-            print(f'calculate refund of {self._refund}: {self.first_name} {self.last_name}', file=sys.stderr)
+            logging.info(f'calculate refund of {self._refund}: {self.first_name} {self.last_name}')
         return self._refund
 
     @property
@@ -401,6 +432,7 @@ class Ticket(object):
         discount = Money.AUD(json_data['discountAmount'])
         refunded_amount = Money.AUD(json_data['refundedAmount'])
         return cls( type =              json_data['ticketName'],
+                    event_code =        json_data['eventCode'],
                     price =             Money.AUD(json_data['totalTicketPrice']),
                     discount =          discount,
                     first_name =        extract_collected_data(json_data['bookingTicketDataCollections'], 'Attendee First Name'),
@@ -426,6 +458,7 @@ class Ticket(object):
         if refunded:
             refunded_amount = Money.AUD.from_text(clean_money(row.ticket_refunded_amount)) - discount
         return cls( type =              row.ticket_type,
+                    event_code =        None,
                     price =             price,
                     discount =          discount,
                     first_name =        optional(lambda: row.ticket_data_attendee_first_name),
@@ -440,6 +473,7 @@ class Ticket(object):
                 )
 
     def __init__(self, type,
+                       event_code,
                        price,
                        discount,
                        first_name,
@@ -452,18 +486,20 @@ class Ticket(object):
                        refunded = False,
                        refunded_amount = None):
         self.type = type
+        self.event_code = non_blank_str(event_code) if event_code else config.get().event_code
         self.price = price
         self.discount = discount
-        self.first_name = capitalise_words(first_name) if first_name else None
-        self.last_name = capitalise_words(last_name) if last_name else None
+        self.first_name = (capitalise_words(clean_name(first_name)) if first_name else None) or None
+        self.last_name = (capitalise_words(clean_name(last_name)) if last_name else None) or None
         self.age = extract_int(age) if age else None
-        self.instrument = capitalise_words(instrument) if instrument else None
+        self.instrument = (capitalise_words(clean_name(instrument)) if instrument else None) or None
         self.photo_consent = parse_boolean(photo_consent) if photo_consent else None
         self.health_concerns = parse_optional_text(health_concerns) if health_concerns else None
         self.void = boolean(void)
         self.refunded = refunded
         self.refunded_amount = refunded_amount
         self._booking = None
+        self._event = None
 
     @property
     def name(self):
@@ -480,9 +516,11 @@ class Bookings(object):
 
     def __init__(self, with_extra_bookings=True):
         self._with_extra_bookings = with_extra_bookings
+        self._event_codes = set()
         self._bookings = []
         self._tickets = []
-        self._discount_codes = {}
+        self._discount_codes = dict()
+        # Load extra bookings from current working directory.  This may also add the relevant discount codes.
         sys.path.append('.')
         try:
             import extra_bookings
@@ -491,9 +529,12 @@ class Bookings(object):
         except ImportError:
             pass
 
-    def add_discount_code(self, code, amount):
-        assert code != ''
-        self._discount_codes[code] = Money.AUD(amount)
+    def load(self, csv_path=None):
+        if csv_path:
+            self.read_csv(csv_path)
+        else:
+            self.fetch_from_site(config.get().event_code)
+        return self
 
     def read_csv(self, path):
         reader = csv_reader.reader(open(path, newline='', encoding='utf-8-sig'))
@@ -508,8 +549,29 @@ class Bookings(object):
                 booking_by_id[booking.id] = booking
                 self._bookings.append(booking)
             booking.add_ticket(ticket)
-        self._sort()
+        self._prepare()
         return self
+
+    def fetch_from_site(self, event_code=None):
+        client = trybooking_client.Client()
+        for booking in client.bookings():
+            in_event = False
+            for ticket in booking.tickets:
+                if event_code is None or ticket.event_code == event_code:
+                    self._tickets.append(ticket)
+                    in_event = True
+            if in_event:
+                self._bookings.append(booking)
+        self._prepare()
+        return self
+
+    def add_event_code(self, code):
+        assert code != ''
+        self._event_codes.add(code)
+
+    def add_discount_code(self, code, amount):
+        assert code != ''
+        self._discount_codes[code] = Money.AUD(amount)
 
     def add_extra_booking(self, booking):
         if self._with_extra_bookings:
@@ -520,6 +582,20 @@ class Bookings(object):
     def _sort(self):
         self._tickets.sort(key= lambda t: (t.booking.date_time, t.name))
         self._bookings.sort(key= lambda b: b.date_time)
+
+    def _prepare(self):
+        self._sort()
+        for ticket in self._tickets:
+            self.add_event_code(ticket.event_code)
+
+    @property
+    def event_codes(self):
+        return iter(self._event_codes)
+
+    @property
+    def event_code(self):
+        assert len(self._event_codes) == 1, f'self._event_codes = {self._event_codes!r}'
+        return next(self.event_codes)
 
     @property
     def tickets(self):

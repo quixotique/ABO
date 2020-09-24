@@ -48,13 +48,15 @@ def uint(text):
         raise ValueError('invalid unsigned int: %d' % i)
     return i
 
-def find_config_file(file_name, start_dir='.'):
-    trydir = os.path.abspath(start_dir)
-    while trydir != '/':
+def find_config_file(file_name, start_dir='.', stop_dir='/', depth_limit=50):
+    trydir = start_dir
+    for depth in range(depth_limit):
         trypath = os.path.join(trydir, file_name)
         if os.path.isfile(trypath):
             return trypath
-        trydir = os.path.dirname(trydir)
+        trydir = '..' if trydir == '.' else os.path.join(trydir, '..')
+        if os.path.samefile(trydir, stop_dir):
+            break
     return None
 
 class Config(object):
@@ -134,7 +136,7 @@ class Config(object):
         path = find_config_file('.pyabo')
         if path:
             return self.read_from(path)
-        raise ConfigException('no configuration file')
+        raise ConfigException('file not found: .pyabo')
 
     def format_date_short(self, date, relative_to=None):
         return date.strftime(r'%-d-%b-%y' if relative_to is None or relative_to.year != date.year else r'%-d-%b')

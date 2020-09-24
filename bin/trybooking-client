@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+# vim: sw=4 sts=4 et fileencoding=utf8 nomod
+# Copyright 2020 Andrew Bettison
+
+import sys
+import os
+import logging
+
+try:
+    import abo.trybooking.client
+except ImportError:
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib'))
+    import abo.trybooking.client
+
+def fatal(message, status=1):
+    print("%s: %s" % (os.path.basename(sys.argv[0]), message), file=sys.stderr)
+    sys.exit(status)
+
+def main():
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    args = sys.argv[1:]
+    if args[:1] == ['--debug']:
+        args.pop(0)
+    elif args[:1] == ['--quiet']:
+        args.pop(0)
+        logging.disable(logging.INFO)
+    elif os.environ.get('ABO_DEBUG', ''):
+        pass
+    else:
+        logging.disable(logging.DEBUG)
+    if not args:
+        fatal(f'missing arg')
+    if len(args) > 1:
+        fatal(f'spurious args')
+    arg = args[0]
+    try:
+        client = abo.trybooking.client.Client()
+        if arg == 'events':
+            for event in client.get_events():
+                print(event.name)
+                print("  ", event.session.start_datetime.strftime(r'%-d-%-b-%Y %H:%M:%S %z %Z'))
+                print("  ", event.session.status)
+                print("  ", repr(event))
+                for session in event.sessions:
+                    print("      ", repr(session))
+        elif arg == 'bookings':
+            for booking in client.get_bookings():
+                print(repr(booking))
+                for ticket in booking.tickets:
+                    print("   ", repr(ticket))
+        else:
+            fatal(f'unsupported command: {arg}')
+    except config.ConfigException as e:
+        fatal(f'configuration error: {e}')
+
+if __name__ == '__main__':
+    main()
