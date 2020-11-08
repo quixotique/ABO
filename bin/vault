@@ -118,9 +118,8 @@ action_open() {
         echo "$MOUNT/*" >/dev/null # touch to reset idle timer
     else
         # Ensure that FUSE is available in the kernel.
-        /sbin/modprobe fuse
         if [ ! -w /dev/fuse ]; then
-            sudo /bin/chgrp fuse /dev/fuse
+            sudo /sbin/modprobe fuse
         fi
 
         # If the raw directory was not specified, then form it by prefixing the
