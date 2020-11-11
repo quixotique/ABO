@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import mailbox
+
+def main():
+    # If invoked as 'mail' then list the +inbox folder.
+    # If invoked as 'mail +folder' then list the given folder.
+    folder_name = None
+    if len(sys.argv) == 1:
+        folder_name = 'inbox'
+    elif len(sys.argv) == 2 and sys.argv[1].startswith('+'):
+        folder_name = sys.argv[1][1:]
+    if folder_name:
+        args = [f'+{folder_name}']
+
+        # Format the list using the folder-specific format, and fall back to
+        # the default format.
+        mh_etc_path = os.path.join(os.environ['HOME'], 'etc', 'nmh')
+        folder_scan_template_path = os.path.join(mh_etc_path, f'scan.{folder_name}')
+        default_scan_template_path = os.path.join(mh_etc_path, f'scan.DEFAULT')
+        form = None
+        if os.path.exists(folder_scan_template_path):
+            form = folder_scan_template_path
+        elif os.path.exists(default_scan_template_path):
+            form = default_scan_template_path
+        if form:
+            args += ['-form', form]
+
+        # Only list enough messages to fill the terminal screen; if the size of
+        # the terminal screen cannot be determined, then list them all.
+        lines = None
+        try:
+            _, lines = os.get_terminal_size()
+        except OSError:
+            pass
+        if lines:
+            mh = mailbox.MH(os.path.join(os.environ['HOME'], 'MH'), create=False)
+            folder = mh.get_folder(folder_name)
+            messages = folder.keys()
+            if messages:
+                first_message = messages[-lines:][0]
+                args += [f'{first_message}-last']
+
+        exec_or_die('scan', args)
+
+    # Otherwise, delegate to 'nmh-wrapper'.
+    exec_or_die('nmh-wrapper', sys.argv[1:])
+
+def exec_or_die(executable_name, args):
+    try:
+        os.execvp(executable_name, [executable_name] + args)
+    except:
+        print(f'{sys.argv[0]}: could not execp "{executable_name}":', sys.exc_info()[1], file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
