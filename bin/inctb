@@ -32,4 +32,4 @@ fi
 
 [[ -e $mbox_path.msf ]] && run rm -f "$mbox_path.msf"
 
-run save --src +refile all
+run save --source +refile all

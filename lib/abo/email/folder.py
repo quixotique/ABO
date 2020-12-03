@@ -11,6 +11,7 @@ if __name__ == '__main__':
     doctest.testmod(abo.email.folder)
 
 import sys
+import logging
 import re
 import fnmatch
 import collections
@@ -94,10 +95,13 @@ class Filer(object):
             True
 
         """
+        ret = None
         for address_rexp, subject_rexp, folder in self.map:
             if address_rexp.fullmatch(address) and (subject_rexp is None or subject is None or subject_rexp.match(subject)):
-                return folder
-        return None
+                ret = folder
+                break
+        logging.debug(f'lookup(address={address!r}, subject={subject!r}) -> {ret!r}')
+        return ret
 
     def lookup_message(self, from_address, sender_address=None, to_addresses=(), subject=None):
         r"""Return a set of folders in which to save a given email message.
@@ -115,6 +119,7 @@ class Filer(object):
             {Folder(name='list', is_list=True, is_self=False)}
 
         """
+        logging.debug(f'lookup_message(from_address={from_address!r}, sender_address={sender_address!r}, to_addresses={to_addresses!r}, subject={subject!r})')
         # Look up the sender using the 'From:' header, and if they have no
         # folder, then the 'Sender:' header.
         from_folder = self.lookup_address(from_address, subject=subject)
@@ -130,6 +135,8 @@ class Filer(object):
                 to_folders.add(to_folder)
             elif not folder_self:
                 folder_self = to_folder
+        logging.debug(f'from_folder = {from_folder!r}')
+        logging.debug(f'to_folders = {to_folders!r}')
         # If the sender has no folder, then use the list folders of the recipients.
         if not from_folder:
             return set(f for f in to_folders if f.is_list)

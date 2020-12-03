@@ -1,46 +1,93 @@
 #!/usr/bin/env python3
 
+r'''Usage:
+    save [--debug] [--dry-run] [--source=+SRC] [--filter=+FILT] [+DEST] [MESSAGE...]
+    save -h | --help
+    save --version
+
+Options:
+    -s --source=+SRC   Read messages from SRC folder (default current folder)
+       --filter=+FILT  Only save messages that resolve to FILT folder
+    -n --dry-run       Print commands but do not execute
+    -D --debug         Print debug messages
+    -h --help          Show this message
+       --version       Show version and exit
+'''
+
 import sys
+import logging
 import os.path
 import locale
 import mailbox
 import subprocess
 import email.utils
 
-try:
-    import abo.email.folder
-except ImportError:
-    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib'))
-    import abo.email.folder
+lib_path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib')
+sys.path += [lib_path, os.path.join(lib_path, 'docopt')]
 
-opt_dry_run = False
+import abo.email.folder
+import docopt
+
 me = os.path.basename(sys.argv[0])
 
 def main():
     locale.setlocale(locale.LC_ALL, '')
+
+    global opts
+    opts = docopt.docopt(__doc__, version='3')
+
+    if opts['--debug']:
+        logging.basicConfig(level=logging.DEBUG)
+
+    logging.debug(opts)
+
+    mhpath_folder_args = []
+    mhpath_message_args = []
+
+    source_folder = opts['--source']
+    if source_folder:
+        if not (source_folder.startswith('+') and len(source_folder) > 1):
+            fatal('bad argument after --source: {source_folder}')
+        mhpath_folder_args += [source_folder]
+
+    filter_folder = opts['--filter']
+    if filter_folder:
+        if not filter_folder.startswith('+'):
+            fatal('bad argument after --filter: {filter_folder}')
+        filter_folder = filter_folder[1:]
+
+    args = []
+    if opts['+DEST']:
+        args.append(opts['+DEST'])
+    args += opts['MESSAGE']
+
+    dest_folder = None
+    for arg in args:
+        if arg.startswith('+'):
+            if len(arg) < 2:
+                fatal('missing folder name after +')
+            if dest_folder:
+                fatal('can only specify one +DEST')
+            dest_folder = arg[1:]
+        else:
+            mhpath_message_args.append(arg)
+
+    if not mhpath_message_args:
+        mhpath_message_args = ['.'] # current message
+
     folders_path = os.path.join(os.environ['HOME'], 'etc', 'folders')
     with open(folders_path, 'r') as f:
         filer = abo.email.folder.Filer(f.read())
-    global opt_dry_run
-    dest_folder_name = None
-    args = sys.argv[1:]
-    mhpath_args = []
-    while args:
-        arg = args.pop(0)
-        if arg in ['-t', '--test', '-n', '--dry-run']:
-            opt_dry_run = True
-        elif arg in ['-s', '--src']:
-            if not args:
-                fatal('missing argument after {arg}')
-            if not args[0].startswith('+'):
-                fatal('invalid argument after {arg}: {args[0]}')
-            mhpath_args.append(args.pop(0))
-        elif arg.startswith('+'):
-            dest_folder_name = arg[1:]
-        else:
-            mhpath_args.append(arg)
-    mhpath_args = mhpath_args or ['.']
-    message_paths = subprocess.check_output(['mhpath'] + mhpath_args, encoding='utf-8').splitlines()
+
+    mhpath_command = ['mhpath'] + mhpath_folder_args + mhpath_message_args
+    logging.debug(f'mhpath_command = {mhpath_command!r}')
+    try:
+        message_paths = subprocess.check_output(mhpath_command, encoding='utf-8').splitlines()
+    except subprocess.CalledProcessError:
+        message_paths = None
+    if not message_paths:
+        sys.exit(1)
+
     saved = 0
     not_saved = 0
     failed = 0
@@ -49,36 +96,41 @@ def main():
         if not os.path.exists(message_path):
             print(f'{me}: message {message_number} doesn\'t exist', file=sys.stderr)
             continue
-        if dest_folder_name:
-            if run(['refile', f'{message_number}', f'+{dest_folder_name}']) != 0:
-                failed += 1
-            else:
-                saved += 1
-            continue
-        with open(message_path, 'r', errors='replace') as f:
+
+        folder_names = []
+        if dest_folder and not filter_folder:
+            folder_names = [dest_folder]
+        else:
             header = []
-            for line in f:
-                header.append(line)
-                if not line or line.isspace(): break
+            with open(message_path, 'r', errors='replace') as f:
+                for line in f:
+                    header.append(line)
+                    if not line or line.isspace(): break
             message = mailbox.MHMessage(''.join(header))
             from_address = email.utils.parseaddr(message['from'])[1]
-            to_addresses = [email.utils.parseaddr(a)[1] for a in message.get_all('to') or ()]
-            #cc_addresses = [email.utils.parseaddr(a)[1] for a in message.get_all('cc') or ()]
+            logging.debug(r'To: ' + repr(message.get_all('to')))
+            to_addresses = [a[1] for a in email.utils.getaddresses(message.get_all('to', []))]
             subject = message['subject']
             folders = filer.lookup_message(from_address=from_address, to_addresses=to_addresses, subject=subject)
-            if not folders:
-                print(f'{me}: message {message_number} not saved', file=sys.stderr)
-                not_saved += 1
-            elif run(['refile', f'{message_number}'] + [f'+{folder.name}' for folder in sorted(folders)]) != 0:
-                failed += 1
+            if filter_folder and dest_folder and [f for f in folders if f.name == filter_folder]:
+                folder_names = [dest_folder]
             else:
-                saved += 1
-    print(('dry run: ' if opt_dry_run else '') + f'saved {saved}, not saved {not_saved}, failed {failed}')
+                folder_names = [f.name for f in folders]
+
+        if not folder_names:
+            print(f'{me}: message {message_number} not saved', file=sys.stderr)
+            not_saved += 1
+        elif run(['refile', f'{message_number}'] + [f'+{name}' for name in sorted(folder_names)]) != 0:
+            failed += 1
+        else:
+            saved += 1
+
+    print(('dry run: ' if opts['--dry-run'] else '') + f'saved {saved}, not saved {not_saved}, failed {failed}')
     sys.exit(3 if failed else 2 if not_saved else 0)
 
 def run(args):
     print(' '.join(args))
-    if opt_dry_run:
+    if opts['--dry-run']:
         return 0
     return subprocess.run(args).returncode
 
