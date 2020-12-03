@@ -169,10 +169,10 @@ class Journal(object):
                         expanded = True
                 if not expanded:
                     args.append(source_path)
-                out = subprocess.check_output(args, cwd=self.config.basedir, stdin=open('/dev/null'))
+                out = subprocess.check_output(args, cwd=self.config.base_dir_path, stdin=open('/dev/null'))
             else:
                 out, err = subprocess.Popen(args,
-                                            cwd=self.config.basedir,
+                                            cwd=self.config.base_dir_path,
                                             stdin=subprocess.PIPE,
                                             stdout=subprocess.PIPE)\
                                      .communicate(''.join(lines).encode())

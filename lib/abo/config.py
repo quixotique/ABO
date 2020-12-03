@@ -62,13 +62,14 @@ def find_config_file(file_name, start_dir='.', stop_dir='/', depth_limit=50):
 class Config(object):
 
     def __init__(self):
-        self.basedir = None
+        self.base_dir_path = None
         self.journal_file_paths = []
         self.checkpoint_file_paths = []
         self.chart_file_path = None
         self.heading = None
         self.width = None
         self.maximum_output_width = {}
+        self.cache_dir_path = os.path.join(os.environ.get('TMPDIR', '/tmp'), 'abo')
         text = os.environ.get('ABO_WIDTH')
         if text is not None:
             try:
@@ -96,11 +97,12 @@ class Config(object):
 
     def read_from(self, path):
         with Parser(path) as parser:
-            self.basedir = parser.basedir
+            self.base_dir_path = parser.basedir
             self.chart_file_path = os.path.join(parser.basedir, 'accounts')
             parser.add_keyword('journal', self._set_journal)
             parser.add_keyword('heading', self._set_heading)
             parser.add_keyword('checkpoint', self._set_checkpoint)
+            parser.add_keyword('cache-dir', self._set_cache_dir)
             parser.add_section_keyword('maximum-output-width', self._set_maximum_output_width)
             parser.parse()
         return self
@@ -115,6 +117,9 @@ class Config(object):
 
     def _set_checkpoint(self, parser, word):
         self.checkpoint_file_paths += glob.glob(os.path.join(parser.basedir, word))
+
+    def _set_cache_dir(self, parser, word):
+        self.cache_dir_path = os.path.join(self.base_dir_path, word)
 
     def _set_maximum_output_width(self, parser, word, section):
         try:
@@ -202,9 +207,6 @@ class Config(object):
                 wid = minw
             widths.append(wid)
         return widths
-
-    def cache_dir_path(self):
-        return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'pyabo')
 
 class Parser(object):
 

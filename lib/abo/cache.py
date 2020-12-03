@@ -16,7 +16,7 @@ class Cache(object):
     def __init__(self, config, ident, contentfunc, deppaths=(), force=False):
         self.config = config
         self.ident = ident
-        self.cpath = os.path.join(self.config.cache_dir_path(), self.ident.replace('/', '%%'))
+        self.cpath = os.path.join(self.config.cache_dir_path, self.ident.replace('/', '%%'))
         self.ctime = -1 if force else self.mtime(self.cpath)
         self.contentfunc = contentfunc
         self.deppaths = list(deppaths)
@@ -63,7 +63,11 @@ class FileCache(Cache):
 
     def __init__(self, config, path, contentfunc, otherpaths=(), force=False):
         self.path = os.path.abspath(path)
-        super(FileCache, self).__init__(config, self.path, contentfunc, [self.path] + list(otherpaths), force=force)
+        super(FileCache, self).__init__(config,
+                                        os.path.relpath(self.path, config.base_dir_path),
+                                        contentfunc,
+                                        [self.path] + list(otherpaths),
+                                        force=force)
 
 class TransactionCache(FileCache):
 
