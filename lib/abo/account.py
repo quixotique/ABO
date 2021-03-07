@@ -362,6 +362,7 @@ class Chart(object):
     ...     "Utilities"
     ...       gas :nd "Gas"
     ...       elec :nd "Electricity"
+    ...       # comment
     ...       water :nd,cons "Water usage"
     ...     :nd,cons "Consumibles"
     ...       food "Food"
