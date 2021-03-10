@@ -1,0 +1,61 @@
+#!/bin/bash
+
+set -e
+shopt -u dotglob
+shopt -s extglob
+
+. "$SHELLBOOST/libsh/include.sh" || exit $?
+__shellboost_include libsh/path.sh
+__shellboost_include libsh/text.sh
+__shellboost_include libsh/script.sh
+
+ensure_in_path lame sox
+
+opt_force=false
+src_dir="${1?}"
+dst_dir="${2?}"
+
+src_dir="$(path_trimsep "$src_dir")"
+src_dir="$(path_simplify "$src_dir")"
+src_name="${src_dir##*/}"
+
+dst_dir="$(path_trimsep "$dst_dir")"
+
+case "$src_name" in
+.*) ;;
+*) dst_dir="$dst_dir/$src_name";;
+esac
+
+# Create destination directory structure.
+
+export dst_dir
+(cd "$src_dir" && find . -type d) | awk '{ print ENVIRON["dst_dir"] "/" $0 }' | xargs -r -d '\n' mkdir -v -p
+
+# Copy files, converting ogg to mp3.
+
+(cd "$src_dir" && find * -type f) | sort | (
+      while read path; do
+         case "$path" in
+         *.ogg)
+            wav="$dst_dir/${path%.ogg}.wav"
+            mp3="$dst_dir/${path%.ogg}.mp3"
+            if $opt_force || ! [ -e "$mp3" ]; then
+               echo "convert to   $mp3"
+               sox -q "$src_dir/$path" "$wav"
+               lame --quiet "$wav" "$mp3.tmp"
+               mv "$mp3.tmp" "$mp3"
+            else
+               echo "already done $mp3"
+            fi
+            rm -f "$wav" "$mp3.tmp"
+            ;;
+         *.jpg)
+            echo "copy         $dst_dir/$path"
+            cp "$src_dir/$path" "$dst_dir/$path"
+            ;;
+         *)
+            echo "skip         $path"
+            ;;
+         esac
+      done
+   )
