@@ -108,10 +108,11 @@ def main():
                     if not line or line.isspace(): break
             message = mailbox.MHMessage(''.join(header))
             from_address = email.utils.parseaddr(message['from'])[1]
+            reply_to_address = email.utils.parseaddr(message['reply-to'])[1]
             logging.debug(r'To: ' + repr(message.get_all('to')))
             to_addresses = [a[1] for a in email.utils.getaddresses(message.get_all('to', []))]
             subject = message['subject']
-            folders = filer.lookup_message(from_address=from_address, to_addresses=to_addresses, subject=subject)
+            folders = filer.lookup_message(from_address=from_address, reply_to_address=reply_to_address, to_addresses=to_addresses, subject=subject)
             if filter_folder and dest_folder and [f for f in folders if f.name == filter_folder]:
                 folder_names = [dest_folder]
             else:

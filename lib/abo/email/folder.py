@@ -103,7 +103,7 @@ class Filer(object):
         logging.debug(f'lookup(address={address!r}, subject={subject!r}) -> {ret!r}')
         return ret
 
-    def lookup_message(self, from_address, sender_address=None, to_addresses=(), subject=None):
+    def lookup_message(self, from_address, reply_to_address=None, sender_address=None, to_addresses=(), subject=None):
         r"""Return a set of folders in which to save a given email message.
 
             >>> f = Filer(text='!one  : some1@gmail.com\n two: *@two.org ; WAH  \n* list:  {a,b}@*.list.org')
@@ -119,12 +119,15 @@ class Filer(object):
             {Folder(name='list', is_list=True, is_self=False)}
 
         """
-        logging.debug(f'lookup_message(from_address={from_address!r}, sender_address={sender_address!r}, to_addresses={to_addresses!r}, subject={subject!r})')
+        logging.debug(f'lookup_message(from_address={from_address!r}, reply_to_address={reply_to_address!r}, sender_address={sender_address!r}, to_addresses={to_addresses!r}, subject={subject!r})')
         # Look up the sender using the 'From:' header, and if they have no
-        # folder, then the 'Sender:' header.
+        # folder, then the 'Sender:' header, and if they have no folder, then
+        # the 'Reply-To:' header.
         from_folder = self.lookup_address(from_address, subject=subject)
         if not from_folder and sender_address:
             from_folder = self.lookup_address(sender_address, subject=subject)
+        if not from_folder and reply_to_address:
+            from_folder = self.lookup_address(reply_to_address, subject=subject)
         # Look up the folders for all recipients, including self.
         to_folders = set()
         folder_self = None
