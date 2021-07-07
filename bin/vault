@@ -3,39 +3,47 @@
 set -e
 shopt -s extglob
 
+source "$SHELLBOOST/libsh/script.sh"
 source "$SHELLBOOST/libsh/path.sh"
-
-me="${0##*/}"
+source "$SHELLBOOST/libsh/time.bash"
 
 usage() {
     echo -n "\
-Usage: $me open [--mount DIR] [--raw DIR] [--timeout MIN] [--browse]
-       $me close [--mount DIR]
+Usage: ${0##*/} open [--cipher CIPHER-DIR] [--timeout DURATION] [--browse] [--help] [CLEAR-DIR]
+       ${0##*/} close [CLEAR-DIR]
 Options:
-  -m,--mount DIR       mount point for decrypted files
-  -r,--raw DIR         directory containing encrypted files
-  -t,--timeout MIN     lock after MIN idle minutes
-  -b,--browse          start file browser if open successful
-  -h,--help            print this message on standard output
+  -c,--cipher CIPHER-DIR    directory containing encrypted files
+  -t,--timeout DURATION     lock after DURATION [default $idle_timeout]
+  -b,--browse               start file browser if open successful
+  -h,--help                 print this message on standard output
+
+  CLEAR-DIR                 mount point for cleartext directory [default $clear_dir]
 "
 }
 
-fatal() {
-    echo "$me: $*" >&2
-    exit 1
+find_real_cipher_dir() {
+    local clear_dir="${1?}"
+    local cipher_link="$clear_dir/.cipher-dir"
+    [[ -L $cipher_link ]] || fatal "cannot find cipher directory for $clear_dir"
+    real_cipher_dir="$(try_realpath_physical "$cipher_link")" || fatal "cannot resolve link: $cipher_link"
 }
 
-bad_usage() {
-    echo "$me: $*" >&2
-    echo "Try '$me --help' for more information." >&2
-    exit 1
-}
-
-is_integer() {
-    [ -n "$1" -a "${1#*[!0-9]}" = "$1" ]
+detect_cipher_type() {
+    if [[ -e $real_cipher_dir/gocryptfs.conf ]]; then
+        cipher_type=gocryptfs
+    elif [[ -e $real_cipher_dir/.encfs6.xml ]]; then
+        cipher_type=encfs
+    else
+        fatal "cannot determine cipher type: $real_cipher_dir"
+    fi
 }
 
 main() {
+    # Global so that usage() can print them:
+    clear_dir="$HOME/Vault"
+    idle_timeout=30m
+    opt_browse=false
+
     if [ $# -eq 0 ]; then
         usage
         exit 0
@@ -47,10 +55,6 @@ main() {
         fatal "unsupported action: $action"
     fi
 
-    opt_mount="$HOME/Vault"
-    opt_raw=
-    opt_timeout=30 # minutes
-    opt_browse=false
     while [ $# -ne 0 ]; do
         local arg="$1"
         case "$arg" in
@@ -58,48 +62,48 @@ main() {
             usage
             exit 0
             ;;
-        --mount=*)
-            opt_mount="${arg#*=}"
+        --cipher=*)
+            cipher_dir="${arg#*=}"
             ;;
-        --mount|-m)
+        --cipher|-c)
             shift
-            [ $# -ne 0 ] || bad_usage "missing argument to $arg"
-            opt_mount="$1"
-            ;;
-        --raw=*)
-            opt_raw="${arg#*=}"
-            ;;
-        --raw|-r)
-            shift
-            [ $# -ne 0 ] || bad_usage "missing argument to $arg"
-            opt_raw="$1"
+            [ $# -ne 0 ] || fatal_usage "missing argument to $arg"
+            cipher_dir="$1"
             ;;
         --timeout=*)
-            opt_timeout="${arg#*=}";
-            is_integer "$opt_timeout" || bad_usage "invalid argument to ${arg%%=*}: $opt_timeout"
+            idle_timeout="${arg#*=}"
+            is_duration "$idle_timeout" || fatal_usage "invalid argument to ${arg%%=*}: $idle_timeout"
             ;;
         --timeout|-t)
             shift
-            [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_timeout="$1"
-            is_integer "$opt_timeout" || bad_usage "invalid argument to $arg: $opt_timeout"
+            [ $# -ne 0 ] || fatal_usage "missing argument to $arg"
+            idle_timeout="$1"
+            is_duration "$idle_timeout" || fatal_usage "invalid argument to $arg: $idle_timeout"
             ;;
         --browse|-b)
             opt_browse=true
             ;;
         -*)
-            bad_usage "unsupported option: $arg"
+            fatal_usage "unsupported option: $arg"
             exit 1
             ;;
         *)
-            bad_usage "unsupported argument: $arg"
-            exit 1
+            break
             ;;
         esac
         shift
     done
 
-    if ! MOUNT="$(try_realpath_physical "$opt_mount")"; then
-        fatal "not accessible: $opt_mount"
+    if [[ $# -ne 0 ]]; then
+        clear_dir="$1"
+        shift
+    fi
+    [[ $# -eq 0 ]] || fatal_usage "spurious arguments: $*"
+
+    [[ -n $clear_dir ]] || fatal "invalid directory name: (empty)"
+    [[ -d $clear_dir ]] || fatal "not a directory: $clear_dir"
+    if ! real_clear_dir="$(try_realpath_physical "$clear_dir")"; then
+        fatal "not accessible: $clear_dir"
     fi
 
     action_$action
@@ -108,85 +112,107 @@ main() {
 action_open() {
     # Only mount if not currently being (un)mounted.
     lock || exit 4
-    trap "unlock; exit 1" 1 2 15
-    trap "unlock" 0
 
-    # If the vault is already mounted, then simply touch it to reset the
-    # idle timer.  Otherwise, mount it.  Retry in case a bad password is
-    # given.
-    if is_encfs_mounted "$MOUNT"; then
-        echo "$MOUNT/*" >/dev/null # touch to reset idle timer
+    # If the vault is already mounted, then simply touch it to reset the idle
+    # timer.  Otherwise, mount it.  Retry in case a bad password is given.
+    if is_fuse_mounted "$real_clear_dir"; then
+        echo "$real_clear_dir/*" >/dev/null # touch to reset idle timer
     else
         # Ensure that FUSE is available in the kernel.
-        if [ ! -w /dev/fuse ]; then
+        if [[ ! -w /dev/fuse ]]; then
             sudo /sbin/modprobe fuse
         fi
 
-        # If the raw directory was not specified, then form it by prefixing the
-        # mount directory's name with a dot.
-        if [ -z "$opt_raw" ]; then
-            opt_raw="${MOUNT%/*}/.${MOUNT##*/}"
+        if [[ -n "$cipher_dir" ]]; then
+            real_cipher_dir=$(try_realpath_physical "$cipher_dir")
+        else
+            find_real_cipher_dir "$real_clear_dir"
         fi
-        if ! RAW="$(try_realpath_physical "$opt_raw")"; then
-            fatal "not accessible: $opt_raw"
+        if ! [ -d "$real_cipher_dir" ]; then
+            fatal "not a directory: $real_cipher_dir"
         fi
-        if ! [ -d "$RAW" ]; then
-            fatal "not a directory: $RAW"
-        fi
+
+        detect_cipher_type
 
         # Ensure the mount point exists.
-        if [ ! -d "$MOUNT" ]; then
-            mkdir -m 700 -p "$MOUNT"
+        if [ ! -d "$real_clear_dir" ]; then
+            mkdir -m 700 -p "$real_clear_dir"
         fi
 
-        /usr/bin/encfs --idle=$opt_timeout --ondemand \
-                        --extpass="${0%/*}/askpass-vault" \
-                        "$RAW" \
-                        "$MOUNT"
+        # For askpass-vault:
+        export _VAULT_CLEAR_DIR="$real_clear_dir"
+        export _VAULT_CIPHER_DIR="$real_cipher_dir"
+
+        case $cipher_type in
+        gocryptfs)
+            local socket_file="/run/user/$UID/sock.${real_clear_dir//\//%}"
+
+            [[ -e $socket_file ]] && run rm -f "$socket_file"
+
+            run "$HOME/bin/gocryptfs" -idle=$idle_timeout \
+                                      -extpass="${0%/*}/askpass-vault" \
+                                      -ctlsock "$socket_file" \
+                                      -nonempty \
+                                      "$real_cipher_dir" \
+                                      "$real_clear_dir" || error "failed with exit status $?"
+            ;;
+        encfs)
+            run /usr/bin/encfs --idle=$(duration_to_minutes $idle_timeout) \
+                               --ondemand \
+                               --extpass="${0%/*}/askpass-vault" \
+                               -o nonempty \
+                               "$real_cipher_dir" \
+                               "$real_clear_dir" || error "failed with exit status $?"
+            ;;
+        esac
+
+        if ! is_fuse_mounted "$real_clear_dir"; then
+            fatal "FUSE mount failed: $real_clear_dir"
+        fi
     fi
 
     if $opt_browse && [ "$(type -t x-file-browser)" = file ]; then
-        x-file-browser "$MOUNT" &
+        run x-file-browser "$real_clear_dir" &
     fi
 }
 
 action_close() {
     # Only unmount if not currently being (un)mounted.
     lock || exit 4
-    trap "unlock; exit 1" 1 2 15
-    trap "unlock" 0
 
-    if is_encfs_mounted "$MOUNT"; then
-        fusermount -u "$MOUNT" || exit $?
+    if is_fuse_mounted "$real_clear_dir"; then
+        run fusermount -u "$real_clear_dir" || exit $?
         exit 0
     else
+        echo "not open"
         exit 1
     fi
 }
 
-is_encfs_mounted()
+is_fuse_mounted()
 {
-    /bin/mount | grep "^encfs on $1 type fuse\.encfs " >/dev/null
+    /bin/mount | grep " on ${1?} type fuse\." >/dev/null
 }
 
 lock()
 {
     if [ -x /usr/bin/lockfile-create ]; then
-        errs=$(/usr/bin/lockfile-create --retry 0 "$MOUNT" 2>&1 1>/dev/null)
+        errs=$(/usr/bin/lockfile-create --retry 0 "$real_clear_dir" 2>&1 1>/dev/null)
         case $? in
-        0) return 0;;
+        0) ;;
         4) return 1;;
-        *) echo "$errs" >&2; exit 1;;
+        *) fatal "$errs";;
         esac
-    else
-        return 0
     fi
+    trap "unlock; exit 1" 1 2 15
+    trap "unlock" 0
+    return 0
 }
 
 unlock()
 {
     if [ -x /usr/bin/lockfile-remove ]; then
-        /usr/bin/lockfile-remove "$MOUNT"
+        /usr/bin/lockfile-remove "$real_clear_dir"
     fi
 }
 

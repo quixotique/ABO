@@ -12,4 +12,13 @@ COMP_WORDBREAKS=${COMP_WORDBREAKS//=}
 
 complete -o nospace -C 'abo compa' abo
 
-complete -W 'open close' vault
+complete -F _complete_vault vault
+
+_complete_vault() {
+    COMPREPLY=()
+    local cur=${COMP_WORDS[COMP_CWORD]}
+    case $COMP_CWORD in
+    1) COMPREPLY=( $(compgen -W 'open close' -- "$cur") );;
+    2) COMPREPLY=( $(compgen -d -- "$cur") );;
+    esac
+}
