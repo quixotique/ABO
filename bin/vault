@@ -149,20 +149,23 @@ action_open() {
 
             [[ -e $socket_file ]] && run rm -f "$socket_file"
 
-            run "$HOME/bin/gocryptfs" -idle=$idle_timeout \
-                                      -extpass="${0%/*}/askpass-vault" \
-                                      -ctlsock "$socket_file" \
-                                      -nonempty \
-                                      "$real_cipher_dir" \
-                                      "$real_clear_dir" || error "failed with exit status $?"
+            run /bin/setsid -w "$HOME/bin/gocryptfs" \
+                                -idle=$idle_timeout \
+                                -extpass="${0%/*}/askpass-vault" \
+                                -ctlsock "$socket_file" \
+                                -nonempty \
+                                "$real_cipher_dir" \
+                                "$real_clear_dir" || error "failed with exit status $?"
+            wait
             ;;
         encfs)
-            run /usr/bin/encfs --idle=$(duration_to_minutes $idle_timeout) \
-                               --ondemand \
-                               --extpass="${0%/*}/askpass-vault" \
-                               -o nonempty \
-                               "$real_cipher_dir" \
-                               "$real_clear_dir" || error "failed with exit status $?"
+            run /bin/setsid -w /usr/bin/encfs \
+                                --idle=$(duration_to_minutes $idle_timeout) \
+                                --ondemand \
+                                --extpass="${0%/*}/askpass-vault" \
+                                -o nonempty \
+                                "$real_cipher_dir" \
+                                "$real_clear_dir" || error "failed with exit status $?"
             ;;
         esac
 
