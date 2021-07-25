@@ -27,8 +27,8 @@ Options:
   -r180,--rotate180    Rotate page 180 degrees
   -r-90,--rotate-90    Rotate page clockwise 90 degrees
   -r,--resolution N    Output resolution N dpi (default $opt_resolution)
-  -C,--fullcolour      Produce an un quantised colour result (default monochrome)
-  -c,--quantcolour     Produce a quantised colour result (default monochrome)
+  -C,--fullcolour      Produce an un quantised colour result (default $opt_mode)
+  -c,--quantcolour     Produce a quantised colour result (default $opt_mode)
   -t,--threshold B[,W] Normalise B percent to black [B to white] (default $opt_threshold)
   -e,--edge N          Blank N mm of margin (default $opt_edge)
   -j,--jpeg[=N]        Generate JPEG PDF, quality N (default $opt_jpeg_quality)
@@ -184,10 +184,10 @@ fi
 
 case $opt_rotate in
 90|180|270)
-   run pnmflip -rotate$opt_rotate "$stem-$res-norm.$scansuffix" >|"$stem-$res-flip.$scansuffix"
+   run pnmflip -rotate$opt_rotate "$stem-$res-norm.$scansuffix" >|"$stem-$res-rotated.$scansuffix"
    ;;
 *)
-   cp "$stem-$res-norm.$scansuffix" "$stem-$res-flip.$scansuffix"
+   cp "$stem-$res-norm.$scansuffix" "$stem-$res-rotated.$scansuffix"
    ;;
 esac
 case $opt_rotate in
@@ -207,29 +207,29 @@ tiff_to_pdf() {
 case $opt_mode in
 
 fullcolour)
-    run pnmtotiff -lzw -truecolor "$stem-$res-flip.$scansuffix" >|"$stem-$res-flip.tiff"
-    tiff_to_pdf -o "$opt_output" "$stem-$res-flip.tiff"
+    run pnmtotiff -lzw -truecolor "$stem-$res-rotated.$scansuffix" >|"$stem-$res-rotated.tiff"
+    tiff_to_pdf -o "$opt_output" "$stem-$res-rotated.tiff"
     ;;
 
 quantcolour)
-    #run ppmdither "$stem-$res-flip.$scansuffix" >|"$stem-$res-quant.ppm"
+    #run ppmdither "$stem-$res-rotated.$scansuffix" >|"$stem-$res-quant.ppm"
     run ppmcolors -maxval=5 >|"$stem-colourmap.ppm"
-    run ppmquant -fs -mapfile="$stem-colourmap.ppm" "$stem-$res-flip.$scansuffix" >|"$stem-$res-quant.ppm"
+    run ppmquant -fs -mapfile="$stem-colourmap.ppm" "$stem-$res-rotated.$scansuffix" >|"$stem-$res-quant.ppm"
     run pnmtotiff -lzw "$stem-$res-quant.ppm" >|"$stem-$res-quant.tiff"
     tiff_to_pdf -o "$opt_output" "$stem-$res-quant.tiff"
     ;;
 
 greyscale)
     run pgmramp -lr 256 1 >|"$stem-colourmap.pgm"
-    run ppmquant -fs -mapfile="$stem-colourmap.pgm" "$stem-$res-flip.$scansuffix" >|"$stem-$res-quant.pgm"
+    run ppmquant -fs -mapfile="$stem-colourmap.pgm" "$stem-$res-rotated.$scansuffix" >|"$stem-$res-quant.pgm"
     run pnmtotiff -lzw "$stem-$res-quant.pgm" >|"$stem-$res-quant.tiff"
     tiff_to_pdf -o "$opt_output" "$stem-$res-quant.tiff"
     ;;
 
 monochrome)
-    run pgmtopbm -fs "$stem-$res-flip.$scansuffix" >|"$stem-$res-flip.pnm"
-    run pnmtops -equalpixels -dpi 150 "$stem-$res-flip.pnm" >|"$stem-$res-flip.ps"
-    run ps2pdf -sPAPERSIZE=a4 -dEPSCrop "$stem-$res-flip.ps" "$opt_output"
+    run pgmtopbm -fs "$stem-$res-rotated.$scansuffix" >|"$stem-$res-rotated.pnm"
+    run pnmtops -equalpixels -dpi 150 "$stem-$res-rotated.pnm" >|"$stem-$res-rotated.ps"
+    run ps2pdf -sPAPERSIZE=a4 -dEPSCrop "$stem-$res-rotated.ps" "$opt_output"
     ;;
 
 esac
