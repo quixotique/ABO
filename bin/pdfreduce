@@ -1,27 +1,21 @@
 #!/bin/bash
 
-shopt -s extglob
 set -e
+shopt -s extglob
+
+source "$SHELLBOOST/libsh/script.sh"
 
 usage() {
-   echo -n -e "\
-Usage: ${0##*/} [options] SRC DEST
+   echo -n "\
+Usage: ${0##*/} [options] SRC [DEST]
 Options:
    -q, --quality $quality_glob
    -r, --resolution DPI
+   -n, --dry-run
 "
 }
 
-fatal_usage() {
-   echo "${0##*/}: $*" >&2
-   echo "See \`${0##*/} --help' for usage." >&2
-   exit 1
-}
-
-fatal() {
-   echo "${0##*/}: $*" >&2
-   exit 1
-}
+ensure_in_path gs
 
 quality_glob='screen|ebook|printer|prepress|default'
 quality=
@@ -47,6 +41,7 @@ while [ $# -ne 0 ]; do
    opt="$1"
    case "$opt" in
    -h|--help) usage; exit 0;;
+   -n|--dry-run) opt_dry_run=true;;
    -q?*) parse_quality "${opt#-q}";;
    --quality=*) parse_quality "${opt#*=}";;
    -q|--quality) shift; parse_quality "${1?missing argument for $opt}";;
@@ -59,27 +54,15 @@ while [ $# -ne 0 ]; do
    shift
 done
 
-if [[ $# -eq 0 ]]; then
-   fatal_usage "missing argument: source file"
-fi
+[[ $# -gt 0 ]] || fatal_usage "missing argument: source file"
 
 src="${1?}"
 shift
-if ! [[ -f $src ]]; then
-   fatal "not a file: $src"
-fi
+[[ -f $src ]] || fatal "not an existing file: $src"
 
 dst="${1:-$src}"
 shift || true
-if [ -d "$dst" ]; then
-   dst="$dst/${src##*/}"
-fi
-
-exec 5>&1
-run() {
-   echo "+ $*" >&5
-   "$@"
-}
+[[ -d "$dst" ]] && dst="$dst/${src##*/}"
 
 tmp="/tmp/${0##*/}-$$.pdf"
 
@@ -91,6 +74,4 @@ run gs \
       ${resolution:+-"sColorImageResolution=$resolution"} \
       "$src"
 
-if [ -s "$tmp" ]; then
-    run mv --backup --suffix=.bak "$tmp" "$dst"
-fi
+{ $opt_dry_run || [[ -s $tmp ]]; } && run mv --backup --suffix=.bak "$tmp" "$dst"
