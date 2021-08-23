@@ -143,13 +143,18 @@ action_open() {
         export _VAULT_CLEAR_DIR="$real_clear_dir"
         export _VAULT_CIPHER_DIR="$real_cipher_dir"
 
+        # If askpass-vault will use X Display, then detach the daemon from the
+        # controlling tty.
+        local setsid=()
+        [[ $DISPLAY && -x /usr/bin/setsid ]] && setsid=(/usr/bin/setsid -w)
+
         case $cipher_type in
         gocryptfs)
             local socket_file="/run/user/$UID/sock.${real_clear_dir//\//%}"
 
             [[ -e $socket_file ]] && run rm -f "$socket_file"
 
-            run /bin/setsid -w "$HOME/bin/gocryptfs" \
+            run "${setsid[@]}" "$HOME/bin/gocryptfs" \
                                 -idle=$idle_timeout \
                                 -extpass="${0%/*}/askpass-vault" \
                                 -ctlsock "$socket_file" \
@@ -159,7 +164,7 @@ action_open() {
             wait
             ;;
         encfs)
-            run /bin/setsid -w /usr/bin/encfs \
+            run "${setsid[@]}" /usr/bin/encfs \
                                 --idle=$(duration_to_minutes $idle_timeout) \
                                 --ondemand \
                                 --extpass="${0%/*}/askpass-vault" \

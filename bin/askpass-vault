@@ -17,10 +17,10 @@ if [ -x /usr/bin/lockfile-create ]; then
     trap '/usr/bin/lockfile-remove --lock-name "$lockfile"; exit 1' HUP INT QUIT USR1 USR2 TERM
 fi
 
-# If there is a valid $DISPLAY in the environment, then we are in an X
-# Windows GUI context, so we use a pop-up GUI dialog with a 10 second
-# timeout.  Otherwise, we present a dialog on the terminal (stdin/stdout).
-# If no response within the timeout time, give up.
+# If there is a valid $DISPLAY in the environment, then we are in an X Windows
+# GUI context, so we use a pop-up GUI dialog.  Otherwise, we present a dialog
+# on the controlling terminal (/dev/tty).  If no response within the timeout
+# time, give up.
 case $DISPLAY in
     *:+([0-9])?(.+([0-9])) )
     /usr/bin/zenity \
