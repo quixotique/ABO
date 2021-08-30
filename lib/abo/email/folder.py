@@ -151,6 +151,6 @@ class Filer(object):
             return to_folders
         # Otherwise, use self folder if sender or recipient is self.
         if folder_self:
-            return set(folder_self)
+            return set([folder_self])
         # Otherwise, no luck.
         return set()
