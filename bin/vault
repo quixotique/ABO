@@ -155,8 +155,9 @@ action_open() {
             [[ -e $socket_file ]] && run rm -f "$socket_file"
 
             run "${setsid[@]}" "$HOME/bin/gocryptfs" \
-                                -idle=$idle_timeout \
-                                -extpass="${0%/*}/askpass-vault" \
+                                -badname "*.sync-conflict*" \
+                                -idle    $idle_timeout \
+                                -extpass "${0%/*}/askpass-vault" \
                                 -ctlsock "$socket_file" \
                                 -nonempty \
                                 "$real_cipher_dir" \
