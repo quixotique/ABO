@@ -1,0 +1,13 @@
+#!/bin/bash
+
+trap "rm -f /tmp/mhtmp$$.html" 0 1 2 15
+
+set -e
+set -x
+
+/usr/bin/mh/mhstore -prefer text/html -outfile /tmp/mhtmp$$.html "$@"
+
+/usr/bin/chromium --headless --disable-gpu \
+                  --print-to-pdf-no-header \
+                  --print-to-pdf=./mh.pdf \
+                  file:///tmp/mhtmp$$.html
