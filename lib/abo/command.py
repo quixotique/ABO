@@ -60,7 +60,8 @@ def cmd_journal(config, opts):
 
 def cmd_chart(config, opts):
     chart = get_chart(config, opts)
-    for account in sorted(fullset(select_accounts(chart, opts))):
+    selectpred = select_option_predicate(chart, opts)
+    for account in sorted(fullset(filter(selectpred, chart.accounts()))):
         if opts['--verbose']:
             line = [account.full_name()]
         else:
@@ -75,10 +76,7 @@ def cmd_chart(config, opts):
 
 def cmd_list(config, opts):
     chart = get_chart(config, opts)
-    try:
-        accounts = filter_accounts(chart, opts['<PRED>'].lstrip())
-    except ValueError as e:
-        raise InvalidArg('<PRED>', e)
+    accounts = filter_accounts(chart, opts)
     for account in sorted(accounts):
         if opts['--verbose']:
             yield account.full_name()
@@ -91,10 +89,7 @@ def cmd_index(config, opts):
 
 def cmd_acc(config, opts):
     chart = get_chart(config, opts)
-    try:
-        accounts = filter_accounts(chart, opts['<PRED>'].lstrip())
-    except ValueError as e:
-        raise InvalidArg('<PRED>', e)
+    accounts = filter_accounts(chart, opts)
     logging.debug('accounts = %r' % list(map(repr, accounts)))
     common_root_account = abo.account.common_root(accounts)
     logging.debug('common_root_account = %r' % common_root_account)
@@ -405,7 +400,7 @@ def cmd_profloss(config, opts):
     ranges = parse_ranges(opts)
     chart = get_chart(config, opts)
     transactions = get_transactions(chart, config, opts)
-    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    selectpred = select_option_predicate(chart, opts)
     plpred = lambda e: chart[e.account].is_profitloss()
     balances = [abo.balance.Balance(transactions,
                                     date_range=r,
@@ -444,7 +439,7 @@ def cmd_cashflow(config, opts):
     ranges = parse_ranges(opts)
     chart = get_chart(config, opts)
     transactions = get_transactions(chart, config, opts)
-    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    selectpred = select_option_predicate(chart, opts)
     cashpred = lambda e: chart[e.account].is_tagged(chart, 'cash')
     noncashpred = lambda e: not cashpred(e)
     transactions = abo.account.remove_account(chart, lambda a: not a.is_tagged(chart, 'cash'), transactions, cancel_only=True)
@@ -501,7 +496,7 @@ def cmd_bsheet(config, opts):
     retained = chart.get_or_create(name='retained profit(-loss)', atype=abo.account.AccountType.Equity)
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
-    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    selectpred = select_option_predicate(chart, opts)
     notplpred = lambda e: not plpred(chart[e.account])
     balances = [abo.balance.Balance(all_transactions, date_range=r, chart=chart,
                                     entry_pred=lambda e: notplpred(e) and selectpred(e),
@@ -527,7 +522,7 @@ def cmd_balance(config, opts):
     chart = get_chart(config, opts)
     all_transactions = get_transactions(chart, config, opts)
     ranges = parse_whens(opts)
-    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    selectpred = select_option_predicate(chart, opts)
     balances = [abo.balance.Balance(all_transactions,
                                     date_range=r,
                                     chart=chart,
@@ -620,7 +615,7 @@ def cmd_due(config, opts):
     chart = get_chart(config, opts)
     when = parse_when(opts)
     transactions = (t for t in get_transactions(chart, config, opts))
-    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    selectpred = select_option_predicate(chart, opts)
     due_accounts = compute_due_accounts(chart, transactions, selectpred)
     bw = config.money_column_width()
     fmt = '%s %s %{bw}s  %s'.format(**locals())
@@ -652,7 +647,7 @@ def cmd_table(config, opts):
     chart = get_chart(config, opts)
     when = parse_when(opts)
     transactions = (t for t in get_transactions(chart, config, opts))
-    selectpred = chart.parse_predicate(opts['--select']) if opts['--select'] else lambda a: True
+    selectpred = select_option_predicate(chart, opts)
     due_accounts = compute_due_accounts(chart, transactions, selectpred)
     # Accumulate due amounts into the table
     slot_headings = ['1+ year',    '6+ months',    '3+ months',    '2+ months',    '1+ month',    '< 1 month', 'future']
@@ -802,18 +797,22 @@ def pay_when_due(chart, transactions):
                                                                        {'account': proj, 'amount': e.amount})))
     return projected
 
-def select_accounts(chart, opts):
-    try:
-        return filter_accounts(chart, (opts['--select'] or '').lstrip())
-    except ValueError as e:
-        raise InvalidOption('--select', e)
+def select_option_predicate(chart, opts):
+    if opts['--select']:
+        try:
+            return chart.parse_predicate(opts['--select'].lstrip())
+        except ValueError as e:
+            raise InvalidOption('--select', e)
+    return lambda a: True
 
-def filter_accounts(chart, text):
-    accounts = set(chart.accounts())
-    if text:
-        pred = chart.parse_predicate(text)
-        accounts = set(filter(pred, accounts))
-    return accounts
+def filter_accounts(chart, opts):
+    if opts['<PRED>']:
+        try:
+            pred = chart.parse_predicate(opts['<PRED>'].lstrip())
+        except ValueError as e:
+            raise InvalidArg('<PRED>', e)
+        return set(filter(pred, chart.accounts()))
+    return set(chart.accounts())
 
 def fullset(accounts):
     full = set()
