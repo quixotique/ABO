@@ -7,5 +7,6 @@ edition = "2018"
 
 [dependencies]
 chrono = "0.4"
+rust_decimal = "1.19"
 structopt = { version = "0.3", default-features = false }
 rusty-money = { version = "0.4.0", features = ["iso"] }
