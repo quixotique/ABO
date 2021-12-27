@@ -5,7 +5,9 @@ trap "rm -f /tmp/mhtmp$$.html" 0 1 2 15
 set -e
 set -x
 
-/usr/bin/mh/mhstore -prefer text/html -outfile /tmp/mhtmp$$.html "$@"
+/usr/bin/mh/mhstore -type text/html \
+                    -prefer text/html \
+                    -outfile /tmp/mhtmp$$.html "$@"
 
 /usr/bin/chromium --headless --disable-gpu \
                   --print-to-pdf-no-header \
