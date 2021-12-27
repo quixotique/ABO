@@ -36,8 +36,15 @@ def main():
         except OSError:
             pass
         if lines:
-            mh = mailbox.MH(os.path.join(os.environ['HOME'], 'MH'), create=False)
-            folder = mh.get_folder(folder_name)
+            mh_path = os.path.join(os.environ['HOME'], 'MH')
+            try:
+                mh = mailbox.MH(mh_path, create=False)
+            except mailbox.NoSuchMailboxError:
+                fatal('missing directory: ' + mh_path)
+            try:
+                folder = mh.get_folder(folder_name)
+            except mailbox.NoSuchMailboxError:
+                fatal('no such mailbox: ' + os.path.join(mh_path, folder_name))
             messages = folder.keys()
             if messages:
                 first_message = messages[-lines:][0]
@@ -52,8 +59,11 @@ def exec_or_die(executable_name, args):
     try:
         os.execvp(executable_name, [executable_name] + args)
     except:
-        print(f'{sys.argv[0]}: could not execp "{executable_name}":', sys.exc_info()[1], file=sys.stderr)
-        sys.exit(1)
+        fatal(f'could not execp "{executable_name}": {sys.exc_info()[1]}')
+
+def fatal(message):
+    print(os.path.basename(sys.argv[0]) + ": " + message, file=sys.stderr)
+    sys.exit(1)
 
 if __name__ == '__main__':
     main()
