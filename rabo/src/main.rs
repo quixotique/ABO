@@ -1,7 +1,6 @@
-use rust_decimal::prelude::*;
-use std::collections::HashSet;
-use std::iter::FromIterator;
 use chrono::prelude::*;
+//use rust_decimal::prelude::*;
+use std::iter::FromIterator;
 use structopt::StructOpt;
 
 mod transaction;
@@ -29,12 +28,12 @@ struct Rabo {
 enum Command {
     Bsheet {
         #[structopt(flatten)]
-        _opts: ReportOpts
+        _opts: ReportOpts,
     },
 
     Profloss {
         #[structopt(flatten)]
-        _opts: ReportOpts
+        _opts: ReportOpts,
     },
 }
 
@@ -52,14 +51,21 @@ struct ReportOpts {
 fn main() {
     let opt = Rabo::from_args();
     if opt.debug {
-        let t = transaction::Transaction::new(NaiveDate::from_ymd(2021, 12, 29),
-                                              None,
-                                              "Who".to_string(),
-                                              "What".to_string(),
-                                              vec![transaction::Entry::new("account A".to_string(), Decimal::new(1, 0), None, "detail".to_string()),
-                                                   transaction::Entry::new("account B".to_string(), Decimal::new(-1, 0), None, "detail".to_string())
-                                                  ],
-                                              HashSet::from_iter(vec![]));
-        println!("transaction {:?}", t);
+        let a1 =
+            transaction::Account::new(None, "A1".to_string(), transaction::Tags::from_iter(vec![]));
+        let a2 =
+            transaction::Account::new(None, "A2".to_string(), transaction::Tags::from_iter(vec![]));
+        let t = transaction::Transaction::new(
+            NaiveDate::from_ymd(2021, 12, 29),
+            None,
+            "Who".to_string(),
+            "What".to_string(),
+            vec![
+                transaction::Entry::new(&a1, "1", None, "detail".to_string()),
+                transaction::Entry::new(&a2, "-1", None, "detail".to_string()),
+            ],
+            transaction::Tags::from_iter(vec![]),
+        );
+        println!("transaction {}", t);
     }
 }
