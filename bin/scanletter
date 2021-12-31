@@ -76,6 +76,7 @@ while [ $# -ne 0 ]; do
     -p|--page) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_pagesize="$1";;
     --resolution=*) opt_resolution="${arg#*=}";;
     -r|--resolution) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_resolution="$1";;
+    --no-threshold) opt_threshold=none;;
     --threshold=*) opt_threshold="${arg#*=}";;
     -t|--threshold) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_threshold="$1";;
     --edge=*) opt_edge="${arg#*=}";;
