@@ -54,11 +54,16 @@ fn main() {
         let a2 = transaction::Account::new(None, "A2", vec![].into_iter());
         let t = transaction::Transaction::new(
             NaiveDate::from_ymd(2021, 12, 29),
-            None,
+            Some(NaiveDate::from_ymd(2021, 12, 31)),
             "Who",
             "What",
             vec![
-                transaction::Entry::new(&a1, "1", None, "detail"),
+                transaction::Entry::new(
+                    &a1,
+                    "1",
+                    Some(NaiveDate::from_ymd(2021, 11, 30)),
+                    "detail",
+                ),
                 transaction::Entry::new(&a2, "-1", None, "detail"),
             ],
             vec!["tag33", "tag4"].into_iter(),
