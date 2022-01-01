@@ -1,31 +1,65 @@
 use chrono::prelude::*;
 use rust_decimal::prelude::*;
 use rusty_money::iso;
+use std::boxed::Box;
 use std::collections::HashSet;
 use std::fmt;
 
 pub type Money = rusty_money::Money<'static, iso::Currency>;
+
 pub const CURRENCY: &iso::Currency = iso::AUD;
 
-pub type Tags = HashSet<String>;
+#[derive(Default, Debug)]
+struct Tags {
+    inner: HashSet<Box<str>>,
+}
+
+impl Tags {
+    fn from_iter<'a, I: Iterator<Item = &'a str>>(iter: I) -> Tags {
+        let mut tags = Tags::default();
+        for s in iter {
+            tags.inner.insert(s.to_string().into_boxed_str());
+        }
+        tags
+    }
+}
+
+impl fmt::Display for Tags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut vec = self.inner.iter().collect::<Vec<&Box<str>>>();
+        vec.sort_by(|a, b| human_sort::compare(*a, *b));
+        for tag in vec {
+            write!(f, " ={}", tag)?;
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct Account<'a> {
     parent: Option<&'a Account<'a>>,
-    name: String,
+    name: Box<str>,
     currency: &'static iso::Currency,
     tags: Tags,
 }
 
 impl<'a> Account<'a> {
-    pub fn new(parent: Option<&'a Account<'a>>, name: String, tags: Tags) -> Account<'a> {
+    pub fn new<'b, I: Iterator<Item = &'b str>>(
+        parent: Option<&'a Account<'a>>,
+        name: &'b str,
+        tags: I,
+    ) -> Account<'a> {
         Account {
-            parent: parent,
-            name: name,
+            parent,
+            name: name.to_string().into_boxed_str(),
             currency: CURRENCY,
-            tags: tags,
+            tags: Tags::from_iter(tags),
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn write_to(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self, self.tags)
     }
 }
 
@@ -39,30 +73,34 @@ impl fmt::Display for Account<'_> {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct Entry<'a> {
     account: &'a Account<'a>,
     amount: Decimal,
     cdate: Option<NaiveDate>,
-    detail: String,
+    detail: &'a str,
 }
 
 impl<'a> Entry<'a> {
     pub fn new(
         account: &'a Account,
-        amount: &str,
+        amount_str: &str,
         cdate: Option<NaiveDate>,
-        detail: String,
+        detail: &'a str,
     ) -> Entry<'a> {
-        let entry = Entry {
-            account: account,
-            amount: *Money::from_str(amount, account.currency).unwrap().amount(),
-            cdate: cdate,
-            detail: detail,
-        };
-        if entry.amount.is_zero() {
-            panic!("zero amount: {:?}", entry)
+        let money = Money::from_str(amount_str, account.currency);
+        if money.is_err() {
+            panic!("malformed amount: {:?}", amount_str)
         }
+        let amount = money.as_ref().unwrap().amount();
+        if amount.is_zero() {
+            panic!("zero amount is invalid: {:?}", money)
+        }
+        let entry = Entry {
+            account,
+            amount: *amount,
+            cdate,
+            detail,
+        };
         entry
     }
 
@@ -85,30 +123,32 @@ impl fmt::Display for Entry<'_> {
         if !self.detail.is_empty() {
             write!(f, " ; {}", self.detail)?;
         }
+        if !self.cdate.is_none() {
+            write!(f, " {{{}}}", self.cdate.unwrap())?;
+        }
         Ok(())
     }
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct Transaction<'a> {
     date: NaiveDate,
     edate: NaiveDate,
-    who: String,
-    what: String,
+    who: &'a str,
+    what: &'a str,
     entries: Vec<Entry<'a>>,
     tags: Tags,
 }
 
 impl<'a> Transaction<'a> {
-    pub fn new(
+    pub fn new<'b, I: Iterator<Item = &'b str>>(
         date: NaiveDate,
         edate: Option<NaiveDate>,
-        who: String,
-        what: String,
+        who: &'a str,
+        what: &'a str,
         entries: Vec<Entry<'a>>,
-        tags: Tags,
-    ) -> Transaction {
+        tags: I,
+    ) -> Transaction<'a> {
         if entries.len() < 2 {
             panic!("too few entries")
         }
@@ -116,15 +156,15 @@ impl<'a> Transaction<'a> {
             panic!("entries do not sum to zero: {:?}", entries)
         }
         Transaction {
-            date: date,
+            date,
             edate: match edate {
                 Some(d) => d,
                 None => date,
             },
-            who: who,
-            what: what,
-            entries: entries,
-            tags: tags,
+            who,
+            what,
+            entries,
+            tags: Tags::from_iter(tags),
         }
     }
 }
@@ -132,6 +172,9 @@ impl<'a> Transaction<'a> {
 impl fmt::Display for Transaction<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.date)?;
+        if self.edate != self.date {
+            write!(f, "={}", self.edate)?;
+        }
         if !self.who.is_empty() {
             if !self.what.is_empty() {
                 write!(f, " {}; {}", self.who, self.what)?;
@@ -141,6 +184,7 @@ impl fmt::Display for Transaction<'_> {
         } else if !self.what.is_empty() {
             write!(f, " ; {}", self.what)?;
         }
+        write!(f, "{}", self.tags)?;
         writeln!(f)?;
         for entry in &self.entries {
             writeln!(f, "   {}", entry)?;

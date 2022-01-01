@@ -1,6 +1,5 @@
 use chrono::prelude::*;
 //use rust_decimal::prelude::*;
-use std::iter::FromIterator;
 use structopt::StructOpt;
 
 mod transaction;
@@ -51,21 +50,19 @@ struct ReportOpts {
 fn main() {
     let opt = Rabo::from_args();
     if opt.debug {
-        let a1 =
-            transaction::Account::new(None, "A1".to_string(), transaction::Tags::from_iter(vec![]));
-        let a2 =
-            transaction::Account::new(None, "A2".to_string(), transaction::Tags::from_iter(vec![]));
+        let a1 = transaction::Account::new(None, "A1", vec!["tag11", "tag2"].into_iter());
+        let a2 = transaction::Account::new(None, "A2", vec![].into_iter());
         let t = transaction::Transaction::new(
             NaiveDate::from_ymd(2021, 12, 29),
             None,
-            "Who".to_string(),
-            "What".to_string(),
+            "Who",
+            "What",
             vec![
-                transaction::Entry::new(&a1, "1", None, "detail".to_string()),
-                transaction::Entry::new(&a2, "-1", None, "detail".to_string()),
+                transaction::Entry::new(&a1, "1", None, "detail"),
+                transaction::Entry::new(&a2, "-1", None, "detail"),
             ],
-            transaction::Tags::from_iter(vec![]),
+            vec!["tag33", "tag4"].into_iter(),
         );
-        println!("transaction {}", t);
+        println!("{}", t);
     }
 }
