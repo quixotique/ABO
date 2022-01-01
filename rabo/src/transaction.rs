@@ -1,3 +1,4 @@
+use chrono::format::*;
 use chrono::prelude::*;
 use rust_decimal::prelude::*;
 use rusty_money::iso;
@@ -8,6 +9,27 @@ use std::fmt;
 pub type Money = rusty_money::Money<'static, iso::Currency>;
 
 pub const CURRENCY: &iso::Currency = iso::AUD;
+
+pub fn format_date<'a>(date: &NaiveDate) -> DelayedFormat<StrftimeItems<'a>> {
+    date.format("%d/%m/%Y")
+}
+
+pub fn format_contextual_date<'a>(
+    date: &NaiveDate,
+    context: &NaiveDate,
+) -> DelayedFormat<StrftimeItems<'a>> {
+    let mut fmt: &'static str = "%d/%m/%Y";
+    if date.year() == context.year() {
+        fmt = "%d/%m/";
+        if date.month() == context.month() {
+            fmt = "%d//";
+            if date.day() == context.day() {
+                fmt = "";
+            }
+        }
+    }
+    date.format(fmt)
+}
 
 #[derive(Default, Debug)]
 struct Tags {
@@ -123,8 +145,25 @@ impl fmt::Display for Entry<'_> {
         if !self.detail.is_empty() {
             write!(f, " ; {}", self.detail)?;
         }
-        if !self.cdate.is_none() {
-            write!(f, " {{{}}}", self.cdate.unwrap())?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct ContextualEntry<'a> {
+    entry: &'a Entry<'a>,
+    context: &'a Transaction<'a>,
+}
+
+impl fmt::Display for ContextualEntry<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.entry)?;
+        if !self.entry.cdate.is_none() {
+            write!(
+                f,
+                " {{{}}}",
+                format_contextual_date(&self.entry.cdate.unwrap(), &self.context.date)
+            )?;
         }
         Ok(())
     }
@@ -171,9 +210,9 @@ impl<'a> Transaction<'a> {
 
 impl fmt::Display for Transaction<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.date)?;
+        write!(f, "{}", format_date(&self.date))?;
         if self.edate != self.date {
-            write!(f, "={}", self.edate)?;
+            write!(f, "={}", format_contextual_date(&self.edate, &self.date))?;
         }
         if !self.who.is_empty() {
             if !self.what.is_empty() {
@@ -187,7 +226,14 @@ impl fmt::Display for Transaction<'_> {
         write!(f, "{}", self.tags)?;
         writeln!(f)?;
         for entry in &self.entries {
-            writeln!(f, "   {}", entry)?;
+            writeln!(
+                f,
+                "   {}",
+                ContextualEntry {
+                    entry: entry,
+                    context: self,
+                }
+            )?;
         }
         Ok(())
     }
