@@ -1,104 +1,16 @@
-use chrono::format::*;
-use chrono::prelude::*;
 use rust_decimal::prelude::*;
-use rusty_money::iso;
-use std::boxed::Box;
-use std::collections::HashSet;
 use std::fmt;
 
-pub type Money = rusty_money::Money<'static, iso::Currency>;
-
-pub const CURRENCY: &iso::Currency = iso::AUD;
-
-pub fn format_date<'a>(date: &NaiveDate) -> DelayedFormat<StrftimeItems<'a>> {
-    date.format("%d/%m/%Y")
-}
-
-pub fn format_contextual_date<'a>(
-    date: &NaiveDate,
-    context: &NaiveDate,
-) -> DelayedFormat<StrftimeItems<'a>> {
-    let mut fmt: &'static str = "%d/%m/%Y";
-    if date.year() == context.year() {
-        fmt = "%d/%m/";
-        if date.month() == context.month() {
-            fmt = "%d//";
-            if date.day() == context.day() {
-                fmt = "";
-            }
-        }
-    }
-    date.format(fmt)
-}
-
-#[derive(Default, Debug)]
-struct Tags {
-    inner: HashSet<Box<str>>,
-}
-
-impl Tags {
-    fn from_iter<'a, I: Iterator<Item = &'a str>>(iter: I) -> Tags {
-        let mut tags = Tags::default();
-        for s in iter {
-            tags.inner.insert(s.to_string().into_boxed_str());
-        }
-        tags
-    }
-}
-
-impl fmt::Display for Tags {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut vec = self.inner.iter().collect::<Vec<&Box<str>>>();
-        vec.sort_by(|a, b| human_sort::compare(*a, *b));
-        for tag in vec {
-            write!(f, " ={}", tag)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub struct Account<'a> {
-    parent: Option<&'a Account<'a>>,
-    name: Box<str>,
-    currency: &'static iso::Currency,
-    tags: Tags,
-}
-
-impl<'a> Account<'a> {
-    pub fn new<'b, I: Iterator<Item = &'b str>>(
-        parent: Option<&'a Account<'a>>,
-        name: &'b str,
-        tags: I,
-    ) -> Account<'a> {
-        Account {
-            parent,
-            name: name.to_string().into_boxed_str(),
-            currency: CURRENCY,
-            tags: Tags::from_iter(tags),
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn write_to(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self, self.tags)
-    }
-}
-
-impl fmt::Display for Account<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if !self.parent.is_none() {
-            write!(f, "{}:", self.parent.unwrap())?;
-        }
-        write!(f, "{}", self.name)
-    }
-}
+use crate::account::*;
+use crate::date::*;
+use crate::money::*;
+use crate::tags::*;
 
 #[derive(Debug)]
 pub struct Entry<'a> {
     account: &'a Account<'a>,
     amount: Decimal,
-    cdate: Option<NaiveDate>,
+    cdate: Option<Date>,
     detail: &'a str,
 }
 
@@ -106,10 +18,10 @@ impl<'a> Entry<'a> {
     pub fn new(
         account: &'a Account,
         amount_str: &str,
-        cdate: Option<NaiveDate>,
+        cdate: Option<Date>,
         detail: &'a str,
     ) -> Entry<'a> {
-        let money = Money::from_str(amount_str, account.currency);
+        let money = account.money_from_str(amount_str);
         if money.is_err() {
             panic!("malformed amount: {:?}", amount_str)
         }
@@ -127,7 +39,7 @@ impl<'a> Entry<'a> {
     }
 
     pub fn money(&self) -> Money {
-        Money::from_decimal(self.amount, self.account.currency)
+        self.account.money_from_decimal(self.amount)
     }
 }
 
@@ -171,8 +83,8 @@ impl fmt::Display for ContextualEntry<'_> {
 
 #[derive(Debug)]
 pub struct Transaction<'a> {
-    date: NaiveDate,
-    edate: NaiveDate,
+    date: Date,
+    edate: Date,
     who: &'a str,
     what: &'a str,
     entries: Vec<Entry<'a>>,
@@ -181,8 +93,8 @@ pub struct Transaction<'a> {
 
 impl<'a> Transaction<'a> {
     pub fn new<'b, I: Iterator<Item = &'b str>>(
-        date: NaiveDate,
-        edate: Option<NaiveDate>,
+        date: Date,
+        edate: Option<Date>,
         who: &'a str,
         what: &'a str,
         entries: Vec<Entry<'a>>,
