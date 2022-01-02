@@ -1,8 +1,13 @@
-use chrono::prelude::*;
-//use rust_decimal::prelude::*;
-use structopt::StructOpt;
-
+mod account;
+mod date;
+mod money;
+mod tags;
 mod transaction;
+
+use crate::account::*;
+use crate::date::*;
+use crate::transaction::*;
+use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "rabo", about = "ABO in Rust.")]
@@ -50,21 +55,16 @@ struct ReportOpts {
 fn main() {
     let opt = Rabo::from_args();
     if opt.debug {
-        let a1 = transaction::Account::new(None, "A1", vec!["tag11", "tag2"].into_iter());
-        let a2 = transaction::Account::new(None, "A2", vec![].into_iter());
-        let t = transaction::Transaction::new(
-            NaiveDate::from_ymd(2021, 12, 29),
-            Some(NaiveDate::from_ymd(2021, 12, 31)),
+        let a1 = Account::new(None, "A1", vec!["tag11", "tag2"].into_iter());
+        let a2 = Account::new(None, "A2", vec![].into_iter());
+        let t = Transaction::new(
+            Date::from_ymd(2021, 12, 29),
+            Some(Date::from_ymd(2021, 12, 31)),
             "Who",
             "What",
             vec![
-                transaction::Entry::new(
-                    &a1,
-                    "1",
-                    Some(NaiveDate::from_ymd(2021, 11, 30)),
-                    "detail",
-                ),
-                transaction::Entry::new(&a2, "-1", None, "detail"),
+                Entry::new(&a1, "1", Some(Date::from_ymd(2021, 11, 30)), "detail"),
+                Entry::new(&a2, "-1", None, "detail"),
             ],
             vec!["tag33", "tag4"].into_iter(),
         );
