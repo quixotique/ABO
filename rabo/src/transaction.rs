@@ -85,8 +85,8 @@ impl fmt::Display for ContextualEntry<'_> {
 pub struct Transaction<'a> {
     date: Date,
     edate: Date,
-    who: &'a str,
-    what: &'a str,
+    who: Box<str>,
+    what: Box<str>,
     entries: Vec<Entry<'a>>,
     tags: Tags,
 }
@@ -112,8 +112,8 @@ impl<'a> Transaction<'a> {
                 Some(d) => d,
                 None => date,
             },
-            who,
-            what,
+            who: who.to_string().into_boxed_str(),
+            what: what.to_string().into_boxed_str(),
             entries,
             tags: Tags::from_iter(tags),
         }
