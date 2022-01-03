@@ -7,8 +7,8 @@ use crate::money::*;
 use crate::tags::*;
 
 #[derive(Debug)]
-pub struct Entry<'c> {
-    account: Account<'c>,
+pub struct Entry<'a> {
+    account: &'a Account,
     amount: Decimal,
     cdate: Option<Date>,
     detail: Box<str>,
@@ -16,7 +16,7 @@ pub struct Entry<'c> {
 
 impl<'a> Entry<'a> {
     pub fn new(
-        account: Account<'a>,
+        account: &'a Account,
         amount_str: &str,
         cdate: Option<Date>,
         detail: &'a str,
