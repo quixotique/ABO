@@ -7,21 +7,21 @@ use crate::money::*;
 use crate::tags::*;
 
 #[derive(Debug)]
-pub struct Entry<'a> {
-    account_iter: &'a AccountIter<'a>,
+pub struct Entry<'c> {
+    account: Account<'c>,
     amount: Decimal,
     cdate: Option<Date>,
-    detail: &'a str,
+    detail: Box<str>,
 }
 
 impl<'a> Entry<'a> {
     pub fn new(
-        account_iter: &'a AccountIter,
+        account: Account<'a>,
         amount_str: &str,
         cdate: Option<Date>,
         detail: &'a str,
     ) -> Entry<'a> {
-        let money = account_iter.money_from_str(amount_str);
+        let money = account.money_from_str(amount_str);
         if money.is_err() {
             panic!("malformed amount: {:?}", amount_str)
         }
@@ -30,16 +30,16 @@ impl<'a> Entry<'a> {
             panic!("zero amount is invalid: {:?}", money)
         }
         let entry = Entry {
-            account_iter,
+            account,
             amount: *amount,
             cdate,
-            detail,
+            detail: detail.to_string().into_boxed_str(),
         };
         entry
     }
 
     pub fn money(&self) -> Money {
-        self.account_iter.money_from_decimal(self.amount)
+        self.account.money_from_decimal(self.amount)
     }
 }
 
@@ -53,7 +53,7 @@ pub fn sum<'a, I: Iterator<Item = &'a Entry<'a>>>(mut iter: I) -> Money {
 
 impl fmt::Display for Entry<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}  {}", *self.account_iter, self.amount)?;
+        write!(f, "{}  {}", self.account, self.amount)?;
         if !self.detail.is_empty() {
             write!(f, " ; {}", self.detail)?;
         }
