@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # vim: ts=4 sw=4 noet ai
 
 import sys
@@ -24,20 +24,20 @@ def main():
 		periods = abo.period.parse_periods(args)
 		if format == 'stmt' and len(periods) > 1:
 			raise ValueError("too many periods for %r format" % format)
-	except ValueError, e:
-		print "%(argv0)s: %(e)s" % locals()
+	except ValueError as e:
+		print("%(argv0)s: %(e)s" % locals())
 	else:
 		last_end = None
 		word_to = '-to' if format == 'stmt' else 'to'
 		word_from = '-from' if format == 'stmt' else 'from'
 		for start, end in periods:
 			if last_end is not None and last_end != start - timedelta(1):
-				print word_to, format_date(last_end),
-			print word_from, format_date(start),
+				print(word_to, format_date(last_end), end=' ')
+			print(word_from, format_date(start), end=' ')
 			last_end = end
 		if last_end is not None:
-			print word_to, format_date(last_end),
-		print
+			print(word_to, format_date(last_end), end=' ')
+		print()
 
 def format_date(d):
 	return d.strftime('%-d/%-m/%Y') if d is not None else '.'
