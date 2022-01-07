@@ -3,26 +3,57 @@ use std::collections::HashSet;
 use std::fmt;
 
 #[derive(Default, Debug)]
-pub struct Tags {
-    inner: HashSet<Box<str>>,
+struct SetOfStrings(HashSet<Box<str>>);
+
+impl<'a, 'b> std::iter::FromIterator<&'b str> for SetOfStrings {
+    fn from_iter<T: IntoIterator<Item = &'b str>>(iter: T) -> SetOfStrings {
+        let mut set = SetOfStrings::default();
+        for s in iter {
+            set.0.insert(s.to_string().into_boxed_str());
+        }
+        set
+    }
 }
 
-impl Tags {
-    pub fn from_iter<'a, I: Iterator<Item = &'a str>>(iter: I) -> Tags {
-        let mut tags = Tags::default();
-        for s in iter {
-            tags.inner.insert(s.to_string().into_boxed_str());
-        }
-        tags
+impl SetOfStrings {
+    fn sorted(&self) -> Vec<&Box<str>> {
+        let mut vec = self.0.iter().collect::<Vec<&Box<str>>>();
+        vec.sort_by(|a, b| human_sort::compare(*a, *b));
+        vec
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct Tags(SetOfStrings);
+
+impl<'a, 'b> std::iter::FromIterator<&'b str> for Tags {
+    fn from_iter<T: IntoIterator<Item = &'b str>>(iter: T) -> Tags {
+        Tags(SetOfStrings::from_iter(iter))
     }
 }
 
 impl fmt::Display for Tags {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut vec = self.inner.iter().collect::<Vec<&Box<str>>>();
-        vec.sort_by(|a, b| human_sort::compare(*a, *b));
-        for tag in vec {
+        for tag in self.0.sorted() {
             write!(f, " ={}", tag)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct Labels(SetOfStrings);
+
+impl<'a, 'b> std::iter::FromIterator<&'b str> for Labels {
+    fn from_iter<T: IntoIterator<Item = &'b str>>(iter: T) -> Labels {
+        Labels(SetOfStrings::from_iter(iter))
+    }
+}
+
+impl fmt::Display for Labels {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for tag in self.0.sorted() {
+            write!(f, " [{}]", tag)?;
         }
         Ok(())
     }

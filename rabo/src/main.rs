@@ -7,7 +7,11 @@ mod transaction;
 use crate::account::*;
 use crate::date::*;
 use crate::transaction::*;
+use std::fs::File;
 use structopt::StructOpt;
+
+#[macro_use]
+extern crate lazy_static;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "rabo", about = "ABO in Rust.")]
@@ -52,15 +56,23 @@ struct ReportOpts {
     _labels: bool,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
+
     let opt = Rabo::from_args();
     if opt.debug {
         let mut chart = Chart::new();
+        chart.read_from(File::open("./test/accounts")?)?;
+        chart.write_to(&mut std::io::stdout())?;
         chart
-            .add_top_level_account("A1", vec!["tag11", "tag2"].into_iter())
-            .add_child("x", vec!["foo"].into_iter())
-            .add_child("y", vec!["bar"].into_iter());
-        chart.add_top_level_account("A2", vec![].into_iter());
+            .add_top_level_account(
+                "A1",
+                vec!["labelA1"].into_iter(),
+                vec!["tag11", "tag2"].into_iter(),
+            )
+            .add_child("x", vec!["label_x"].into_iter(), vec!["foo"].into_iter())
+            .add_child("y", vec!["label_y"].into_iter(), vec!["bar"].into_iter());
+        chart.add_top_level_account("A2", vec!["labelA2"].into_iter(), vec![].into_iter());
         let t = Transaction::new(
             Date::from_ymd(2021, 12, 29),
             Some(Date::from_ymd(2021, 12, 31)),
@@ -79,4 +91,5 @@ fn main() {
         );
         println!("{}", t);
     }
+    Ok(())
 }
