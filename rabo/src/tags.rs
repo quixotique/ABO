@@ -18,7 +18,7 @@ impl<'a, 'b> std::iter::FromIterator<&'b str> for SetOfStrings {
 impl SetOfStrings {
     fn sorted(&self) -> Vec<&Box<str>> {
         let mut vec = self.0.iter().collect::<Vec<&Box<str>>>();
-        vec.sort_by(|a, b| human_sort::compare(*a, *b));
+        vec.sort_by(|a, b| lexical_sort::natural_only_alnum_cmp(*a, *b));
         vec
     }
 }
