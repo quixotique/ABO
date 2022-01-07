@@ -1,0 +1,851 @@
+# vim: sw=3 ts=3 sts=3 noet ai fileencoding=utf8
+# Chart of accounts
+# Andrew Bettison and Juana Estrella
+
+Contributed equity [equity] =EQ =equity
+
+Retained profit [profit] =AL =profit
+
+Andrew [_andrew]
+
+	BankSA Investment Cash 114 963 040 [bank_banksa_ic_]
+		account [bank_banksa_ic] =AL =cash
+		cheques =AL =cash
+		pending =AL =cash =pend
+		interest =PL
+		fees =PL =nd
+
+	NSW Police Credit Union 95520 [bank_nswpcu_]
+		account [bank_nswpcu] =AL =cash
+		interest =PL =nd
+		fees =PL
+		debit tax =PL =nd
+
+	OANDA FX trading 231233 [bank_oanda] =AL =cash
+
+	Paypal.com 4029357733 AU [bank_paypal] =AL =cash
+
+	Revolut [bank_revolut] =AL =cash
+
+	vouchers [vouch] =AL =cash
+
+	tax =PL
+		tax compliance
+			tax returns - Andrew =taxc
+				Grant Thornton [taxc_gt_tr_a] =bas_purchases
+			tax advice =taxc
+				Pike & Franks [taxc_pf_adv]
+				Grant Thornton [taxc_gt_adv_a] =bas_purchases
+		assessments [assess_a] =tax
+		franking credits [frank_a] =tax =extra
+		withheld [tax_withheld_a] =tax
+			PAYG installments [payg_a] =extra
+			SA Police Credit Union [intax_int_sapcu]
+			Acacia Research [payg_ar]
+			Acacia Systems [payg_as]
+			Flinders University [payg_fu]
+			Headroom Engineering [payg_h]
+			Adelaide Festival Corporation [payg_afc]
+
+	suppliers =AL
+		Fennell, Allen & Co [fennell] =pay
+		Finlaysons [finlaysons] =pay
+		Cosoff Cudmore Knox [cck] =pay
+		Tower Australia [tower] =pay
+
+	family =extra
+		CCK [taxc_cck] =PL =taxc
+			capital loss advice [legal_caploss]
+			private tax ruling [legal_ruling]
+		Fennell Allen [taxc_fa]
+		BFIT expenses [bfit_exp] =PL =nd
+		BFT expenses [bft_exp] =PL =nd
+		Sam exit [legal_samexit] =PL =nd
+		capital costs [legal_cap] =AL
+		family settlement [legal_settle] =PL =nd
+		family settlement tax advice [legal_settle_tax] =PL =nd
+		structuring [legal_struct] =PL =nd
+		estate planning [legal_estate] =PL =nd
+		gifts to trusts [gift_trust] =PL =extra =nd
+		gifts to family members [gift_family] =PL =extra =nd
+		shares [shares] =AL
+		cars from estate of Jim Bettison [old_cars] =nd =PL
+		Jim's loan written off [writeoff_jim] =nd =PL
+		gravesite maintenance [grave] =nd =PL
+
+	Headroom Engineering
+		loan written off [writeoff_h] =PL =nd
+		wind-up costs [acc_headroom] =PL =nd
+
+	Iverin [iverin]
+		Bendigo Bank Easy Saver 160 011 250 [bank_bendigo_iverin_]
+			account [bank_bendigo_iverin] =AL =cash
+			pending =AL =cash =pend
+			interest =PL
+			fees =PL =nd
+		GST [gst] =AL =pay
+			ATO [gst_ato]
+				BAS lodgements [gst_bas] =pay
+				input credits [gst_credit] =pay
+				GST on sales [gst_sales] =pay
+			outstanding credit errors [gst_credit_error] =pay
+			outstanding debit errors [gst_debit_error] =pay
+		super payments outstanding [super_iv_due] =AL =pay =super
+		business expenses [iverin_exp] =PL
+			GST free [iverin_exp_nogst]
+			internet service [tel_iverin] =bas_purchases
+			IT equipment and supplies [iverin_it] =bas_purchases
+			administration [iverin_admin] =bas_purchases
+			mobile Andrew [tel_a]
+				app purchases [tel_andrewapp]
+				contract [tel_andrew]
+				handset purchase and repair [tel_andrewkit]
+		clients [clients]
+			Gifted and Talented Children's Association of SA [gtcasa] =AL =rec
+			Serval Project [serval] =AL =rec
+		compulsory employer super contributions [super_iv_ccon] =PL =super
+		professional services [sales_iv] =PL =bas_sales_gst
+			Serval Project [income_s] =bas_sales_gst
+			small clients [income_small] =bas_sales_gst
+		Kapunda farm [farm] =extra
+			Bendigo Bank Easy Saver 160 011 326 [bank_bendigo_farm_]
+				account [bank_bendigo_farm] =AL =cash
+				pending =AL =cash =pend
+				interest =PL
+				fees =PL =nd
+			suppliers =AL
+				Light Regional Council [lightrc] =pay
+				Eco Pest [eco_farm] =pay
+				Flick Anticimex [flick_farm] =pay
+				Landmark [landmark] =pay
+				R.J. Mickan [rjmickan] =pay
+			customers [customers] =rec
+				AWB [awb] =AL
+				CBH Grain [cbh_grain] =AL
+				Australian Grain Export [age] =AL
+				Hawkers Creek Farms [hawkers] =AL =rec
+			deductible operating expenses [farm_ded] =PL
+				grain sale levies [farm_levy]
+					GST free [farm_levy_nogst]
+					GST inclusive [farm_levy_gst]
+				non-capital purchases [farm_purch] =bas_purchases
+				   Emergency Services Levy [farm_esl]
+				   council rates [farm_rates]
+				   insurance [farm_ins]
+				   pest control [farm_pest]
+				   equipment maintenance [farm_equip_maint]
+				   property maintenance [farm_prop_maint]
+				   accounting [farm_account]
+			capital purchases [farm_cap] =AL =bas_purchases
+				fencing [farm_fencing]
+			grain sales [income_k] =PL
+				subject to GST [income_k_gst] =bas_sales_gst
+				not subject to GST [income_k_nogst] =bas_sales_nogst
+			insurance claims [farm_income_ins] =PL =nd
+			non-deductible expenses [farm_nonded] =PL =nd
+			property [farm_prop] =AL
+
+	super funds [super_funds_a] =AL =super
+		AMP Flexible Lifetime H6839587-T [super_amp]
+		AUSfund 8627698 [super_apf]
+		UniSuper [super_uni]
+			accumulation component [super_uni_accum]
+			defined benefit [super_uni_defben]
+				contributions
+				component
+
+	deductible work expenses [work_exp_andrew] =PL
+	non-assessable income [income_nonassess_a] =PL =nd
+		singing honoraria [income_ch] =nd
+	insurance [ins_andrew] =PL
+		death and disablement [ins_death_a] =nd
+		income and disability [ins_income]
+		claims [income_ins_a] =PL =nd
+	miscellaneous income [income_misc_a] =PL
+	salary [salary_a] =PL
+		Acacia Research [income_ar]
+		Acacia Systems [income_as]
+		Flinders University [income_f]
+		Headroom Engineering [income_h]
+		Adelaide Festival Corporation [income_afc]
+
+	super [super_a] =super =PL
+		fund earnings [super_a_earn] =nd
+		fund expenses [super_a_exp] =nd
+		concessional tax [super_a_tax] =tax
+		voluntary super contributions
+			deductible [super_a_vcon_ded]
+			non-deductible [super_a_vcon_nonded] =nd
+		employer salary deductions [super_a_eded]
+
+	super contributions [supcon_a] =super =PL =nd
+		compulsory employer [supcon_emp]
+			Acacia Research [supcon_ar]
+			Acacia Systems [supcon_as]
+			Flinders University [supcon_fu]
+			Headroom [supcon_h]
+			Iverin [supcon_iv]
+			Adelaide Festval Corporation [supcon_af]
+		government [supcon_govt_a]
+		personal [supcon_pers_a]
+		salary deductions [supded_emp_a]
+			Flinders University [supded_fu]
+
+	trust distributions [distrib_a] =PL =extra
+		capital [distrib_a_cap] =nd
+		franking credits [distrib_a_fc]
+		income [distrib_a_i]
+
+	loans =loans
+		ABFT =abft
+			capital loan [abft_a_capital] =AL
+			beneficiary account [abft_a] =AL
+		BFIT beneficiary loan [bfit] =AL
+		BFT beneficiary loan [bft] =AL
+			capital [bft_cap]
+			income [bft_in]
+		BJFT beneficiary loan [bjft] =AL
+		Acacia Research [acacia] =AL
+		Headroom Engineering [headroom] =AL =rec
+		Giles Bettison [giles] =AL
+			BFIT and BIC [giles_bfit]
+			BFT and Ivy Cliff [giles_bft]
+			CCK [giles_cck]
+			Kapunda farm [giles_farm]
+			Old cars [giles_cars]
+			personal [giles_pers]
+			Willa [willa]
+		Sam Bettison [sam] =AL
+			BFIT and BIC [sam_bfit]
+			BFT and Ivy Cliff [sam_bft]
+			CCK [sam_cck]
+			personal [sam_pers]
+		Jim Bettison [jim] =AL
+		Sue Bettison [sue] =AL
+		Bronwyn Paddick [bron] =AL
+		Charlotte Kelso [charlie] =AL
+		Bethany Hill [bethany] =AL
+		School of Spanish Language and Culture [spanish_school_a] =AL =rec
+
+Juana [_juana]
+
+	tax =PL =extra
+		tax returns - Juana =taxc
+			Grant Thornton [taxc_gt_tr_j]
+		withheld [tax_withheld_j] =tax
+			PAYG installments [payg_j] =extra
+			Pembroke School [payg_j_pembroke]
+			Dept of Education [payg_decd]
+			WEA [payg_j_wea]
+		assessments [assess_j] =tax
+		franking credits [frank_j] =tax =extra
+
+	super funds [super_funds_j] =AL =super
+		Super SA [super_sa]
+		Hostplus [super_hostplus_juana]
+
+	work expenses [work_exp_juana] =PL
+		non-deductible =nd
+			miscellaneous [misc_work_juana]
+			Spanish School of Language and Culture [sslc_juana]
+			conferences and courses [course_juana]
+		deductible
+			teachers registration [teachreg_juana]
+			union membership [union_juana]
+			English language proficiency [english_juana]
+			memberships, conferences and courses [profdev_juana]
+			workshop ingredients and materials [wshopexp_juana]
+
+	non-assessable income [income_nonassess_j] =PL =nd
+
+	salary [salary_j] =PL
+		Dept of Education [income_decd]
+		casual
+			WEA [income_wea]
+			LCF Fun Languages [income_lcf]
+			Spanish School of Language and Culture [income_sslc]
+				voluntary teaching honoraria [income_sslc_teach]
+				voluntary grant honoraria [sslc_grant]
+			Pembroke School [income_pembroke]
+
+	super [super_j] =super =PL
+		fund earnings [super_j_earn] =nd
+		fund expenses [super_j_exp] =nd
+		concessional tax [super_j_tax] =tax
+		voluntary super contributions
+			deductible [super_j_vcon_ded]
+			non-deductible [super_j_vcon_nonded] =nd
+
+	super contributions [supcon_j] =super =PL =nd
+		personal [supcon_pers_j]
+		compulsory employer [supcon_j_emp]
+			Dept of Education [supcon_decd]
+
+	trust distributions [distrib_j] =PL =extra
+		franking credits [distrib_j_fc]
+		income [distrib_j_i]
+
+	loans =loans
+		ABFT =abft
+			beneficiary account [abft_j] =AL
+		Dept of Education [decd_loan] =AL
+		School of Spanish Language and Culture [sslc_loan] =rec =AL
+		Spanish Club of SA [spanish_club] =rec =AL
+		Spanish Rocio Society [spanish_rocio] =rec =AL
+		North Prospect Primary School [npps_loan] =AL
+		Spanish Teachers Association of SA [stasa_loan] =AL
+		Clara Arbizu [clara] =AL
+		Vicki Sandstad [vicki] =AL
+
+Danae [_danae]
+
+	tax =PL =extra
+		tax returns - Danae =taxc
+			Grant Thornton [taxc_gt_tr_d]
+
+	personal loan [danae] =AL =loans
+
+	support loan [danae_loan] =AL =loans
+		expenses
+			allowance [danae_allow]
+			telephone [danae_tel]
+			transport [danae_trans]
+			university [danae_uni]
+				academic courses [danae_uni_acad]
+				student services [danae_uni_stud]
+				materials [danae_uni_mat]
+			music [danae_music]
+			health and medical [danae_med]
+			clothes [danae_cloth]
+		repayments
+			trust distributions [danae_repay_trust]
+			tax refunds [danae_tax_refund]
+
+#	ABFT beneficiary account [abft_d] =AL =loans =abft
+
+Nestor [_nestor]
+
+	personal loan [nestor] =AL =loans
+
+	support loan [nestor_loan] =AL =loans
+		expenses
+			allowance [nestor_allow]
+			telephone [nestor_tel]
+			transport [nestor_trans]
+			university [nestor_uni]
+				academic courses [nestor_uni_acad]
+				student services [nestor_uni_stud]
+				materials [nestor_uni_mat]
+			music [nestor_music]
+		repayments
+			trust distributions [nestor_repay_trust]
+			tax refunds [nestor_tax_refund]
+
+#	ABFT beneficiary account [abft_n] =AL =loans =abft
+
+	deductible work expenses [work_exp_nestor] =PL
+
+joint
+
+	undeposited cheques [undep] =AL =cash
+
+	SA Police Credit Union 5175310S1 [bank_sapcu_s1_]
+		account [bank_sapcu_s1] =AL =cash
+		fees =PL =nd
+		interest =PL
+		debit tax =PL =nd
+
+	SA Police Credit Union 5175310S12 [bank_sapcu_s12_]
+		account [bank_sapcu_s12] =AL =cash
+		fees =PL =nd
+		interest =PL
+		debit tax =PL =nd
+
+	BankSA Complete Freedom 115 389 740 [bank_banksa_cf_]
+		account [bank_banksa_cf] =AL =cash
+		pending =AL =cash =pend
+		interest on overdraft =PL =nd
+		fees =PL =nd
+
+	BankSA Maxi Saver 115 526 440 [bank_banksa_ms_]
+		account [bank_banksa_ms] =AL =cash
+		interest =PL
+		fees =PL =nd
+
+	BankSA Term Deposit 010 4039 913 960 [bank_banksa_td_]
+		account [bank_banksa_td] =AL =cash
+		interest =PL
+		fees =PL =nd
+
+	Bendigo Bank Everyday 160 011 110 [bank_bendigo_ed_]
+		account [bank_bendigo_ed] =AL =cash
+		pending =AL =cash =pend
+		fees =PL =nd
+
+	Bendigo Bank Easy Saver 160 011 177 [bank_bendigo_es_]
+		account [bank_bendigo_es] =AL =cash
+		pending =AL =cash =pend
+		interest =PL
+		fees =PL =nd
+
+	Mastercard Woolworths [mc_ww_]
+		account [mc_ww] =AL =pay =cash
+			Andrew [mc_ww_a]
+			Juana [mc_ww_j]
+			repayments [mc_ww_repay]
+		fees =PL =nd
+		charges =PL =nd
+
+	Visa Woolworths [visa_ww_]
+		account [visa_ww] =AL =pay =cash
+			Andrew [visa_ww_a]
+			Juana [visa_ww_j]
+			repayments [visa_ww_repay]
+		fees =PL =nd
+		charges =PL =nd
+
+	Mastercard 28 Degrees [mc_28_]
+		account [mc_28] =AL =pay =cash
+		fees =PL =nd
+		charges =PL =nd
+
+	Visa Commonwealth Bank [visa_cw_]
+		account [visa_cw] =AL =pay =cash
+		fees =PL =nd
+		charges =PL =nd
+
+	SelfWealth Limited [sw_]
+		trading cash account 301347779 [sw_trading] =AL =cash
+
+	Interactive Brokers [ib_]
+		trading cash account U4850226 [ib_trading] =AL =cash
+
+	Link Market Services [lms_]
+		withheld payments [lms_withheld] =AL =cash
+
+	gifts received [gift_in] =PL =extra
+
+	Unexplained [unexp]
+	   Xero.com =PL =extra
+
+	significant material assets [assets] =AL =material
+		motor vehicles [assets_motor]
+		works of art [assets_art]
+
+	loans =loans
+		ABFT support repayments =abft
+			Danae [abft_loan_danae] =AL
+			Nestor [abft_loan_nestor] =AL
+
+	tax =PL
+		tax returns =taxc
+			Pike & Franks [taxc_pf_tr]
+		income activity statements =PL =taxc
+			Pike & Franks [taxc_pf_ias]
+		interim fees
+			Grant Thornton [taxc_gt_interim]
+
+	non-assessable income [income_nonassess_joint] =PL =nd
+		homestay subsidies [income_hstay] =nd
+
+	donations [_don] =PL =extra
+		deductible [_don_ded]
+			Amnesty International [don_amnesty]
+			Australian Youth Climate Coalition [don_aycc]
+			Australian Conservation Foundation [don_acf]
+			Australian Red Cross [don_rc]
+			Greenpeace Australia Pacific [don_gp]
+			The Australian Greens [don_greens]
+			Wilderness Society [don_ws]
+			Sydney University Alumni Development Fund [don_syduni]
+			Climate Council [don_cc]
+			Market Forces [don_mf]
+			Australia Institute [don_auinst]
+			Young Adelaide Voices [don_yav]
+			Centre for Public Integrity [don_cpi]
+			misc. [don_deduct]
+		non deductible [_don_nd] =nd
+			Electronic Frontiers Australia [don_efa] =nd
+			Australian Privacy Foundation [don_apf] =nd
+			Avaaz.org [don_avaaz] =nd
+			Getup! [don_getup] =nd
+			misc. [don_nondeduct] =nd
+
+	suppliers =AL
+		ABC Norwood [abc_norwood] =pay
+		AGL [agl] =pay
+		Burnside Youth Concert Band [bycb] =pay
+		CGU [cgu] =pay
+		   cars =pay
+		   home =pay
+		   farm =pay
+		Callsave [callsave] =pay
+		Century 21 Carroll & Partners - 5 Old Beecroft Rd Cheltenham [century21] =pay
+		Diamond Energy [diamond] =pay
+		Grant Thornton [grantthornton] =pay
+		Eco Pest [eco_home] =pay
+		Flick Anticimex [flick_home] =pay
+		EnergyAustralia [energy_aust] =pay
+		Family Assistance Office [fao] =pay
+		Geoff Purdie [gpurdie] =pay
+		Gumnut Montessori School [gumnut] =pay
+		HCF [hcf] =pay
+		Hackney Kindergarten [hackney] =pay
+		Internode [internode] =pay
+		Aussie Broadband [aussiebb] =pay
+		Karuna Jaiswal Naturopath [karuna] =pay
+		KG Music [kgmusic] =pay
+		Marryatville High School [mhs] =pay
+		Melissa Burrows [mburrows] =pay
+		Michael Beare [mbeare] =pay
+		Neil Clifford & Co [neilc] =pay
+		Norwood Basketball Club [nbc] =pay
+		Norwood Primary School [norwoodps] =pay
+		Oliver Travel [otravel] =pay
+		Optus [optus] =pay
+		Origin Energy [origin] =pay
+		PacNet [pacnet] =pay
+		Pike & Franks [pikefranks] =pay
+		QBE [qbe] =pay
+		   farm =pay
+		RevenueSA [revenue_sa] =pay
+		SA Water [sa_water] =pay
+		Scholz Vinall Design [svos] =pay
+		School of Languages [sol] =pay
+		Sharon Gray [sgray] =pay
+		St Peters Child Care Centre [st_peters] =pay
+		Telstra [telstra] =pay
+			home line [telstra_h] =pay
+			mobile [telstra_m] =pay
+		The City of Norwood, Payneham & St Peters [npsp]
+			50 Clifton St [npsp_clifton] =pay
+			25B Nora St [npsp_nora] =pay
+			6/2 Argent Pl [npsp_argent] =pay
+		Transport SA [transport_sa] =pay
+		Various bills [bills] =pay
+		Young Adelaide Voices [yav] =pay
+		4D Design [4dd] =pay
+		NGS Engineers [ngs] =pay
+		Timberwise Design [timberwise] =pay
+		Elite Builders [elite] =pay
+		Visual Lines [visual_lines] =pay
+		Traditional Urban [trad_urban] =pay
+		JC Bellido Plumber [jcbellido] =pay
+		Alexander Botten & Associates [botten] =pay
+		TPG [tpg] =pay
+			Andrew 5646518 [tpg_andrew] =pay
+			Juana 5588324 [tpg_juana] =pay
+		Ethnic Schools Association of SA [esasa] =pay
+		University of Adelaide [adelaide_uni] =pay
+		ASIC [asic] =pay
+		Adelaide Building Consultants [abconsult] =pay
+		Van Phan Tuyen [tuyen] =pay
+
+Australian Tax Office [ato]
+	Andrew [ato_a] =AL =taxdue =pay
+	Iverin [ato_iv] =AL =taxdue =pay
+	Juana [ato_j] =AL =taxdue =pay
+
+bonds paid and refundable [bond] =AL =bonds
+
+Family Assistance Office [_fao]
+	Child Care Benefit [ccb] =PL =nd
+	Family Tax Benefit [ftb] =PL =nd
+	Family Tax Benefit Part A [ftb_a] =PL =nd
+	Family Tax Benefit Part B [ftb_b] =PL =nd
+	bonus payments [fao_bonus] =PL =nd
+
+foreign currency [fx] =PL
+	Euros [euros] =nd
+
+living [_living] =PL
+	cash [cash] =nd
+	education [edu] =nd
+		Danae [edu_danae] =nd
+			art class [danae_art] =nd
+			child care [danae_cc] =nd
+			high school [danae_high_school] =nd
+				standard charges [danae_mhs_std] =nd
+				uniform [danae_mhs_uniform] =nd
+				sport [danae_mhs_sport] =nd
+				music [danae_mhs_music] =nd
+				extra [danae_mhs_extra] =nd
+				Japan Cultural Tour 2015 [danae_mhs_japan15] =nd
+				Spanish language [danae_lang] =nd
+			music =nd
+				Wendy Gumpl [danae_gumpl] =nd
+				band [danae_bycb] =nd
+				choir [danae_yav]
+					membership [danae_yav_mem]
+					uniform [danae_yav_uniform]
+					camps [danae_yav_camp]
+					2016 Europe tour [danae_yav_tour16]
+					WATU festival [danae_yav_watu]
+					2019 Sydney tour [danae_yav_tour19]
+					2020 Europe tour [danae_yav_tour20]
+				clarinet [danae_clari] =nd
+				piano [danae_piano] =nd
+			other [danae_other] =nd
+			primary school [danae_nps] =nd
+			sport [danae_sport] =nd
+				Cirkidz [danae_cirkidz] =nd
+				swimming [danae_swim] =nd
+		Juana [edu_juana] =nd
+			other [edu_juana_other] =nd
+			Bachelor of Visual Arts =nd
+				SATAC [edu_juana_satac] =nd
+				Flinders University [edu_juana_flinders] =nd
+				TafeSA [edu_juana_tafesa] =nd
+				materials [edu_juana_supplies] =nd
+		Nestor [edu_nestor] =nd
+			child care [nestor_cc] =nd
+			music =nd
+				guitar [nestor_guitar] =nd
+				piano [nestor_piano] =nd
+				drums [nestor_drums] =nd
+				band [nestor_bycb] =nd
+			other [nestor_other] =nd
+			primary school [nestor_nps] =nd
+			high school [nestor_high_school] =nd
+				standard charges [nestor_mhs_std] =nd
+				uniform [nestor_mhs_uniform] =nd
+				music [nestor_mhs_music] =nd
+				sport [nestor_mhs_sport] =nd
+				extra [nestor_mhs_extra] =nd
+				Snow Tour 2019 [nestor_mhs_snow19] =nd
+				Spanish language [nestor_lang] =nd
+			sport [nestor_sport] =nd
+				Cirkidz [nestor_cirkidz] =nd
+				basketball [nestor_bb] =nd
+				basketball Norwood Flames [nestor_nf] =nd
+				karate [nestor_karate] =nd
+				footy [nestor_footy] =nd
+				rugby [nestor_rugby] =nd
+				swimming [nestor_swim] =nd
+				motorbike [nestor_moto] =nd
+				badminton [nestor_badm] =nd
+				snow [nestor_snow] =nd
+				boxing [nestor_boxing] =nd
+	entertainment and holidays [_ent] =nd
+		Kangaroo Island 2012-2013 [hol_ki12] =nd
+		Paris 2014 [hol_paris14] =nd
+		Sue & Bron April 2015 [hol_bris_apr15] =nd
+		Sue & Bron December 2015 [hol_bris_dec15] =nd
+		Sue & Bron December 2016 [hol_bris_dec16] =nd
+		Sue's 80th May 2017 [hol_bris_may17] =nd
+		Tasmania January 2014 [hol_tas14] =nd
+		Juana Cairns 2017 [hol_cairns17] =nd
+		New Zealand December 2017 [hol_nz17] =nd
+		Uluru 2018 [hol_ulu18] =nd
+		Andrew Nestor Sydney 2019 [hol_syd19] =nd
+		Juana Bali 2020 [hol_bali20] =nd
+		Andrew ACS tour 2020 [hol_acs20] =nd
+		Juana Andrew NT 2020 [hol_nt20] =nd
+		Juana Victoria 2021 [hol_vic21] =nd
+		subscriptions and memberships [subs] =nd
+		other [ent] =nd
+	food and household products [food] =nd
+	gifts [gift] =nd
+	health and wellbeing [health] =nd
+	medical [med] =nd
+		consultation and treatment [medical] =nd
+		dental check-up and treatment [dental] =nd
+		private insurance premiums [med_ins] =nd
+		travel [med_travel] =nd
+	pocket money [pocketmoney] =nd
+		Danae =nd
+		Nestor =nd
+	rent 5 Old Beecroft Rd [rent] =nd
+	stuff [stuff] =nd
+		furniture and whitegoods [furniture] =nd
+		homeware and garden [homeware] =nd
+		clothes and bedding [clothes] =nd
+		hardware and tools [hardware] =nd
+		books, music, media, toys [books_toys] =nd
+		hi-fi and home cinema [hifi_cinema] =extra =nd
+		information technology [it] =nd
+		camera equipment [camera] =nd
+		camping equipment [camping] =nd
+		sporting and fitness =nd
+		  cycling [bike] =nd
+		  swimming [swim] =nd
+		  sporting gear [sport_gear] =nd
+		  Goodlife Gym [goodlife] =nd
+	telecom [tel]
+		home phone line rental [tel_homeline] =nd
+		call charges [tel_homecall] =nd
+		international calls [tel_inter] =nd
+		Internet access [tel_internet] =nd
+		mobile [_tel_mobile] =nd
+			plan charges [tel_mobcall] =nd
+			equipment purchase and repair [tel_mobkit] =nd
+	transport [transp]
+		car parking and fines [parking] =nd
+		cars [car]
+			Holden Astra [astra] =nd
+				insurance [astra_ins]
+				maintenance [astra_maint]
+				petrol [astra_petrol]
+				registration [astra_rego]
+				repairs [astra_repair]
+				write off [astra_writeoff]
+			Mazda 121 [mazda] =nd
+				insurance [mazda_ins]
+				maintenance [mazda_maint]
+				petrol [mazda_petrol]
+				registration [mazda_rego]
+				repairs [mazda_repair]
+			Nissan X-Trail [xtrail] =nd
+				insurance [xtrail_ins]
+				maintenance [xtrail_maint]
+				petrol [xtrail_petrol]
+				registration [xtrail_rego]
+				repairs [xtrail_repair]
+			Honda Jazz [jazz] =nd
+				insurance [jazz_ins]
+				maintenance [jazz_maint]
+				petrol [jazz_petrol]
+				registration [jazz_rego]
+				repairs [jazz_repair]
+			Toyota Hilux [hilux] =nd
+				maintenance [hilux_maint]
+				petrol [hilux_petrol]
+				repairs [hilux_repair]
+			accessories [car_acc] =nd
+			other [car_other] =nd
+				petrol other cars [other_petrol] =nd
+				repairs other cars [other_repair] =nd
+		drivers licenses [car_dl] =nd
+		roadside assistance [car_assist] =nd
+		transport =nd
+			taxi fares [taxi] =nd
+			public transport [bus] =nd
+				bus Danae [bus_danae] =nd
+				bus Nestor [bus_nestor] =nd
+				bus family [bus_family] =nd
+	unknown expenses [unknown] =PL =nd
+	home =nd
+		building and contents insurance [home_ins] =nd
+		Emergency Services Levy [house_esl] =nd
+		council rates [house_rates] =nd
+		utilities [_util] =nd =PL
+			supply
+				electricity [elec_supply] =nd
+				gas [gas_supply] =nd
+				sewer [house_sewer] =nd
+				water [house_water] =nd
+			usage [_utiluse] =nd
+				electricity [elec_usage]
+				gas [gas_usage]
+				water [water]
+	overseas
+		Australian passports and residency [aust] =PL =nd
+		Spanish account transfers [xfer_spain] =PL =nd =extra
+		Spanish passports and residency [spain] =PL =nd =extra
+		administration while absent [admin] =PL =nd
+		relocation to/from Spain [reloc] =PL =nd
+		travel to/from Spain [travel_spain] =PL =nd
+
+real estate
+
+	50 Clifton [50clifton]
+		value at cost [50clifton_value] =AL
+		purchase costs [house_purchase] =extra =nd =PL
+		first home buyers grant [house_grants] =extra =nd =PL
+		loans
+			SA Water errors [sa_water_error] =AL
+		property improvements [_improv] =PL =extra =nd
+			kitchen renovation 2003 [reno_k] =nd
+			bathroom renovation 2013 [reno_b] =nd
+			stormwater and rainwater 2020 [rain]
+			general [improv] =nd
+			wood combustion stove for living room [wood_lr] =nd
+			house extension 2019 [extension] =nd
+				planning
+				quoted
+				variations
+				additional
+				dispute
+		property maintenance and repair [maint] =nd =PL
+		neighbour 52 Clifton [neighbour52] =nd =PL
+		letting [house_let] =PL
+			SA Land Tax [house_landtax]
+			landlords insurance [house_landlord_ins]
+			property maintenance [house_maint_ded]
+			water supply and rates [house_water_ded]
+			council rates [house_rates_ded]
+			rental income [house_rent]
+		tenants =AL
+			Brett Aylen and Jacqui Iles [bj]
+				bond [bj_bond] =bonds
+				rent and sundry [bj_rent] =rec
+			Emma Horwood [emmah]
+				rent [emma_rent] =rec
+				utilities [emma_util] =rec
+			Simone and Oli
+				rent [svos_rent] =rec
+
+	25B Nora [nora]
+		value at cost =AL
+		purchase costs =nd =PL
+		SA Land Tax [nora_landtax] =PL
+		utilities and services [nora_serv] =nd =PL
+			Emergency Services Levy [nora_esl]
+			council rates [nora_rates]
+			sewer access [nora_sewer]
+			water supply [nora_water]
+		repair and maintenance [nora_maint] =nd =PL
+
+	6/2 Argent Place [argent]
+		value at cost =AL
+		purchase costs =AL
+		Whittles Management Services [whittles] =AL =pay
+		utilities and services [argent_serv] =PL =rent_deduct
+			Emergency Services Levy [argent_esl]
+			council rates [argent_rates]
+			strata title fund [argent_strata]
+			sewer access [argent_sewer]
+			water supply [argent_water]
+		improvements =PL =rent_deduct
+			fixtures [argent_fixt]
+		repair and maintenance [argent_maint] =PL =rent_deduct
+		rental =PL
+			advertising [argent_advert] =rent_deduct
+			income [argent_rent] =rent_income
+		tenants =AL
+			Eimy De Barros [eimy] =rec
+				rent [eimy_rent]
+				utilities [eimy_util]
+				payments [eimy_pay]
+			Tom & Katarina [tomkat] =rec
+				rent [tomkat_rent]
+				utilities [tomkat_util]
+				payments [tomkat_pay]
+
+investments
+
+	research [invest_research] =PL =nd
+
+	Australian Ethical Diversified Shares Fund [ae_div]
+		capital =AL
+		costs =PL
+		returns =PL =nd
+
+	VEFI Vanguard Ethically Conscious Global Aggregate Bond Index Hedged [vefi]
+		capital =AL
+		costs =PL
+		returns =PL =nd
+
+	ETHI BetaShares Global Sustainability Leaders [ethi]
+		capital =AL
+		costs =PL
+		returns =PL =nd
+
+	GBND BetaShares Sustainability Leaders Diversified Bond Currency Hedged [gbnd]
+		capital =AL
+		costs =PL
+		returns =PL =nd
+
+round-off and adjustments [_round]
+	BFT beneficiary account [bft_error] =PL =nd =extra
+	Iverin BAS [round_bas] =PL =nd

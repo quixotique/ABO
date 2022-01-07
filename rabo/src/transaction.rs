@@ -1,5 +1,6 @@
 use rust_decimal::prelude::*;
 use std::fmt;
+use std::iter::FromIterator;
 
 use crate::account::*;
 use crate::date::*;
@@ -92,13 +93,13 @@ pub struct Transaction<'a> {
 }
 
 impl<'a> Transaction<'a> {
-    pub fn new<'b, I: Iterator<Item = &'b str>>(
+    pub fn new<'b, T: IntoIterator<Item = &'b str>>(
         date: Date,
         edate: Option<Date>,
         who: &'a str,
         what: &'a str,
         entries: Vec<Entry<'a>>,
-        tags: I,
+        tags: T,
     ) -> Transaction<'a> {
         if entries.len() < 2 {
             panic!("too few entries")
