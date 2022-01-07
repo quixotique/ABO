@@ -15,4 +15,4 @@ rust_decimal = "1.19"
 structopt = { version = "0.3", default-features = false }
 rusty-money = { version = "0.4.0", features = ["iso"] }
 regex = "1"
-human-sort = "0.2"
+lexical-sort = "0.3"
