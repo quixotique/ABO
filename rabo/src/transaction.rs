@@ -1,9 +1,9 @@
 use rust_decimal::prelude::*;
 use std::fmt;
-use std::iter::FromIterator;
 
 use crate::account::*;
 use crate::date::*;
+use crate::error::Result;
 use crate::money::*;
 use crate::tags::*;
 
@@ -100,14 +100,14 @@ impl<'a> Transaction<'a> {
         what: &'a str,
         entries: Vec<Entry<'a>>,
         tags: T,
-    ) -> Transaction<'a> {
+    ) -> Result<Transaction<'a>> {
         if entries.len() < 2 {
             panic!("too few entries")
         }
         if !sum(entries.iter()).is_zero() {
             panic!("entries do not sum to zero: {:?}", entries)
         }
-        Transaction {
+        Ok(Transaction {
             date,
             edate: match edate {
                 Some(d) => d,
@@ -116,8 +116,8 @@ impl<'a> Transaction<'a> {
             who: who.to_string().into_boxed_str(),
             what: what.to_string().into_boxed_str(),
             entries,
-            tags: Tags::from_iter(tags),
-        }
+            tags: Tags::from_iter(tags)?,
+        })
     }
 }
 
