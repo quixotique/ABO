@@ -16,3 +16,4 @@ structopt = { version = "0.3", default-features = false }
 rusty-money = { version = "0.4.0", features = ["iso"] }
 regex = "1"
 lexical-sort = "0.3"
+derive_more = { version = "0.99", default-features = false, features = ["display", "error", "from", "constructor"] }
