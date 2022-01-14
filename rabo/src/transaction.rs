@@ -20,7 +20,7 @@ impl<'a> Entry<'a> {
         account: &'a Account,
         amount_str: &str,
         cdate: Option<Date>,
-        detail: &'a str,
+        detail: &str,
     ) -> Entry<'a> {
         let money = account.money_from_str(amount_str);
         if money.is_err() {
