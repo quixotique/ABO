@@ -61,3 +61,14 @@ impl InputError {
         self
     }
 }
+
+#[cfg(test)]
+use derive_more::Error;
+
+#[cfg(test)]
+#[derive(Debug, Display, Error, From)]
+#[display(fmt = "test failed: {:?}", message)]
+#[from(forward)]
+pub struct Fail {
+    message: Box<str>,
+}
