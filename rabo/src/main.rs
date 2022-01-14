@@ -1,12 +1,14 @@
 mod account;
 mod date;
 mod error;
+mod journal;
 mod money;
 mod tags;
 mod transaction;
 
 use crate::account::*;
 use crate::date::*;
+use crate::journal::*;
 use crate::transaction::*;
 use structopt::StructOpt;
 
@@ -79,6 +81,7 @@ fn inner() -> Result<(), Box<dyn std::error::Error>> {
         let mut chart = Chart::new();
         chart.read_from_path("./test/accounts")?;
         chart.write_to(&mut std::io::stdout())?;
+
         chart
             .add_top_level_account(
                 "A1",
@@ -106,6 +109,12 @@ fn inner() -> Result<(), Box<dyn std::error::Error>> {
         )
         .unwrap();
         println!("{}", t);
+
+        let mut journal = Journal::new(&chart);
+        journal.read_from_path("./test/journal")?;
+        for t in journal.transactions {
+            println!("{}", t);
+        }
     }
     Ok(())
 }

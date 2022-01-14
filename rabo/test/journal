@@ -1,0 +1,20 @@
+#comment 1
+#comment 2
+Block 1
+
+#comment 3
+
+#comment 4
+Block 2
+Block 2
+#comment 5
+Block 2
+Block 2
+
+date    14/1/2022
+type    transaction
+who     Somebody
+what    something
+db      A 50.00 aardvark
+cr      B 50.00 bloom
+amt     50
