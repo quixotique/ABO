@@ -1,0 +1,35 @@
+#!/bin/bash
+
+set -e
+source "$SHELLBOOST/libsh/script.sh"
+
+ensure_in_path pactl sed
+
+user="${1?}"
+home="$(eval echo "~$user")"
+
+if [ ! -d "$home" ]; then
+   echo "No home directory: $home" >&2
+   exit 1
+fi
+if [ -z "$DISPLAY" ]; then
+   echo "Variable not set: \$DISPLAY" >&2
+   exit 1
+fi
+
+run sudo --login --user="$user" rm -f "$home/.Xauthority"
+xauth extract - "$DISPLAY" | run sudo --login --user="$user" /bin/sh -c 'unset XAUTHORITY; xauth merge -'
+unset XAUTHORITY
+
+pulse_server=$(pactl info | sed -ne '/^Server String: /s///p')
+case $pulse_server in
+unix:/* | /*)
+    path="${pulse_server#unix:}"
+    while [[ -w $path ]]; do
+        run chmod o+x "$path"
+        path="${path%/*}"
+    done
+    ;;
+esac
+
+run exec sudo --login --user="$user" "PULSE_SERVER=unix:$pulse_server"
