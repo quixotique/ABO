@@ -218,18 +218,18 @@ fullcolour)
     ;;
 
 quantcolour)
-    #run ppmdither "$stem-$res-rotated.$scansuffix" >|"$stem-$res-quant.ppm"
+    #run ppmdither "$stem-$res-rotated.$scansuffix" >|"$stem-$res-remap.ppm"
     run ppmcolors -maxval=5 >|"$stem-colourmap.ppm"
-    run ppmquant -fs -mapfile="$stem-colourmap.ppm" "$stem-$res-rotated.$scansuffix" >|"$stem-$res-quant.ppm"
-    run pnmtotiff -lzw "$stem-$res-quant.ppm" >|"$stem-$res-quant.tiff"
-    tiff_to_pdf -o "$opt_output" "$stem-$res-quant.tiff"
+    run pnmremap -fs -mapfile="$stem-colourmap.ppm" "$stem-$res-rotated.$scansuffix" >|"$stem-$res-remap.ppm"
+    run pnmtotiff -lzw "$stem-$res-remap.ppm" >|"$stem-$res-remap.tiff"
+    tiff_to_pdf -o "$opt_output" "$stem-$res-remap.tiff"
     ;;
 
 greyscale)
     run pgmramp -lr 256 1 >|"$stem-colourmap.pgm"
-    run ppmquant -fs -mapfile="$stem-colourmap.pgm" "$stem-$res-rotated.$scansuffix" >|"$stem-$res-quant.pgm"
-    run pnmtotiff -lzw "$stem-$res-quant.pgm" >|"$stem-$res-quant.tiff"
-    tiff_to_pdf -o "$opt_output" "$stem-$res-quant.tiff"
+    run pnmremap -fs -mapfile="$stem-colourmap.pgm" "$stem-$res-rotated.$scansuffix" >|"$stem-$res-remap.pgm"
+    run pnmtotiff -lzw "$stem-$res-remap.pgm" >|"$stem-$res-remap.tiff"
+    tiff_to_pdf -o "$opt_output" "$stem-$res-remap.tiff"
     ;;
 
 monochrome)
