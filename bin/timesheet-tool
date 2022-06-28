@@ -3,6 +3,7 @@
 
 import sys
 import locale
+import argparse
 import codecs
 import re
 import traceback
@@ -11,11 +12,21 @@ from collections import defaultdict
 
 def main():
     locale.setlocale(locale.LC_ALL, '')
-    # process all input files
+
+    # Parse command line.
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--decimal', '-d', action='store_true', help='print times as decimal h.hh instead of h:mm')
+    parser.add_argument('path', nargs='+')
+    args = parser.parse_args()
+
+    Duration.format = staticmethod(Duration.format_hours_decimal if args.decimal else Duration.format_hours_minutes)
+
+    # Process input files.
     result = Result()
-    for path in sys.argv[1:]:
+    for path in args.path:
         result += process(path)
-    # print reports
+
+    # Print reports.
     print_calendar_report(result)
     print_task_report(result)
 
@@ -561,7 +572,11 @@ class Duration(object):
         return dur
 
     @staticmethod
-    def format(minutes):
+    def format_hours_decimal(minutes):
+        return '%.2f' % (minutes / 60.0,)
+
+    @staticmethod
+    def format_hours_minutes(minutes):
         sign = ''
         if minutes < 0:
             sign = '-'
@@ -569,10 +584,8 @@ class Duration(object):
         h = minutes // 60
         m = minutes % 60
         return '%s%u:%02u' % (sign, h, m)
-        #hs = 's' if h != 1 else ''
-        #ms = 's' if m != 1 else ''
-        #mstr = ' %u minute%s' % (m, ms) if m else ''
-        #return '%u hour%s%s' % (h, hs, mstr)
+
+    format = format_hours_minutes
 
     def __repr__(self):
         return self.prefix + ' [' + (self.format(self.minutes) if self.minutes is not None else '*') + ']'
