@@ -1,6 +1,6 @@
 [submodule "lib/docopt"]
 	path = lib/docopt
-	url = git://github.com/docopt/docopt.git
+	url = git@github.com:docopt/docopt.git
 [submodule "lib/mako"]
 	path = lib/mako
 	url = https://bitbucket.org/zzzeek/mako.git
