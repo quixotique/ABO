@@ -34,6 +34,7 @@ def process(path):
     # First pass to discover all the labels to exclude.
     cursor = PithyCursor(FileCursor(path))
     excluded_labels = set()
+    daily_pay = None
     for line in cursor:
         if line.startswith('EXCLUDE '):
             excluded_labels.update(line[8:].split())
@@ -46,7 +47,7 @@ def process(path):
             if cursor.current().startswith('EXCLUDE '):
                 cursor.advance()
                 continue
-            total = Total.parse(cursor)
+            total = tag('TOTAL').parse(cursor)
             if total is not None:
                 running = result.present - result.present.slice(excluded_labels)
                 if total.minutes != running.minutes:
@@ -54,9 +55,14 @@ def process(path):
                                 Duration.format(total.minutes), Duration.format(running.minutes)),
                             line=total.line)
                 continue
+            pay = tag('PAY').parse(cursor)
+            if pay is not None:
+                daily_pay = pay
+                continue
             day = Day.parse(cursor)
             if day is not None:
                 day.excluded = day.present.slice(excluded_labels)
+                if daily_pay and not (day.is_weekend or day.is_unpaid): day.paid = daily_pay.minutes
                 result.add_day(day)
                 continue
             raise ParseError('malformed line', line=cursor.current())
@@ -69,11 +75,12 @@ def format_duration_or_none(minutes):
     return Duration.format(minutes) if minutes is not None else '-'
 
 def print_calendar_report(result):
-    fmt = '%-16.16s ' + ' %8.8s' * (3 + len(result.reported)) + ' %-25s'
+    paidkeys = ('Paid',) if result.paid is not None else ()
+    fmt = '%-16.16s ' + ' %8.8s' * (3 + len(result.reported) + len(paidkeys)) + ' %-25s'
     avfmt = '%-16.16s ' + ' %8.8s' * 2 + ' %s'
     reportkeys = sorted(result.reported)
-    print fmt % (('', 'Present', 'Spent', 'Reported') + tuple(reportkeys) + ('',))
-    print fmt % (('',) + ('--------',) * (3 + len(reportkeys)) + ('',))
+    print fmt % (('', 'Present', 'Spent', 'Reported') + tuple(reportkeys) + paidkeys + ('',))
+    print fmt % (('',) + ('--------',) * (3 + len(reportkeys) + len(paidkeys)) + ('',))
     for day in sorted(result.days):
         notes = []
         if day.is_pubhol:
@@ -82,18 +89,23 @@ def print_calendar_report(result):
             notes.append('personal')
         elif day.is_weekend:
             notes.append('weekend')
+        elif day.is_unpaid:
+            notes.append('unpaid')
         reported_minutes = [day.reported[k].sum_labels() if k in day.reported else None for k in reportkeys]
         print fmt % ((day.date.strftime('%a %_d %b %Y'),
                       Duration.format(day.present.minutes) if day.present.minutes else '-',
                       Duration.format(day.spent.minutes) if day.spent.minutes else '-',
                       format_duration_or_none(sum(m or 0 for m in reported_minutes) or None)) +
                       tuple(format_duration_or_none(m) for m in reported_minutes) +
+                      ((format_duration_or_none(day.paid),) if paidkeys else ()) +
                       (', '.join(notes)[:25],))
-    print fmt % (('',) + ('--------',) * (3 + len(reportkeys)) + ('',))
+    print fmt % (('',) + ('--------',) * (3 + len(reportkeys) + len(paidkeys)) + ('',))
     print fmt % (('TOTAL',
                   Duration.format(result.present.minutes),
                   Duration.format(result.spent.minutes)) +
-                  ('',) * (2 + len(reportkeys)))
+                  ('',) * (1 + len(reportkeys)) +
+                  ((format_duration_or_none(result.paid),) if paidkeys else ()) +
+                  ('',))
     if result.working_days:
         s = 's' if result.working_days != 1 else ''
         print avfmt % ('AVERAGE',
@@ -290,22 +302,27 @@ class TotalMinutes(object):
             if lsum != self.minutes:
                 raise ValueError('labels [%s] do not sum to total [%s]' % (Duration.format(lsum), Duration.format(self.minutes)))
 
-class Total(object):
+def tag(taglabel):
 
-    def __init__(self, minutes, line):
-        self.minutes = minutes
-        self.line = line
+    class Tag(object):
 
-    @classmethod
-    def parse(cls, cursor):
-        if not cursor.eof():
-            line = cursor.current()
-            if line.startswith('TOTAL '):
-                d = Duration.parse(line, 0)
-                if d is not None and d.prefix == 'TOTAL' and line[d.end:].strip() == '':
-                    cursor.advance()
-                    return cls(d.minutes, line)
-        return None
+        def __init__(self, minutes, line):
+            self.label = taglabel
+            self.minutes = minutes
+            self.line = line
+
+        @classmethod
+        def parse(cls, cursor):
+            if not cursor.eof():
+                line = cursor.current()
+                if line.startswith(taglabel + ' '):
+                    d = Duration.parse(line, 0)
+                    if d is not None and d.prefix == taglabel and line[d.end:].strip() == '':
+                        cursor.advance()
+                        return cls(d.minutes, line)
+            return None
+
+    return Tag
 
 class Day(object):
 
@@ -315,9 +332,11 @@ class Day(object):
         self.is_pubhol = False
         self.is_personal = False
         self.is_weekend = False
+        self.is_unpaid = False
         self.present = TotalMinutes()
         self.excluded = TotalMinutes()
         self.reported = defaultdict(TotalMinutes)
+        self.paid = None
 
     @property
     def spent(self):
@@ -343,6 +362,7 @@ class Day(object):
         day.is_pubhol = 'public holiday' in comment
         day.is_personal = 'sick' in comment or 'personal' in comment
         day.is_weekend = day.date.weekday() >= 5
+        day.is_unpaid = 'unpaid' in comment or 'without pay' in comment
         cursor.advance()
         for block in Block.parseiter(cursor):
             day.blocks.append(block)
@@ -358,6 +378,7 @@ class Result(object):
         self.present = TotalMinutes()
         self.excluded = TotalMinutes()
         self.reported = defaultdict(TotalMinutes)
+        self.paid = None
         self.working_days = 0
         self.days_present = 0
 
@@ -371,6 +392,7 @@ class Result(object):
         self.excluded += other.excluded
         for label in other.reported:
             self.reported[label] += other.reported[label]
+        if other.paid is not None: self.paid = (self.paid or 0) + other.paid
         self.working_days += other.working_days
         self.days_present += other.days_present
         return self
@@ -381,6 +403,7 @@ class Result(object):
         self.excluded += day.excluded
         for label in day.reported:
             self.reported[label] += day.reported[label]
+        if day.paid is not None: self.paid = (self.paid or 0) + day.paid
         if not day.is_pubhol and not day.is_personal and not day.is_weekend:
             self.working_days += 1
         if day.present:
