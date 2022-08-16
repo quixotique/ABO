@@ -78,8 +78,8 @@ def print_calendar_report(result):
         notes = []
         if day.is_pubhol:
             notes.append('public holiday')
-        if day.is_sick:
-            notes.append('sick')
+        if day.is_personal:
+            notes.append('personal')
         elif day.is_weekend:
             notes.append('weekend')
         reported_minutes = [day.reported[k].sum_labels() if k in day.reported else None for k in reportkeys]
@@ -313,7 +313,7 @@ class Day(object):
         self.date = date
         self.blocks = []
         self.is_pubhol = False
-        self.is_sick = False
+        self.is_personal = False
         self.is_weekend = False
         self.present = TotalMinutes()
         self.excluded = TotalMinutes()
@@ -334,13 +334,14 @@ class Day(object):
         if cursor.eof() or cursor.current().indent() != 0:
             return None
         line = cursor.current()
-        words = line.split(None)
         try:
+            words = line.split(None, 5)
             day = cls(datetime.strptime(' '.join(words[:4]), '%a %d %b %Y'))
-        except ValueError:
-            raise ParseError('malformed date: %s' % (' '.join(words[:4])), line=line)
-        day.is_pubhol = 'public holiday' in ' '.join(words[4:]).lower()
-        day.is_sick = 'sick' in ' '.join(words[4:]).lower()
+            comment = ' '.join(words[4:]).lower()
+        except ValueError as ex:
+            raise ParseError('malformed date: %s' % (ex,), line=line)
+        day.is_pubhol = 'public holiday' in comment
+        day.is_personal = 'sick' in comment or 'personal' in comment
         day.is_weekend = day.date.weekday() >= 5
         cursor.advance()
         for block in Block.parseiter(cursor):
@@ -380,7 +381,7 @@ class Result(object):
         self.excluded += day.excluded
         for label in day.reported:
             self.reported[label] += day.reported[label]
-        if not day.is_pubhol and not day.is_sick and not day.is_weekend:
+        if not day.is_pubhol and not day.is_personal and not day.is_weekend:
             self.working_days += 1
         if day.present:
             self.days_present += 1
