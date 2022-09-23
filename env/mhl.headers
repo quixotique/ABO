@@ -1,0 +1,18 @@
+; mhl.headers
+;
+leftadjust,compwidth=9
+overflowtext="... ",overflowoffset=5
+ignores=msgid,message-id,received,content-type,content-transfer-encoding,content-id,dkim-signature,x-ham-report,x-spam-status,x-spam-score,x-spam-bar,x-spam-flag,mime-version,x-mailer,x-received,references,user-agent,x-forwarded-message-id,domainkey-signature,x-job
+Date:formatfield="%<(nodate{text})%{text}%|%(pretty{text})%>"
+To:decode
+Cc:decode
+From:decode
+:
+Subject:decode
+:
+Delivered-To:decode
+Reply-To:decode
+X-Address-In-Whitelist:
+X-Bogosity:
+;extras:nocomponent
+:

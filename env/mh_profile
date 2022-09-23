@@ -1,0 +1,17 @@
+Path: MH
+Aliasfile: aliases
+Alternate-Mailboxes: andrewb@zip.com.au,ajbettison@zip.com.au,ajb@ozemail.com.au,andrewb@iconmedialab.es,abettison@acm.org,andrewb@gonuts4free.com,ajbettison@telefonica.net,andrew@iverin.com.au,rent@iverin.com.au,glauringo@gmail.com
+Draft-Folder: +drafts
+showproc: mhshow
+repl: -nogroup -nocc me -format
+send: -port 25
+mhshow: -form /home/andrewb/.mhl.headers
+mhshow-show-application/pdf: %pevince '%F'
+mhshow-show-text/plain: %pcat '%F'
+mhshow-show-text/html: %pelinks -force-html '%F'
+mhshow-show-application/mac-binhex40: /home/andrewb/bin/macbinhex -d '%F' | less
+mhstore-store-application/PostScript: %m%P.ps
+mhstore-store-text/richtext: %m%P.rt
+mhstore-store-text: %m%P.txt
+mhstore-store-video/mpeg: %m%P.mpg
+mhn-compose-macbinhex: /home/andrewb/bin/macbinhex
