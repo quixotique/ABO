@@ -2,7 +2,8 @@
 
 set -e
 
-source "$SHELLBOOST/libsh/text.sh"
+source "$SHELLBOOST/libsh/include.sh"
+__shellboost_include libsh/text.sh
 
 me="${0##*/}"
 

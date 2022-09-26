@@ -3,9 +3,10 @@
 set -e
 shopt -s extglob
 
-source "$SHELLBOOST/libsh/script.sh"
-source "$SHELLBOOST/libsh/path.sh"
-source "$SHELLBOOST/libsh/time.bash"
+source "$SHELLBOOST/libsh/include.sh"
+__shellboost_include libsh/script.sh
+__shellboost_include libsh/path.sh
+__shellboost_include libsh/time.bash
 
 usage() {
     echo -n "\

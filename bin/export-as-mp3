@@ -4,7 +4,7 @@ set -e
 shopt -u dotglob
 shopt -s extglob
 
-. "$SHELLBOOST/libsh/include.sh" || exit $?
+source "$SHELLBOOST/libsh/include.sh"
 __shellboost_include libsh/path.sh
 __shellboost_include libsh/text.sh
 __shellboost_include libsh/script.sh
