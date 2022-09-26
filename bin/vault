@@ -154,8 +154,7 @@ action_open() {
             local socket_file="/run/user/$UID/sock.${real_clear_dir//\//%}"
 
             [[ -e $socket_file ]] && run rm -f "$socket_file"
-
-            run "${setsid[@]}" "$HOME/bin/gocryptfs" \
+            run "${setsid[@]}" gocryptfs \
                                 -badname "*.sync-conflict*" \
                                 -idle    $idle_timeout \
                                 -extpass "${0%/*}/askpass-vault" \
@@ -166,7 +165,7 @@ action_open() {
             wait
             ;;
         encfs)
-            run "${setsid[@]}" /usr/bin/encfs \
+            run "${setsid[@]}" encfs \
                                 --idle=$(duration_to_minutes $idle_timeout) \
                                 --ondemand \
                                 --extpass="${0%/*}/askpass-vault" \
