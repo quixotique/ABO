@@ -13,6 +13,7 @@ usage() {
 Usage: ${0##*/} open [--cipher CIPHER-DIR] [--timeout DURATION] [--browse] [--help] [CLEAR-DIR]
        ${0##*/} close [CLEAR-DIR]
 Options:
+  -a,--allow-other          allow other users to access cleartext directory and files
   -c,--cipher CIPHER-DIR    directory containing encrypted files
   -t,--timeout DURATION     lock after DURATION [default $idle_timeout]
   -b,--browse               start file browser if open successful
@@ -43,6 +44,7 @@ main() {
     # Global so that usage() can print them:
     clear_dir="$HOME/Vault"
     idle_timeout=30m
+    opt_allow_other=false
     opt_browse=false
 
     if [ $# -eq 0 ]; then
@@ -80,6 +82,9 @@ main() {
             [ $# -ne 0 ] || fatal_usage "missing argument to $arg"
             idle_timeout="$1"
             is_duration "$idle_timeout" || fatal_usage "invalid argument to $arg: $idle_timeout"
+            ;;
+        --allow-other|-a)
+            opt_allow_other=true
             ;;
         --browse|-b)
             opt_browse=true
@@ -156,22 +161,28 @@ action_open() {
             local socket_file="/run/user/$UID/sock.${real_clear_dir//\//%}"
 
             [[ -e $socket_file ]] && run rm -f "$socket_file"
+            opts=()
+            $opt_allow_other && opts+=(-allow_other)
             run "${setsid[@]}" gocryptfs \
                                 -badname "*.sync-conflict*" \
                                 -idle    $idle_timeout \
                                 -extpass "${0%/*}/askpass-vault" \
                                 -ctlsock "$socket_file" \
                                 -nonempty \
+                                "${opts[@]}" \
                                 "$real_cipher_dir" \
                                 "$real_clear_dir" || error "failed with exit status $?"
             wait
             ;;
         encfs)
+            opts=()
+            $opt_allow_other && opts+=(-o allow_other -o default_permissions)
             run "${setsid[@]}" encfs \
                                 --idle=$(duration_to_minutes $idle_timeout) \
                                 --ondemand \
                                 --extpass="${0%/*}/askpass-vault" \
                                 -o nonempty \
+                                "${opts[@]}" \
                                 "$real_cipher_dir" \
                                 "$real_clear_dir" || error "failed with exit status $?"
             ;;
