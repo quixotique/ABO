@@ -106,6 +106,8 @@ main() {
     if ! real_clear_dir="$(try_realpath_physical "$clear_dir")"; then
         fatal "not accessible: $clear_dir"
     fi
+    clear_dir_parent="$(dirpath "$real_clear_dir")"
+    [[ -w $clear_dir_parent ]] || fatal "not writeable: $clear_dir_parent"
 
     action_$action
 }
