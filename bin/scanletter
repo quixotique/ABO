@@ -3,6 +3,7 @@
 set -e
 
 source "$SHELLBOOST/libsh/include.sh"
+__shellboost_include libsh/script.sh
 __shellboost_include libsh/text.sh
 
 me="${0##*/}"
@@ -20,27 +21,23 @@ usage() {
     echo -n "\
 Usage: $me [options]
 Options:
-  -n,--noscan          Use the original scan from the last run
+  -n,--dry-run         print commands but do not execute
+  -N,--noscan          use the original scan from the last run
   -d,--device DEV      passed directly to scanimage(1)
-  -o,--output FILE     Write to the given FILE (default $opt_output)
-  -p,--page SIZE       Page size A4 A5 WxH (mm) (default $opt_pagesize)
-  -r90,--rotate90      Rotate page anticlockwise 90 degrees
-  -r180,--rotate180    Rotate page 180 degrees
-  -r-90,--rotate-90    Rotate page clockwise 90 degrees
-  -r,--resolution N    Output resolution N dpi (default $opt_resolution)
-  -C,--fullcolour      Produce an un quantised colour result (default $opt_mode)
-  -c,--quantcolour     Produce a quantised colour result (default $opt_mode)
-  -t,--threshold B[,W] Normalise B percent to black [B to white] (default $opt_threshold)
-  -e,--edge N          Blank N mm of margin (default $opt_edge)
-  -j,--jpeg[=N]        Generate JPEG PDF, quality N (default $opt_jpeg_quality)
-  -T,--title TEXT      Set title of PDF (default --output file name)
-  -h,--help            Print this message on standard output
+  -o,--output FILE     write to the given FILE (default $opt_output)
+  -p,--page SIZE       page size A4 A5 WxH (mm) (default $opt_pagesize)
+  -r90,--rotate90      rotate page anticlockwise 90 degrees
+  -r180,--rotate180    rotate page 180 degrees
+  -r-90,--rotate-90    rotate page clockwise 90 degrees
+  -r,--resolution N    output resolution N dpi (default $opt_resolution)
+  -C,--fullcolour      produce an un quantised colour result (default $opt_mode)
+  -c,--quantcolour     produce a quantised colour result (default $opt_mode)
+  -t,--threshold B[,W] normalise B percent to black [B to white] (default $opt_threshold)
+  -e,--edge N          blank N mm of margin (default $opt_edge)
+  -j,--jpeg[=N]        generate JPEG PDF, quality N (default $opt_jpeg_quality)
+  -T,--title TEXT      set title of PDF (default --output file name)
+  -h,--help            print this message on standard output
 "
-}
-
-bad_usage() {
-    echo "$me: $*" >&2
-    echo "Try '$me --help' for more information." >&2
 }
 
 is_integer() {
@@ -52,6 +49,7 @@ shopt -s extglob
 tmp="${TMPDIR:-/tmp}"
 stem="$tmp/$me"
 
+opt_verbose=true
 opt_scan=true
 opt_rotate=0
 opt_mode=greyscale
@@ -60,32 +58,33 @@ while [ $# -ne 0 ]; do
     arg="$1"
     case "$arg" in
     -h|--help) usage; exit 0;;
-    -n|--noscan) opt_scan=false;;
+    -n|--dry-run) opt_dry_run=true;;
+    -N|--noscan) opt_scan=false;;
     -r90|--rotate90) opt_rotate=90;;
     -r180|--rotate180) opt_rotate=180;;
     -r-90|--rotate-90) opt_rotate=270;;
     --device=*) opt_device="${arg#*=}";;
-    -d|--device) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_device="$1";;
+    -d|--device) shift; [ $# -ne 0 ] || fatal_usage "missing argument to $arg"; opt_device="$1";;
     --output=*) opt_output="${arg#*=}";;
-    -o|--output) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_output="$1";;
+    -o|--output) shift; [ $# -ne 0 ] || fatal_usage "missing argument to $arg"; opt_output="$1";;
     --title=) opt_title="${arg#*=}";;
-    -T|--title) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_title="$1";;
+    -T|--title) shift; [ $# -ne 0 ] || fatal_usage "missing argument to $arg"; opt_title="$1";;
     -C|--fullcolour) opt_mode=fullcolour;;
     -c|--quantcolour) opt_mode=quantcolour;;
     -m|--monochrome) opt_mode=monochrome;;
     --page=*) opt_pagesize="${arg#*=}";;
-    -p|--page) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_pagesize="$1";;
+    -p|--page) shift; [ $# -ne 0 ] || fatal_usage "missing argument to $arg"; opt_pagesize="$1";;
     --resolution=*) opt_resolution="${arg#*=}";;
-    -r|--resolution) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_resolution="$1";;
+    -r|--resolution) shift; [ $# -ne 0 ] || fatal_usage "missing argument to $arg"; opt_resolution="$1";;
     --no-threshold) opt_threshold=none;;
     --threshold=*) opt_threshold="${arg#*=}";;
-    -t|--threshold) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_threshold="$1";;
+    -t|--threshold) shift; [ $# -ne 0 ] || fatal_usage "missing argument to $arg"; opt_threshold="$1";;
     --edge=*) opt_edge="${arg#*=}";;
-    -e|--edge) shift; [ $# -ne 0 ] || bad_usage "missing argument to $arg"; opt_edge="$1";;
+    -e|--edge) shift; [ $# -ne 0 ] || fatal_usage "missing argument to $arg"; opt_edge="$1";;
     --jpeg=*) opt_jpeg=true; opt_jpeg_quality="${arg#*=}";;
     -j|--jpeg) opt_jpeg=true; shift; is_integer "$1" && { opt_jpeg_quality="$1"; shift; };;
-    -*) bad_usage "unsupported option: $arg"; exit 1;;
-    *) bad_usage "unsupported argument: $arg"; exit 1;;
+    -*) fatal_usage "unsupported option: $arg"; exit 1;;
+    *) fatal_usage "unsupported argument: $arg"; exit 1;;
     esac
     shift
 done
@@ -113,12 +112,9 @@ letter)
     scansize="-l 0 -t 0 -x $width -y $height"
     ;;
 *)
-    echo "$me: unsupported page size: $opt_pagesize" >&2
-    exit 1
+    fatal "unsupported page size: $opt_pagesize"
     ;;
 esac
-
-res=$opt_resolution
 
 case $opt_mode in
 monochrome | greyscale)
@@ -139,68 +135,63 @@ case "$opt_threshold" in
     bpercent=$opt_threshold
     wpercent=$(dc -e "4k 95 $bpercent -p")
     if [ $(dc -e "[1p]sa 95 $bpercent >a") ]; then
-        echo "$me: threshold out of range: $opt_threshold" >&2
-        exit 1
+        fatal "threshold out of range: $opt_threshold"
     fi
     ;;
 +([0-9])?(.+([0-9])),+([0-9])?(.+([0-9])) )
     bpercent=${opt_threshold%,*}
     wpercent=${opt_threshold#*,}
     if [ $(dc -e "[1p]sa 100 $bpercent $wpercent +>a") ]; then
-        echo "$me: threshold out of range: $opt_threshold" >&2
-        exit 1
+        fatal "threshold out of range: $opt_threshold"
     fi
     ;;
 none)
     ;;
 *)
-    echo "$me: unsupported threshold: $opt_threshold" >&2
-    exit 1
+    fatal "unsupported threshold: $opt_threshold"
     ;;
 esac
 
+res=$opt_resolution
+scanres=$opt_resolution
+[ $res -gt 300 ] && scanres=600
+
 scale=
-[ $opt_resolution -ne 300 ] && scale=$(echo 8k $opt_resolution 300 /p | dc)
-edgepix=$((opt_edge * 3000 / 254))
+[ $scanres -ne $res ] && scale=$(echo 8k $res $scanres /p | dc)
+edgepix=$((opt_edge * $scanres * 10 / 254))
 
-exec 5>&1
-
-run() {
-    quoted + "$@" >&5
-    "$@"
-}
-
-$opt_scan && run scanimage --progress ${opt_device:+--device "$optdevice"} --format pnm --mode $scanmode --resolution 300 $scansize >|"$stem-300-scan.$scansuffix"
+$opt_scan && run scanimage --progress ${opt_device:+--device "$optdevice"} --format pnm --mode $scanmode --resolution $scanres $scansize >|"$stem-$scanres-scan.$scansuffix"
 
 if [ $edgepix -gt 0 ]; then
-   run pnmcut -left $edgepix -right -$edgepix -top $edgepix -bottom -$edgepix "$stem-300-scan.$scansuffix" |
-      run pnmpad -white -left $edgepix -right $edgepix -top $edgepix -bottom $edgepix >|"$stem-300-clean.$scansuffix"
+    run pnmcut -left $edgepix -right -$edgepix -top $edgepix -bottom -$edgepix "$stem-$scanres-scan.$scansuffix" |
+        run pnmpad -white -left $edgepix -right $edgepix -top $edgepix -bottom $edgepix >|"$stem-$scanres-edged.$scansuffix"
 else
-   cp "$stem-300-scan.$scansuffix" "$stem-300-clean.$scansuffix"
+    run ln "$stem-$scanres-scan.$scansuffix" "$stem-$scanres-edged.$scansuffix"
 fi
 
 if [ "$opt_threshold" != none ]; then
-    run pnmnorm -keephues -bpercent $bpercent -wpercent $wpercent "$stem-300-clean.$scansuffix" >|"$stem-300-norm.$scansuffix"
+    run pnmnorm -keephues -bpercent $bpercent -wpercent $wpercent "$stem-$scanres-edged.$scansuffix" >|"$stem-$scanres-norm.$scansuffix"
 else
-    cp "$stem-300-clean.$scansuffix" "$stem-300-norm.$scansuffix"
+    run ln "$stem-$scanres-edged.$scansuffix" "$stem-$scanres-norm.$scansuffix"
 fi
 
 if [ -n "$scale" ]; then
-    run pnmscale $scale "$stem-300-norm.$scansuffix" >|"$stem-$res-norm.$scansuffix"
+    run pnmscale $scale "$stem-$scanres-norm.$scansuffix" >|"$stem-$res-norm.$scansuffix"
 fi
 
 case $opt_rotate in
 90|180|270)
-   run pnmflip -rotate$opt_rotate "$stem-$res-norm.$scansuffix" >|"$stem-$res-rotated.$scansuffix"
-   ;;
+    run pnmflip -rotate$opt_rotate "$stem-$res-norm.$scansuffix" >|"$stem-$res-rotated.$scansuffix"
+    ;;
+0)
+    run ln "$stem-$res-norm.$scansuffix" "$stem-$res-rotated.$scansuffix"
+    ;;
 *)
-   cp "$stem-$res-norm.$scansuffix" "$stem-$res-rotated.$scansuffix"
-   ;;
+    fatal "opt_rotate=$opt_rotate"
+    ;;
 esac
 case $opt_rotate in
-90|270)
-   pdfpagesize=
-   ;;
+90|270) pdfpagesize=;;
 esac
 
 tiff_to_pdf() {
