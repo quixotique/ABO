@@ -10,8 +10,7 @@ __shellboost_include libsh/time.bash
 
 usage() {
     echo -n "\
-Usage: ${0##*/} open [--cipher CIPHER-DIR] [--timeout DURATION] [--browse] [--help] [CLEAR-DIR]
-       ${0##*/} close [CLEAR-DIR]
+Usage: ${0##*/} [options] open|close [CLEAR-DIR]
 Options:
   -a,--allow-other          allow other users to access cleartext directory and files
   -c,--cipher CIPHER-DIR    directory containing encrypted files
@@ -47,27 +46,12 @@ main() {
     opt_allow_other=false
     opt_browse=false
 
-    if [ $# -eq 0 ]; then
-        usage
-        exit 0
-    fi
-
-    action="$1"
-    shift
-    if [ "$(type -t "action_$action")" != function ]; then
-        fatal "unsupported action: $action"
-    fi
-
+    args=()
     while [ $# -ne 0 ]; do
         local arg="$1"
         case "$arg" in
-        -h|--help)
-            usage
-            exit 0
-            ;;
-        --cipher=*)
-            cipher_dir="${arg#*=}"
-            ;;
+        -h|--help) usage; exit 0;;
+        --cipher=*) cipher_dir="${arg#*=}";;
         --cipher|-c)
             shift
             [ $# -ne 0 ] || fatal_usage "missing argument to $arg"
@@ -83,23 +67,25 @@ main() {
             idle_timeout="$1"
             is_duration "$idle_timeout" || fatal_usage "invalid argument to $arg: $idle_timeout"
             ;;
-        --allow-other|-a)
-            opt_allow_other=true
-            ;;
-        --browse|-b)
-            opt_browse=true
-            ;;
-        -*)
-            fatal_usage "unsupported option: $arg"
-            exit 1
-            ;;
-        *)
-            break
-            ;;
+        --allow-other|-a) opt_allow_other=true;;
+        --browse|-b) opt_browse=true;;
+        -*) fatal_usage "unsupported option: $arg";;
+        *) args+=("$arg");;
         esac
         shift
     done
+    set -- "${args[@]}"
 
+    if [ $# -eq 0 ]; then
+        usage
+        exit 0
+    fi
+
+    action="$1"
+    shift
+    if [ "$(type -t "action_$action")" != function ]; then
+        fatal "unsupported action: $action"
+    fi
     if [[ $# -ne 0 ]]; then
         clear_dir="$1"
         shift
