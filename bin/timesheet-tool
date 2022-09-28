@@ -106,18 +106,16 @@ def print_calendar_report(result):
                   ('',) * (1 + len(reportkeys)) +
                   ((format_duration_or_none(result.paid),) if paidkeys else ()) +
                   ('',))
-    if result.working_days:
-        s = 's' if result.working_days != 1 else ''
-        print avfmt % ('AVERAGE',
-                       Duration.format(result.present.minutes / result.working_days),
-                       Duration.format(result.spent.minutes / result.working_days),
-                       'per day over %u working day%s' % (result.working_days, s))
-    if result.days_present:
-        s = 's' if result.days_present != 1 else ''
-        print avfmt % ('AVERAGE',
-                       Duration.format(result.present.minutes / result.days_present),
-                       Duration.format(result.spent.minutes / result.days_present),
-                       'per day over %u day%s present' % (result.days_present, s))
+    def print_average(days, called):
+        if days:
+            s = 's' if days != 1 else ''
+            print avfmt % ('AVERAGE',
+                           Duration.format(result.present.minutes / days),
+                           Duration.format(result.spent.minutes / days),
+                           'per day over %u %s day%s' % (days, called, s))
+    print_average(result.days_paid, 'paid')
+    print_average(result.days_working, 'working')
+    print_average(result.days_present, 'present')
 
 def print_task_report(result):
     w = str(max(map(len, result.all_labels)))
@@ -379,7 +377,8 @@ class Result(object):
         self.excluded = TotalMinutes()
         self.reported = defaultdict(TotalMinutes)
         self.paid = None
-        self.working_days = 0
+        self.days_paid = 0
+        self.days_working = 0
         self.days_present = 0
 
     @property
@@ -393,7 +392,8 @@ class Result(object):
         for label in other.reported:
             self.reported[label] += other.reported[label]
         if other.paid is not None: self.paid = (self.paid or 0) + other.paid
-        self.working_days += other.working_days
+        self.days_paid += other.days_paid
+        self.days_working += other.days_working
         self.days_present += other.days_present
         return self
 
@@ -403,9 +403,11 @@ class Result(object):
         self.excluded += day.excluded
         for label in day.reported:
             self.reported[label] += day.reported[label]
-        if day.paid is not None: self.paid = (self.paid or 0) + day.paid
+        if day.paid is not None:
+            self.paid = (self.paid or 0) + day.paid
+            self.days_paid += 1
         if not day.is_pubhol and not day.is_personal and not day.is_weekend:
-            self.working_days += 1
+            self.days_working += 1
         if day.present:
             self.days_present += 1
 
