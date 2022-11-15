@@ -32,19 +32,19 @@ def main():
 
 def process(path):
     # First pass to discover all the labels to exclude.
-    cursor = PithyCursor(FileCursor(path))
+    cursor = NoModeLinesCursor(FileCursor(path))
     excluded_labels = set()
     daily_pay = None
     for line in cursor:
         if line.startswith('EXCLUDE '):
             excluded_labels.update(line[8:].split())
     # Second pass to sum all the hours, excluding non-billable hours.
-    cursor = PithyCursor(FileCursor(path))
+    cursor = NoModeLinesCursor(FileCursor(path))
     result = Result()
     try:
         cursor.advance()
         while not cursor.eof():
-            if cursor.current().startswith('EXCLUDE '):
+            if cursor.current().startswith('EXCLUDE ') or cursor.current().is_blank():
                 cursor.advance()
                 continue
             total = tag('TOTAL').parse(cursor)
@@ -151,6 +151,9 @@ class Line(unicode):
     def where(self):
         return '%s, line %s' % (self.file.name, self.lineno)
 
+    def is_blank(self):
+        return self == '' or self.isspace()
+
     def indent(self):
         return len(self) - len(self.lstrip())
 
@@ -222,13 +225,13 @@ class FilteredCursor(Cursor):
             self._current = self.orig.advance()
         return self._current
 
-class PithyCursor(FilteredCursor):
+class NoModeLinesCursor(FilteredCursor):
 
     def __init__(self, orig_cursor):
-        super(PithyCursor, self).__init__(orig_cursor)
+        super(NoModeLinesCursor, self).__init__(orig_cursor)
 
     def filter(self, line):
-        return not (line == '' or line.isspace() or (line.lineno <= 5 and line.startswith('vim:')))
+        return not (line.lineno <= 5 and line.startswith('vim:'))
 
 class TotalMinutes(object):
 
@@ -348,7 +351,7 @@ class Day(object):
     @classmethod
     def parse(cls, cursor):
         # Day stanzas must start with a non-indented line like "Day DD Mon YYYY".
-        if cursor.eof() or cursor.current().indent() != 0:
+        if cursor.eof() or cursor.current().is_blank() or cursor.current().indent() != 0:
             return None
         line = cursor.current()
         try:
@@ -436,11 +439,15 @@ class Block(object):
 
     @classmethod
     def parse(cls, cursor):
-        if cursor.eof() or cursor.current().indent() == 0:
+        # Blocks finish at EOF or the next non-blank non-indented line.
+        while not cursor.eof() and cursor.current().is_blank():
+            cursor.advance()
+        if cursor.eof() or (not cursor.current().is_blank() and cursor.current().indent() == 0):
             return None
         block = cls()
         firstline = None
-        while not cursor.eof() and cursor.current().indent():
+        # A Block is a contiguous series of non-blank indented lines.
+        while not cursor.eof() and not cursor.current().is_blank() and cursor.current().indent():
             if firstline is None:
                 firstline = cursor.current()
             bl = BlockLine.parse(cursor.current(), tasklabel=block.tasklabel, wildlabel=block.wildlabel)
@@ -534,7 +541,6 @@ class BlockLine(object):
                     bl.tasklabel = label
                     bl.totals.add(d.minutes, label=label)
                 lastpos = d.end
-                d = Duration.parse(line, lastpos)
             else:
                 # found Range
                 if r.prefix:
@@ -545,7 +551,6 @@ class BlockLine(object):
                 bl.tasklabel = None
                 bl.wildlabel = None
                 lastpos = r.end
-                r = Range.parse(line, lastpos)
         return bl
 
 class Duration(object):
