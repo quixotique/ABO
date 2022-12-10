@@ -44,6 +44,7 @@ is_integer() {
     [ -n "$1" -a "${1#*[!0-9]}" = "$1" ]
 }
 
+set -o pipefail
 shopt -s extglob
 
 tmp="${TMPDIR:-/tmp}"
@@ -160,31 +161,40 @@ scale=
 [ $scanres -ne $res ] && scale=$(echo 8k $res $scanres /p | dc)
 edgepix=$((opt_edge * $scanres * 10 / 254))
 
-$opt_scan && run scanimage --progress ${opt_device:+--device "$optdevice"} --format pnm --mode $scanmode --resolution $scanres $scansize >|"$stem-$scanres-scan.$scansuffix"
+write() {
+    cat >|"${1?}"
+}
+
+$opt_scan && run scanimage --progress ${opt_device:+--device "$optdevice"} --format pnm --mode $scanmode --resolution $scanres $scansize |
+             run write "$stem-$scanres-scan.$scansuffix"
 
 if [ $edgepix -gt 0 ]; then
     run pnmcut -left $edgepix -right -$edgepix -top $edgepix -bottom -$edgepix "$stem-$scanres-scan.$scansuffix" |
-        run pnmpad -white -left $edgepix -right $edgepix -top $edgepix -bottom $edgepix >|"$stem-$scanres-edged.$scansuffix"
+        run pnmpad -white -left $edgepix -right $edgepix -top $edgepix -bottom $edgepix |
+        run write "$stem-$scanres-edged.$scansuffix"
 else
-    run ln "$stem-$scanres-scan.$scansuffix" "$stem-$scanres-edged.$scansuffix"
+    run ln -f "$stem-$scanres-scan.$scansuffix" "$stem-$scanres-edged.$scansuffix"
 fi
 
 if [ "$opt_threshold" != none ]; then
-    run pnmnorm -keephues -bpercent $bpercent -wpercent $wpercent "$stem-$scanres-edged.$scansuffix" >|"$stem-$scanres-norm.$scansuffix"
+    run pnmnorm -keephues -bpercent $bpercent -wpercent $wpercent "$stem-$scanres-edged.$scansuffix" |
+        run write "$stem-$scanres-norm.$scansuffix"
 else
-    run ln "$stem-$scanres-edged.$scansuffix" "$stem-$scanres-norm.$scansuffix"
+    run ln -f "$stem-$scanres-edged.$scansuffix" "$stem-$scanres-norm.$scansuffix"
 fi
 
 if [ -n "$scale" ]; then
-    run pnmscale $scale "$stem-$scanres-norm.$scansuffix" >|"$stem-$res-norm.$scansuffix"
+    run pnmscale $scale "$stem-$scanres-norm.$scansuffix" |
+        run write "$stem-$res-norm.$scansuffix"
 fi
 
 case $opt_rotate in
 90|180|270)
-    run pnmflip -rotate$opt_rotate "$stem-$res-norm.$scansuffix" >|"$stem-$res-rotated.$scansuffix"
+    run pnmflip -rotate$opt_rotate "$stem-$res-norm.$scansuffix" |
+        run write "$stem-$res-rotated.$scansuffix"
     ;;
 0)
-    run ln "$stem-$res-norm.$scansuffix" "$stem-$res-rotated.$scansuffix"
+    run ln -f "$stem-$res-norm.$scansuffix" "$stem-$res-rotated.$scansuffix"
     ;;
 *)
     fatal "opt_rotate=$opt_rotate"
@@ -205,28 +215,32 @@ tiff_to_pdf() {
 case $opt_mode in
 
 fullcolour)
-    run pnmtotiff -lzw -truecolor "$stem-$res-rotated.$scansuffix" >|"$stem-$res-rotated.tiff"
+    run pnmtotiff -lzw -truecolor "$stem-$res-rotated.$scansuffix" |
+        run write "$stem-$res-rotated.tiff"
     tiff_to_pdf -o "$opt_output" "$stem-$res-rotated.tiff"
     ;;
 
 quantcolour)
     #run ppmdither "$stem-$res-rotated.$scansuffix" >|"$stem-$res-remap.ppm"
     run ppmcolors -maxval=5 >|"$stem-colourmap.ppm"
-    run pnmremap -fs -mapfile="$stem-colourmap.ppm" "$stem-$res-rotated.$scansuffix" >|"$stem-$res-remap.ppm"
-    run pnmtotiff -lzw "$stem-$res-remap.ppm" >|"$stem-$res-remap.tiff"
+    run pnmremap -fs -mapfile="$stem-colourmap.ppm" "$stem-$res-rotated.$scansuffix" |
+        run write "$stem-$res-remap.ppm"
+    run pnmtotiff -lzw "$stem-$res-remap.ppm" |
+        run write "$stem-$res-remap.tiff"
     tiff_to_pdf -o "$opt_output" "$stem-$res-remap.tiff"
     ;;
 
 greyscale)
-    run pgmramp -lr 256 1 >|"$stem-colourmap.pgm"
-    run pnmremap -fs -mapfile="$stem-colourmap.pgm" "$stem-$res-rotated.$scansuffix" >|"$stem-$res-remap.pgm"
-    run pnmtotiff -lzw "$stem-$res-remap.pgm" >|"$stem-$res-remap.tiff"
+    run pgmramp -lr 256 1 | run write "$stem-colourmap.pgm"
+    run pnmremap -fs -mapfile="$stem-colourmap.pgm" "$stem-$res-rotated.$scansuffix" |
+        run write "$stem-$res-remap.pgm"
+    run pnmtotiff -lzw "$stem-$res-remap.pgm" | run write "$stem-$res-remap.tiff"
     tiff_to_pdf -o "$opt_output" "$stem-$res-remap.tiff"
     ;;
 
 monochrome)
-    run pgmtopbm -fs "$stem-$res-rotated.$scansuffix" >|"$stem-$res-rotated.pnm"
-    run pnmtops -equalpixels -dpi 150 "$stem-$res-rotated.pnm" >|"$stem-$res-rotated.ps"
+    run pgmtopbm -fs "$stem-$res-rotated.$scansuffix" | run write "$stem-$res-rotated.pnm"
+    run pnmtops -equalpixels -dpi 150 "$stem-$res-rotated.pnm" | run write "$stem-$res-rotated.ps"
     run ps2pdf -sPAPERSIZE=a4 -dEPSCrop "$stem-$res-rotated.ps" "$opt_output"
     ;;
 
