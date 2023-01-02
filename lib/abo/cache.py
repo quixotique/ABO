@@ -20,6 +20,7 @@ class Cache(object):
         self.ctime = -1 if force else self.mtime(self.cpath)
         self.contentfunc = contentfunc
         self.deppaths = list(deppaths)
+        self.content = None
 
     def source_paths(self):
         for path in self.deppaths:
@@ -32,23 +33,24 @@ class Cache(object):
         return self.ctime < self.source_mtime()
 
     def get(self):
-        stime = self.source_mtime()
-        if self.ctime >= stime:
+        if self.is_dirty():
+            logging.debug("compile %r" % self.ident)
+            try:
+                os.makedirs(os.path.dirname(self.cpath))
+            except OSError as e:
+                if e.errno != errno.EEXIST:
+                    raise
+            content = self.contentfunc()
+            pickle.dump(content, open(self.cpath, 'wb'), 2)
+            self.ctime = self.mtime(self.cpath)
+            self.content = content
+        elif self.content is None:
             try:
                 logging.debug("load %r" % self.cpath)
-                return pickle.load(open(self.cpath, 'rb'))
+                self.content = pickle.load(open(self.cpath, 'rb'))
             except (pickle.UnpicklingError, UnicodeDecodeError):
                 pass
-        logging.debug("compile %r" % self.ident)
-        try:
-            os.makedirs(os.path.dirname(self.cpath))
-        except OSError as e:
-            if e.errno != errno.EEXIST:
-                raise
-        content = self.contentfunc()
-        pickle.dump(content, open(self.cpath, 'wb'), 2)
-        self.ctime = stime
-        return content
+        return self.content
 
     @staticmethod
     def mtime(path):
@@ -103,6 +105,7 @@ def transaction_caches(chart, config, opts=None):
     global _transaction_caches
     if _transaction_caches is None:
         import abo.journal
+        logging.debug("populate transaction caches")
         _transaction_caches = []
         for path in config.journal_file_paths:
             _transaction_caches.append(

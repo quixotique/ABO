@@ -17,6 +17,7 @@ r'''Usage:
     abo check [-efqD]
     abo mako [-fqD] [--remove=PRED...] [--template-dir=DIR...] <template> [<args>...]
     abo compa <command> <word> <preword>
+    abo batch [-qD] <commandfile>
     abo -h | --help
     abo --version
 
@@ -65,11 +66,14 @@ Environment variables:
     PYABO_WIDTH=COLUMNS     equivalent to --width=COLUMNS
 '''
 
+version = '0.3'
+
 import sys
 import logging
 import locale
 import os
 import os.path
+import shlex
 
 try:
     import abo.config
@@ -82,12 +86,11 @@ def main():
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     opts = None
     try:
-        output = []
         # For speed and simplicity, don't parse the 'compa' command using docopt.
         if len(sys.argv) >= 2 and sys.argv[1] == 'compa':
             try:
                 config = abo.config.Config().load()
-                output = compa(config, [arg for arg in sys.argv[2:]])
+                printlines(compa(config, [arg for arg in sys.argv[2:]]))
             except abo.config.ConfigException as e:
                 # Attempting to do abo command-line completion when not in an
                 # ABO directory will simply have no effect, rather than
@@ -96,29 +99,33 @@ def main():
         else:
             sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
             import docopt
-            opts = docopt.docopt(__doc__, version='0.2')
             try:
                 config = abo.config.Config().load()
             except abo.config.ConfigException as e:
                 fatal(str(e))
-            import abo.command
-            for word, value in opts.items():
-                if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
-                    func = getattr(abo.command, 'cmd_' + word)
-                    break
+            if len(sys.argv) >= 2 and sys.argv[1] == 'batch':
+                opts = docopt.docopt(__doc__, sys.argv[1:], version=version)
+                setup_debug(opts)
+                commandfile = opts['<commandfile>']
+                with open(commandfile) if commandfile != '-' else sys.stdin as cmdf:
+                    for line in cmdf:
+                        line = line.rstrip('\n')
+                        parts = line.rsplit('>', 1)
+                        line = parts[0]
+                        outf = sys.stdout
+                        if len(parts) > 1:
+                            outf = open(parts[1], mode='w')
+                        if not opt_quiet:
+                            print(line, file=sys.stderr)
+                        argv = shlex.split(line)
+                        opts = docopt.docopt(__doc__, argv, version=version)
+                        printlines(command(config, opts), file=outf)
+                        if outf is not sys.stdout:
+                            outf.close()
             else:
-                fatal('unknown command : %s' % sys.argv[1])
-            if opts['--debug'] or len(os.environ.get('ABO_DEBUG', '')):
-                pass
-            elif opts['--quiet']:
-                logging.disable(logging.INFO)
-            else:
-                logging.disable(logging.DEBUG)
-            logging.debug("parsed options, func=%s", func.__name__)
-            config.apply_options(opts)
-            output = func(config, opts)
-        for line in output:
-            print(line, end=getattr(output, 'sep', '\n'), file=sys.stdout)
+                opts = docopt.docopt(__doc__, sys.argv[1:], version=version)
+                setup_debug(opts)
+                printlines(command(config, opts))
     except:
         if opts and opts['--debug']:
             raise
@@ -135,6 +142,34 @@ def main():
 def fatal(message, status=1):
     print("%s: %s" % (os.path.basename(sys.argv[0]), message), file=sys.stderr)
     sys.exit(status)
+
+opt_quiet = False
+
+def setup_debug(opts):
+    if opts['--debug'] or len(os.environ.get('ABO_DEBUG', '')):
+        pass
+    elif opts['--quiet']:
+        opt_quiet = True
+        logging.disable(logging.INFO)
+    else:
+        logging.disable(logging.DEBUG)
+
+def command(config, opts):
+    import abo.command
+    for word, value in opts.items():
+        if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
+            func = getattr(abo.command, 'cmd_' + word)
+            break
+    else:
+        fatal('unknown command : %s' % sys.argv[1])
+    logging.debug("parsed options, func=%s", func.__name__)
+    config = config.clone()
+    config.apply_options(opts)
+    return func(config, opts)
+
+def printlines(output, file=sys.stdout):
+    for line in output:
+        print(line, end=getattr(output, 'sep', '\n'), file=file)
 
 def compa(config, args):
     logging.disable(logging.INFO)
@@ -172,14 +207,14 @@ def compa_accounts(config, word):
                 comp = comp.split(':', 1)[0] + ':'
             else:
                 end = ' '
-            yield shell_quote(word + comp) + end
+            yield shlex.quote(word + comp) + end
 
 def compa_tags(config, word):
     import abo.cache
     chart = abo.cache.chart_cache(config).get()
     for tag in chart.tags():
         if tag.startswith(word):
-            yield shell_quote(tag) + ' '
+            yield shlex.quote(tag) + ' '
 
 def compa_pred(config, word):
     if word.startswith('='):
@@ -211,14 +246,6 @@ def compa_mako(config, word):
             elif os.path.exists(path):
                 path += ' '
             yield path
-
-def shell_quote(text):
-    return (text.replace('\\', '\\\\')
-                .replace('"', '\\"')
-                .replace("'", "\\'")
-                .replace('$', '\\$')
-                .replace('`', '\\`')
-                .replace(' ', '\\ '))
 
 if __name__ == '__main__':
     main()

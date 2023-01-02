@@ -13,6 +13,7 @@ import glob
 import shlex
 from itertools import chain
 import sys
+import copy
 
 class InvalidInput(ValueError):
 
@@ -76,6 +77,13 @@ class Config(object):
                 self.width = uint(text)
             except ValueError as e:
                 warn('ignoring invalid environment variable ABO_WIDTH: %r' % text)
+
+    def clone(self):
+        clone = copy.copy(self)
+        clone.journal_file_paths = self.journal_file_paths[:]
+        clone.checkpoint_file_paths = self.checkpoint_file_paths[:]
+        clone.maximum_output_width = self.maximum_output_width.copy()
+        return clone
 
     _regex_encoding = re.compile(r'coding[=:]\s*([-\w.]+)', re.MULTILINE)
 
