@@ -31,8 +31,9 @@ def main():
     print_task_report(result)
 
 def process(path):
-    # First pass to discover all the labels to exclude.
-    excluded_labels = set()
+    # First pass to discover special labels.
+    no_report_labels = set()
+    not_payable_labels = set()
     skip_line_ids = set()
     daily_pay = None
     cursor = NoModeLinesCursor(FileCursor(path))
@@ -40,11 +41,17 @@ def process(path):
     while not cursor.eof():
         tag = tagged_labels('EXCLUDE').parse(cursor)
         if tag:
-            excluded_labels.update(tag.labels)
             skip_line_ids.add(tag.line.id())
-        else:
-            cursor.advance()
-    # Second pass to sum all the hours, excluding non-billable hours.
+            no_report_labels.update(tag.labels)
+            not_payable_labels.update(tag.labels)
+            continue
+        tag = tagged_labels('NOT PAID').parse(cursor)
+        if tag:
+            skip_line_ids.add(tag.line.id())
+            not_payable_labels.update(tag.labels)
+            continue
+        cursor.advance()
+    # Second pass to sum all the hours.
     cursor = NoModeLinesCursor(FileCursor(path))
     result = Result()
     try:
@@ -55,10 +62,10 @@ def process(path):
                 continue
             total = tagged_duration('TOTAL').parse(cursor)
             if total is not None:
-                running = result.present - result.present.slice(excluded_labels)
-                if total.minutes != running.minutes:
-                    raise ParseError('TOTAL [%s] does not equal running total [%s]' % (
-                                Duration.format(total.minutes), Duration.format(running.minutes)),
+                payable = result.logged.slice(exclude_labels=not_payable_labels)
+                if total.minutes != payable.minutes:
+                    raise ParseError('TOTAL [%s] does not equal payable total [%s]' % (
+                                Duration.format(total.minutes), Duration.format(payable.minutes)),
                             line=total.line)
                 continue
             pay = tagged_duration('PAY').parse(cursor)
@@ -67,7 +74,8 @@ def process(path):
                 continue
             day = Day.parse(cursor)
             if day is not None:
-                day.excluded = day.present.slice(excluded_labels)
+                day.payable = day.logged.slice(exclude_labels=not_payable_labels)
+                day.reportable = day.logged.slice(exclude_labels=no_report_labels)
                 if daily_pay and day.paid is None: day.paid = daily_pay.minutes
                 result.add_day(day)
                 continue
@@ -82,11 +90,13 @@ def format_duration_or_none(minutes):
 
 def print_calendar_report(result):
     paidkeys = ('Paid',) if result.paid is not None else ()
-    fmt = '%-16.16s ' + ' %8.8s' * (3 + len(result.reported) + len(paidkeys)) + ' %-25s'
-    avfmt = '%-16.16s ' + ' %8.8s' * 2 + ' %s'
+    colfmt = '%10.10s'
+    colrule = '-' * 10
+    fmt = '%-16.16s ' + (' ' + colfmt) * (4 + len(result.reported) + len(paidkeys)) + ' %-25s'
+    avfmt = '%-16.16s ' + (' ' + colfmt) * 2 + ' %s'
     reportkeys = sorted(result.reported)
-    print fmt % (('', 'Present', 'Spent', 'Reported') + tuple(reportkeys) + paidkeys + ('',))
-    print fmt % (('',) + ('--------',) * (3 + len(reportkeys) + len(paidkeys)) + ('',))
+    print fmt % (('', 'Logged', 'Payable', 'Reportable', 'Reported') + tuple(reportkeys) + paidkeys + ('',))
+    print fmt % (('',) + (colrule,) * (4 + len(reportkeys) + len(paidkeys)) + ('',))
     for day in sorted(result.days):
         notes = []
         if day.is_pubhol:
@@ -99,16 +109,18 @@ def print_calendar_report(result):
             notes.append('unpaid')
         reported_minutes = [day.reported[k].sum_labels() if k in day.reported else None for k in reportkeys]
         print fmt % ((day.date.strftime('%a %_d %b %Y'),
-                      Duration.format(day.present.minutes) if day.present.minutes else '-',
-                      Duration.format(day.spent.minutes) if day.spent.minutes else '-',
+                      format_duration_or_none(day.logged.minutes or None),
+                      format_duration_or_none(day.payable.minutes or None),
+                      format_duration_or_none(day.reportable.minutes or None),
                       format_duration_or_none(sum(m or 0 for m in reported_minutes) or None)) +
                       tuple(format_duration_or_none(m) for m in reported_minutes) +
                       ((format_duration_or_none(day.paid or None),) if paidkeys else ()) +
                       (', '.join(notes)[:25],))
-    print fmt % (('',) + ('--------',) * (3 + len(reportkeys) + len(paidkeys)) + ('',))
+    print fmt % (('',) + (colrule,) * (4 + len(reportkeys) + len(paidkeys)) + ('',))
     print fmt % (('TOTAL',
-                  Duration.format(result.present.minutes),
-                  Duration.format(result.spent.minutes)) +
+                  Duration.format(result.logged.minutes),
+                  Duration.format(result.payable.minutes),
+                  Duration.format(result.reportable.minutes)) +
                   ('',) * (1 + len(reportkeys)) +
                   ((format_duration_or_none(result.paid),) if paidkeys else ()) +
                   ('',))
@@ -116,38 +128,40 @@ def print_calendar_report(result):
         if days:
             s = 's' if days != 1 else ''
             print avfmt % ('AVERAGE',
-                           Duration.format(result.present.minutes / days),
-                           Duration.format(result.spent.minutes / days),
+                           Duration.format(result.logged.minutes / days),
+                           Duration.format(result.payable.minutes / days),
                            'per day over %u %s day%s' % (days, called, s))
     print_average(result.days_paid, 'paid')
     print_average(result.days_working, 'working')
-    print_average(result.days_present, 'present')
+    print_average(result.days_logged, 'logged')
 
 def print_task_report(result):
     w = str(max(map(len, result.all_labels)))
-    fmt = '%-' + w + '.' + w + 's ' + ' %8.8s' * (len(result.reported) + 3)
+    colfmt = '%10.10s'
+    colrule = '-' * 10
+    fmt = '%-' + w + '.' + w + 's ' + (' ' + colfmt) * (len(result.reported) + 3)
     print
-    print fmt % (('', 'Spent', 'Reported', 'Unreport') + tuple(result.reported))
-    print fmt % (('',) + ('--------',) * (len(result.reported) + 3))
-    total_spent = 0
+    print fmt % (('', 'Reportable', 'Reported', 'Unreported') + tuple(result.reported))
+    print fmt % (('',) + (colrule,) * (len(result.reported) + 3))
+    total_reportable = 0
     total_unreported = 0
     total_reported = [0] * len(result.reported)
     for label in sorted(result.all_labels, key=label_sort_key):
-        spent_minutes = result.spent.labels.get(label)
+        reportable_minutes = result.reportable.labels.get(label)
         report_minutes = [v.labels.get(label) for v in result.reported.values()]
-        total_spent += spent_minutes or 0
+        total_reportable += reportable_minutes or 0
         total_reported = [t + (m or 0) for t, m in zip(total_reported, report_minutes)]
-        unreported_minutes = spent_minutes
-        if [m for m in [spent_minutes] + report_minutes if m]:
+        unreported_minutes = reportable_minutes
+        if [m for m in [reportable_minutes] + report_minutes if m]:
             reported_minutes = sum(m or 0 for m in report_minutes) or None
-            unreported_minutes = (spent_minutes or 0) - (reported_minutes or 0) or None
-            print fmt % ((label, format_duration_or_none(spent_minutes),
+            unreported_minutes = (reportable_minutes or 0) - (reported_minutes or 0) or None
+            print fmt % ((label, format_duration_or_none(reportable_minutes),
                                  format_duration_or_none(reported_minutes),
                                  format_duration_or_none(unreported_minutes)) +
                                  tuple(format_duration_or_none(m) for m in report_minutes))
         total_unreported += unreported_minutes or 0
-    print fmt % (('',) + ('--------',) * (len(result.reported) + 3))
-    print fmt % (('TOTAL', format_duration_or_none(total_spent or None),
+    print fmt % (('',) + (colrule,) * (len(result.reported) + 3))
+    print fmt % (('TOTAL', format_duration_or_none(total_reportable or None),
                            format_duration_or_none(sum(total_reported) or None),
                            format_duration_or_none(total_unreported or None)) +
                            tuple(format_duration_or_none(t or None) for t in total_reported))
@@ -300,11 +314,11 @@ class TotalMinutes(object):
     def sum_labels(self):
         return sum(self.labels.itervalues())
 
-    def slice(self, labels):
+    def slice(self, include_only_labels=None, exclude_labels=frozenset()):
         self.validate_sum()
         slc = type(self)()
-        for label in labels:
-            if label in self.labels:
+        for label in self.labels:
+            if (include_only_labels is None or (label in include_only_labels)) and label not in exclude_labels:
                 slc.add(self.labels[label], label)
         slc.minutes = slc.sum_labels()
         return slc
@@ -315,7 +329,7 @@ class TotalMinutes(object):
             if lsum != self.minutes:
                 raise ValueError('labels [%s] do not sum to total [%s]' % (Duration.format(lsum), Duration.format(self.minutes)))
 
-def tagged_labels(tagword):
+def tagged_labels(tag_text):
 
     class Tag(object):
 
@@ -327,15 +341,16 @@ def tagged_labels(tagword):
         def parse(cls, cursor):
             if not cursor.eof():
                 line = cursor.current()
-                words = line.without_indent().split()
-                if len(words) >= 2 and words[0] == tagword:
-                    cursor.advance()
-                    return cls(words[1:], line)
+                if line.without_indent().startswith(tag_text + ' '):
+                    labels = line.without_indent()[len(tag_text) + 1:].split()
+                    if labels:
+                        cursor.advance()
+                        return cls(labels, line)
             return None
 
     return Tag
 
-def tagged_duration(tagword):
+def tagged_duration(tag_text):
 
     class Tag(object):
 
@@ -347,9 +362,9 @@ def tagged_duration(tagword):
         def parse(cls, cursor):
             if not cursor.eof():
                 line = cursor.current()
-                if line.without_indent().startswith(tagword + ' '):
+                if line.without_indent().startswith(tag_text + ' '):
                     d = Duration.parse(line, 0)
-                    if d is not None and d.prefix == tagword and line[d.end:].strip() == '':
+                    if d is not None and d.prefix == tag_text and line[d.end:].strip() == '':
                         cursor.advance()
                         return cls(d.minutes, line)
             return None
@@ -364,15 +379,11 @@ class Day(object):
         self.is_pubhol = False
         self.is_personal = False
         self.is_weekend = False
-        self.is_unpaid = False
-        self.present = TotalMinutes()
-        self.excluded = TotalMinutes()
-        self.reported = defaultdict(TotalMinutes)
         self.paid = None
-
-    @property
-    def spent(self):
-        return self.present - self.excluded
+        self.logged = TotalMinutes()
+        self.payable = TotalMinutes()
+        self.reportable = TotalMinutes()
+        self.reported = defaultdict(TotalMinutes)
 
     def __lt__(self, other):
         if not isinstance(other, type(self)):
@@ -398,7 +409,7 @@ class Day(object):
         cursor.advance()
         for block in Block.parseiter(cursor):
             day.blocks.append(block)
-            day.present += block.totals
+            day.logged += block.totals
             if block.pay is not None: day.paid = (day.paid or 0) + block.pay
             for label in block.reports:
                 day.reported[label] += block.reports[label]
@@ -408,34 +419,33 @@ class Result(object):
 
     def __init__(self):
         self.days = []
-        self.present = TotalMinutes()
-        self.excluded = TotalMinutes()
+        self.logged = TotalMinutes()
+        self.payable = TotalMinutes()
+        self.reportable = TotalMinutes()
         self.reported = defaultdict(TotalMinutes)
         self.paid = None
         self.days_paid = 0
         self.days_working = 0
-        self.days_present = 0
-
-    @property
-    def spent(self):
-        return self.present - self.excluded
+        self.days_logged = 0
 
     def __iadd__(self, other):
         self.days += other.days
-        self.present += other.present
-        self.excluded += other.excluded
+        self.logged += other.logged
+        self.payable += other.payable
+        self.reportable += other.reportable
         for label in other.reported:
             self.reported[label] += other.reported[label]
         if other.paid is not None: self.paid = (self.paid or 0) + other.paid
         self.days_paid += other.days_paid
         self.days_working += other.days_working
-        self.days_present += other.days_present
+        self.days_logged += other.days_logged
         return self
 
     def add_day(self, day):
         self.days.append(day)
-        self.present += day.present
-        self.excluded += day.excluded
+        self.logged += day.logged
+        self.payable += day.payable
+        self.reportable += day.reportable
         for label in day.reported:
             self.reported[label] += day.reported[label]
         if day.paid is not None:
@@ -444,12 +454,12 @@ class Result(object):
             self.days_paid += 1
         if not (day.is_pubhol or day.is_personal or day.is_weekend):
             self.days_working += 1
-        if day.present:
-            self.days_present += 1
+        if day.logged:
+            self.days_logged += 1
 
     @property
     def all_labels(self):
-        all_labels = set(self.present.labels)
+        all_labels = set(self.logged.labels)
         for report in self.reported.values():
             all_labels |= set(report.labels)
         return all_labels
