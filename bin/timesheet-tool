@@ -32,22 +32,28 @@ def main():
 
 def process(path):
     # First pass to discover all the labels to exclude.
-    cursor = NoModeLinesCursor(FileCursor(path))
     excluded_labels = set()
+    skip_line_ids = set()
     daily_pay = None
-    for line in cursor:
-        if line.startswith('EXCLUDE '):
-            excluded_labels.update(line[8:].split())
+    cursor = NoModeLinesCursor(FileCursor(path))
+    cursor.advance()
+    while not cursor.eof():
+        tag = tagged_labels('EXCLUDE').parse(cursor)
+        if tag:
+            excluded_labels.update(tag.labels)
+            skip_line_ids.add(tag.line.id())
+        else:
+            cursor.advance()
     # Second pass to sum all the hours, excluding non-billable hours.
     cursor = NoModeLinesCursor(FileCursor(path))
     result = Result()
     try:
         cursor.advance()
         while not cursor.eof():
-            if cursor.current().startswith('EXCLUDE ') or cursor.current().is_blank():
+            if cursor.current().is_blank() or cursor.current().id() in skip_line_ids:
                 cursor.advance()
                 continue
-            total = tag('TOTAL').parse(cursor)
+            total = tagged_duration('TOTAL').parse(cursor)
             if total is not None:
                 running = result.present - result.present.slice(excluded_labels)
                 if total.minutes != running.minutes:
@@ -55,14 +61,14 @@ def process(path):
                                 Duration.format(total.minutes), Duration.format(running.minutes)),
                             line=total.line)
                 continue
-            pay = tag('PAY').parse(cursor)
+            pay = tagged_duration('PAY').parse(cursor)
             if pay is not None:
                 daily_pay = pay
                 continue
             day = Day.parse(cursor)
             if day is not None:
                 day.excluded = day.present.slice(excluded_labels)
-                if daily_pay and not (day.is_weekend or day.is_unpaid): day.paid = daily_pay.minutes
+                if daily_pay and day.paid is None: day.paid = daily_pay.minutes
                 result.add_day(day)
                 continue
             raise ParseError('malformed line', line=cursor.current())
@@ -89,7 +95,7 @@ def print_calendar_report(result):
             notes.append('personal')
         elif day.is_weekend:
             notes.append('weekend')
-        elif day.is_unpaid:
+        elif day.paid == 0:
             notes.append('unpaid')
         reported_minutes = [day.reported[k].sum_labels() if k in day.reported else None for k in reportkeys]
         print fmt % ((day.date.strftime('%a %_d %b %Y'),
@@ -97,7 +103,7 @@ def print_calendar_report(result):
                       Duration.format(day.spent.minutes) if day.spent.minutes else '-',
                       format_duration_or_none(sum(m or 0 for m in reported_minutes) or None)) +
                       tuple(format_duration_or_none(m) for m in reported_minutes) +
-                      ((format_duration_or_none(day.paid),) if paidkeys else ()) +
+                      ((format_duration_or_none(day.paid or None),) if paidkeys else ()) +
                       (', '.join(notes)[:25],))
     print fmt % (('',) + ('--------',) * (3 + len(reportkeys) + len(paidkeys)) + ('',))
     print fmt % (('TOTAL',
@@ -148,6 +154,9 @@ def print_task_report(result):
 
 class Line(unicode):
 
+    def id(self):
+        return (self.file.name, self.lineno)
+
     def where(self):
         return '%s, line %s' % (self.file.name, self.lineno)
 
@@ -156,6 +165,9 @@ class Line(unicode):
 
     def indent(self):
         return len(self) - len(self.lstrip())
+
+    def without_indent(self):
+        return self.lstrip()
 
 class ParseError(Exception):
 
@@ -303,12 +315,31 @@ class TotalMinutes(object):
             if lsum != self.minutes:
                 raise ValueError('labels [%s] do not sum to total [%s]' % (Duration.format(lsum), Duration.format(self.minutes)))
 
-def tag(taglabel):
+def tagged_labels(tagword):
+
+    class Tag(object):
+
+        def __init__(self, labels, line):
+            self.labels = labels
+            self.line = line
+
+        @classmethod
+        def parse(cls, cursor):
+            if not cursor.eof():
+                line = cursor.current()
+                words = line.without_indent().split()
+                if len(words) >= 2 and words[0] == tagword:
+                    cursor.advance()
+                    return cls(words[1:], line)
+            return None
+
+    return Tag
+
+def tagged_duration(tagword):
 
     class Tag(object):
 
         def __init__(self, minutes, line):
-            self.label = taglabel
             self.minutes = minutes
             self.line = line
 
@@ -316,9 +347,9 @@ def tag(taglabel):
         def parse(cls, cursor):
             if not cursor.eof():
                 line = cursor.current()
-                if line.startswith(taglabel + ' '):
+                if line.without_indent().startswith(tagword + ' '):
                     d = Duration.parse(line, 0)
-                    if d is not None and d.prefix == taglabel and line[d.end:].strip() == '':
+                    if d is not None and d.prefix == tagword and line[d.end:].strip() == '':
                         cursor.advance()
                         return cls(d.minutes, line)
             return None
@@ -363,11 +394,12 @@ class Day(object):
         day.is_pubhol = 'public holiday' in comment
         day.is_personal = 'sick' in comment or 'personal' in comment
         day.is_weekend = day.date.weekday() >= 5
-        day.is_unpaid = 'unpaid' in comment or 'without pay' in comment
+        day.paid = 0 if day.is_weekend or 'unpaid' in comment or 'without pay' in comment else None
         cursor.advance()
         for block in Block.parseiter(cursor):
             day.blocks.append(block)
             day.present += block.totals
+            if block.pay is not None: day.paid = (day.paid or 0) + block.pay
             for label in block.reports:
                 day.reported[label] += block.reports[label]
         return day
@@ -408,8 +440,9 @@ class Result(object):
             self.reported[label] += day.reported[label]
         if day.paid is not None:
             self.paid = (self.paid or 0) + day.paid
+        if day.paid:
             self.days_paid += 1
-        if not day.is_pubhol and not day.is_personal and not day.is_weekend:
+        if not (day.is_pubhol or day.is_personal or day.is_weekend):
             self.days_working += 1
         if day.present:
             self.days_present += 1
@@ -426,6 +459,7 @@ class Block(object):
     def __init__(self):
         self.totals = TotalMinutes()
         self.reports = defaultdict(TotalMinutes)
+        self.pay = None
         self.tasklabel = None
         self.wildlabel = None
 
@@ -448,8 +482,16 @@ class Block(object):
         firstline = None
         # A Block is a contiguous series of non-blank indented lines.
         while not cursor.eof() and not cursor.current().is_blank() and cursor.current().indent():
+            if block.pay is not None:
+                raise ParseError('spurious line after PAY', line=cursor.current())
+            pay = tagged_duration('PAY').parse(cursor)
             if firstline is None:
                 firstline = cursor.current()
+                if pay is not None:
+                    block.pay = pay.minutes
+                    continue
+            elif pay is not None:
+                raise ParseError('spurious line before PAY', line=firstline)
             bl = BlockLine.parse(cursor.current(), tasklabel=block.tasklabel, wildlabel=block.wildlabel)
             block.tasklabel = bl.tasklabel
             if bl.wildlabel:
