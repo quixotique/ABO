@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 # vim:fileencoding=utf8 nomod
 
 import sys
@@ -28,6 +28,7 @@ def main():
 
     # Print reports.
     print_calendar_report(result)
+    print()
     print_task_report(result)
 
 def process(path):
@@ -81,8 +82,8 @@ def process(path):
                 continue
             raise ParseError('malformed line', line=cursor.current())
         return result
-    except ParseError, e:
-        print >>sys.stderr, unicode(e)
+    except ParseError as e:
+        print(str(e), file=sys.stderr)
         sys.exit(1)
 
 def format_duration_or_none(minutes):
@@ -95,8 +96,8 @@ def print_calendar_report(result):
     fmt = '%-16.16s ' + (' ' + colfmt) * (4 + len(result.reported) + len(paidkeys)) + ' %-25s'
     avfmt = '%-16.16s ' + (' ' + colfmt) * 2 + ' %s'
     reportkeys = sorted(result.reported)
-    print fmt % (('', 'Logged', 'Payable', 'Reportable', 'Reported') + tuple(reportkeys) + paidkeys + ('',))
-    print fmt % (('',) + (colrule,) * (4 + len(reportkeys) + len(paidkeys)) + ('',))
+    print(fmt % (('', 'Logged', 'Payable', 'Reportable', 'Reported') + tuple(reportkeys) + paidkeys + ('',)))
+    print(fmt % (('',) + (colrule,) * (4 + len(reportkeys) + len(paidkeys)) + ('',)))
     for day in sorted(result.days):
         notes = []
         if day.is_pubhol:
@@ -108,29 +109,29 @@ def print_calendar_report(result):
         elif day.paid == 0:
             notes.append('unpaid')
         reported_minutes = [day.reported[k].sum_labels() if k in day.reported else None for k in reportkeys]
-        print fmt % ((day.date.strftime('%a %_d %b %Y'),
+        print(fmt % ((day.date.strftime('%a %_d %b %Y'),
                       format_duration_or_none(day.logged.minutes or None),
                       format_duration_or_none(day.payable.minutes or None),
                       format_duration_or_none(day.reportable.minutes or None),
                       format_duration_or_none(sum(m or 0 for m in reported_minutes) or None)) +
                       tuple(format_duration_or_none(m) for m in reported_minutes) +
                       ((format_duration_or_none(day.paid or None),) if paidkeys else ()) +
-                      (', '.join(notes)[:25],))
-    print fmt % (('',) + (colrule,) * (4 + len(reportkeys) + len(paidkeys)) + ('',))
-    print fmt % (('TOTAL',
+                      (', '.join(notes)[:25],)))
+    print(fmt % (('',) + (colrule,) * (4 + len(reportkeys) + len(paidkeys)) + ('',)))
+    print(fmt % (('TOTAL',
                   Duration.format(result.logged.minutes),
                   Duration.format(result.payable.minutes),
                   Duration.format(result.reportable.minutes)) +
                   ('',) * (1 + len(reportkeys)) +
                   ((format_duration_or_none(result.paid),) if paidkeys else ()) +
-                  ('',))
+                  ('',)))
     def print_average(days, called):
         if days:
             s = 's' if days != 1 else ''
-            print avfmt % ('AVERAGE',
+            print(avfmt % ('AVERAGE',
                            Duration.format(result.logged.minutes / days),
                            Duration.format(result.payable.minutes / days),
-                           'per day over %u %s day%s' % (days, called, s))
+                           'per day over %u %s day%s' % (days, called, s)))
     print_average(result.days_paid, 'paid')
     print_average(result.days_working, 'working')
     print_average(result.days_logged, 'logged')
@@ -140,9 +141,8 @@ def print_task_report(result):
     colfmt = '%10.10s'
     colrule = '-' * 10
     fmt = '%-' + w + '.' + w + 's ' + (' ' + colfmt) * (len(result.reported) + 3)
-    print
-    print fmt % (('', 'Reportable', 'Reported', 'Unreported') + tuple(result.reported))
-    print fmt % (('',) + (colrule,) * (len(result.reported) + 3))
+    print(fmt % (('', 'Reportable', 'Reported', 'Unreported') + tuple(result.reported)))
+    print(fmt % (('',) + (colrule,) * (len(result.reported) + 3)))
     total_reportable = 0
     total_unreported = 0
     total_reported = [0] * len(result.reported)
@@ -155,18 +155,18 @@ def print_task_report(result):
         if [m for m in [reportable_minutes] + report_minutes if m]:
             reported_minutes = sum(m or 0 for m in report_minutes) or None
             unreported_minutes = (reportable_minutes or 0) - (reported_minutes or 0) or None
-            print fmt % ((label, format_duration_or_none(reportable_minutes),
+            print(fmt % ((label, format_duration_or_none(reportable_minutes),
                                  format_duration_or_none(reported_minutes),
                                  format_duration_or_none(unreported_minutes)) +
-                                 tuple(format_duration_or_none(m) for m in report_minutes))
+                                 tuple(format_duration_or_none(m) for m in report_minutes)))
         total_unreported += unreported_minutes or 0
-    print fmt % (('',) + (colrule,) * (len(result.reported) + 3))
-    print fmt % (('TOTAL', format_duration_or_none(total_reportable or None),
+    print(fmt % (('',) + (colrule,) * (len(result.reported) + 3)))
+    print(fmt % (('TOTAL', format_duration_or_none(total_reportable or None),
                            format_duration_or_none(sum(total_reported) or None),
                            format_duration_or_none(total_unreported or None)) +
-                           tuple(format_duration_or_none(t or None) for t in total_reported))
+                           tuple(format_duration_or_none(t or None) for t in total_reported)))
 
-class Line(unicode):
+class Line(str):
 
     def id(self):
         return (self.file.name, self.lineno)
@@ -216,7 +216,7 @@ class FileCursor(Cursor):
 
     def __init__(self, path):
         super(FileCursor, self).__init__()
-        firstline = file(path).readline()
+        firstline = open(path).readline()
         enc = locale.getlocale()[1]
         if firstline:
             m = re.search(r'coding[=:]\s*([-\w.]+)', firstline)
@@ -227,7 +227,7 @@ class FileCursor(Cursor):
 
     def advance(self):
         try:
-            self._current = Line(self._file.next())
+            self._current = Line(next(self._file))
             self._lineno += 1
             self._current.file = self._file
             self._current.lineno = self._lineno
@@ -290,14 +290,14 @@ class TotalMinutes(object):
     def __iadd__(self, other):
         if other.minutes is not None:
             self.minutes = (self.minutes or 0) + other.minutes
-        for label, minutes in other.labels.iteritems():
+        for label, minutes in other.labels.items():
             self.labels[label] = self.labels.get(label, 0) + minutes
         return self
 
     def __isub__(self, other):
         if other.minutes is not None:
             self.minutes = (self.minutes or 0) - other.minutes
-        for label, minutes in other.labels.iteritems():
+        for label, minutes in other.labels.items():
             m = self.labels.get(label, 0) - minutes
             if m:
                 self.labels[label] = m
@@ -312,7 +312,7 @@ class TotalMinutes(object):
             self.minutes = (self.minutes or 0) + minutes
 
     def sum_labels(self):
-        return sum(self.labels.itervalues())
+        return sum(self.labels.values())
 
     def slice(self, include_only_labels=None, exclude_labels=frozenset()):
         self.validate_sum()
@@ -523,7 +523,7 @@ class Block(object):
             block.totals.minutes = block.totals.sum_labels()
         try:
             block.totals.validate_sum()
-        except ValueError, e:
+        except ValueError as e:
             raise ParseError(str(e), line=firstline)
         return block
 
@@ -553,7 +553,7 @@ class BlockLine(object):
             if r is None and (d is None or d.prefix) and rminutes is not None and label is None:
                 # after at least one Range, either a missing Duration or a Duration with some preceding text
                 # tell the user what we calculate the total duration ought to be
-                print '%s: time range missing total [%s]' % (line.where(), Duration.format(rminutes))
+                print('%s: time range missing total [%s]' % (line.where(), Duration.format(rminutes)))
             if d is None and r is None:
                 # found Neither Range nor Duration
                 break
@@ -607,7 +607,7 @@ class BlockLine(object):
 
 class Duration(object):
 
-    re_duration = re.compile(ur'\[\s*(?:(?:(?P<h1>\d*)(?P<m1>¼|½|¾|⅓|⅔|⅕|⅖|⅗|⅘|:\d\d|\.\d+)h?)|(?:(?:(?P<h2>\d+)\s*[hH])?\s*(?:(?P<m2>\d+)\s*[mM])?)|(?P<wild>\*)|0)\s*\]')
+    re_duration = re.compile(r'\[\s*(?:(?:(?P<h1>\d*)(?P<m1>¼|½|¾|⅓|⅔|⅕|⅖|⅗|⅘|:\d\d|\.\d+)h?)|(?:(?:(?P<h2>\d+)\s*[hH])?\s*(?:(?P<m2>\d+)\s*[mM])?)|(?P<wild>\*)|0)\s*\]')
 
     @classmethod
     def parse(cls, line, start=0):
