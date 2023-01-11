@@ -102,12 +102,12 @@ def print_calendar_report(result):
         notes = []
         if day.is_pubhol:
             notes.append('public holiday')
-        if day.is_personal:
-            notes.append('personal')
         elif day.is_weekend:
             notes.append('weekend')
+        elif day.is_personal_leave:
+            notes.append('personal leave')
         elif day.paid == 0:
-            notes.append('unpaid')
+            notes.append('unpaid leave')
         reported_minutes = [day.reported[k].sum_labels() if k in day.reported else None for k in reportkeys]
         print(fmt % ((day.date.strftime('%a %_d %b %Y'),
                       format_duration_or_none(day.logged.minutes or None),
@@ -377,7 +377,7 @@ class Day(object):
         self.date = date
         self.blocks = []
         self.is_pubhol = False
-        self.is_personal = False
+        self.is_personal_leave = False
         self.is_weekend = False
         self.paid = None
         self.logged = TotalMinutes()
@@ -403,9 +403,9 @@ class Day(object):
         except ValueError as ex:
             raise ParseError('malformed date: %s' % (ex,), line=line)
         day.is_pubhol = 'public holiday' in comment
-        day.is_personal = 'sick' in comment or 'personal' in comment
+        day.is_personal_leave = 'sick' in comment or 'personal' in comment
         day.is_weekend = day.date.weekday() >= 5
-        day.paid = 0 if day.is_weekend or 'unpaid' in comment or 'without pay' in comment else None
+        day.paid = 0 if day.is_weekend or 'without pay' in comment or 'unpaid' in comment else None
         cursor.advance()
         for block in Block.parseiter(cursor):
             day.blocks.append(block)
@@ -452,7 +452,7 @@ class Result(object):
             self.paid = (self.paid or 0) + day.paid
         if day.paid:
             self.days_paid += 1
-        if not (day.is_pubhol or day.is_personal or day.is_weekend):
+        if not (day.is_pubhol or day.is_personal_leave or day.is_weekend):
             self.days_working += 1
         if day.logged:
             self.days_logged += 1
