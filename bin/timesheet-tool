@@ -703,7 +703,7 @@ class Range(object):
 _re_label_sort_key = re.compile(r'([A-Za-z_]+|\d+|[^A-Za-z_\d]+)')
 
 def label_sort_key(label):
-    return [(int(p) if p.isdecimal() else p.lower() if p.isalpha() else '') for p in _re_label_sort_key.split(label)]
+    return [('{:0>10}'.format(p) if p.isdecimal() else p.lower() if p.isalpha() else '') for p in _re_label_sort_key.split(label)]
 
 if __name__ == '__main__':
     main()
