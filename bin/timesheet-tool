@@ -2,6 +2,7 @@
 # vim:fileencoding=utf8 nomod
 
 import sys
+import os.path
 import locale
 import argparse
 import codecs
@@ -9,6 +10,12 @@ import re
 import traceback
 from datetime import datetime
 from collections import defaultdict
+
+try:
+    import abo.time
+except ImportError:
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib'))
+    import abo.time
 
 def main():
     locale.setlocale(locale.LC_ALL, '')
@@ -613,7 +620,7 @@ class BlockLine(object):
 
 class Duration(object):
 
-    re_duration = re.compile(r'\[\s*(?:(?:(?P<h1>\d*)(?P<m1>¼|½|¾|⅓|⅔|⅕|⅖|⅗|⅘|:\d\d|\.\d+)h?)|(?:(?:(?P<h2>\d+)\s*[hH])?\s*(?:(?P<m2>\d+)\s*[mM])?)|(?P<wild>\*)|0)\s*\]')
+    re_duration = re.compile(r'\[\s*(?:' + abo.time.re_hours_minutes.pattern + r'|(?P<wild>\*))\s*\]')
 
     @classmethod
     def parse(cls, line, start=0):
@@ -621,43 +628,18 @@ class Duration(object):
         if mt is None:
             return None
         if mt.group('wild'):
-            tminutes = None
+            minutes = None
         else:
-            hours = mt.group('h1') or mt.group('h2') or '0'
-            minutes = mt.group('m1') or mt.group('m2') or ''
-            tminutes = int(hours) * 60
-            if minutes.isdigit():
-                tminutes += int(minutes)
-            elif minutes.startswith(':'):
-                tminutes += int(minutes[1:])
-            elif minutes.startswith('.'):
-                tminutes += int(float(minutes) * 60)
-            elif minutes == u'¼':
-                tminutes += 15
-            elif minutes == u'½':
-                tminutes += 30
-            elif minutes == u'¾':
-                tminutes += 45
-            elif minutes == u'⅓':
-                tminutes += 20
-            elif minutes == u'⅔':
-                tminutes += 40
-            elif minutes == u'⅕':
-                tminutes += 12
-            elif minutes == u'⅖':
-                tminutes += 24
-            elif minutes == u'⅗':
-                tminutes += 36
-            elif minutes == u'⅘':
-                tminutes += 48
-            elif minutes != '':
+            delta = abo.time.from_hours_minutes_match(mt)
+            if delta is None:
                 raise ParseError('invalid duration: %s' % mt.group(0), line=line)
+            minutes = delta.total_seconds() / 60
         dur = cls()
         dur.text = mt.group(0)
         dur.start = mt.start(0)
         dur.end = mt.end(0)
         dur.prefix = line[start:mt.start(0)].strip(' ,:')
-        dur.minutes = tminutes
+        dur.minutes = minutes
         return dur
 
     @staticmethod
