@@ -55,31 +55,39 @@ class numbered_line(str):
     r'''Sub-class of str which carries extra attributes such as 'line_number'
     and 'name', which it preserves where needed.
 
-    >>> i = numbered_line('abc ')
+    >>> i = numbered_line(' abc ')
     >>> i.line_number = 42
     >>> i.name = 'wah'
+    >>> i.lstrip()
+    'abc '
+    >>> type(i.lstrip())
+    <class 'abo.text.numbered_line'>
+    >>> i.lstrip().line_number
+    42
+    >>> i.lstrip().name
+    'wah'
     >>> i.rstrip()
-    'abc'
+    ' abc'
     >>> type(i.rstrip())
     <class 'abo.text.numbered_line'>
     >>> i.rstrip().line_number
     42
     >>> i.rstrip().name
     'wah'
-    >>> i[1]
+    >>> i[2]
     'b'
-    >>> i[1].name
+    >>> i[2].name
     'wah'
-    >>> i[2:]
+    >>> i[3:]
     'c '
-    >>> i[2:].name
+    >>> i[3:].name
     'wah'
     >>> i + 'def'
-    'abc def'
+    ' abc def'
     >>> (i + 'def').name
     'wah'
     >>> 'xxx' + i
-    'xxxabc '
+    'xxx abc '
     >>> ('xxx' + i).name
     'wah'
 
