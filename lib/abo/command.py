@@ -220,24 +220,20 @@ def cmd_acc(config, opts):
     yield fmt % ('', 'Balance', '', '', config.format_money(tally.balance))
 
 def invoice_bill_account(chart, transaction):
-    # Treat this transaction as an invoice, bill, remittance or payment if
-    # it mentions exactly one single accrual account...
-    accrual_account = None
-    accrual_sign = None
+    # Treat this transaction as an invoice, bill, remittance or payment if all
+    # its debits OR all its credits are to a single accrual (payable/receivable)
+    # account.
+    accrual_entry = next((e for e in transaction.entries if chart[e.account].is_accrual()), None)
+    if accrual_entry is None:
+        return None
+    accrual_account = chart[accrual_entry.account]
+    accrual_sign = sign(accrual_entry.amount)
     for e in transaction.entries:
         acc = chart[e.account]
         if acc.is_accrual():
-            if accrual_account is not None:
+            if acc is not accrual_account or sign(e.amount) != accrual_sign:
                 return None
-            accrual_account = acc
-            accrual_sign = sign(e.amount)
-    if accrual_account is None:
-        return None
-    # ... and there are no other same-sign credits/debits to any other
-    # asset/liability account.
-    for e in transaction.entries:
-        acc = chart[e.account]
-        if acc is not accrual_account and acc.is_assetliability() and sign(e.amount) == accrual_sign:
+        elif sign(e.amount) != accrual_sign:
             return None
     return accrual_account
 
