@@ -1,0 +1,305 @@
+#!/usr/bin/env python3
+# vim: sw=4 sts=4 et fileencoding=utf8 nomod
+# Copyright 2023 Andrew Bettison
+
+'''Usage:
+    med [-Dg] <path> [<period>...]
+    med --test
+    med --version
+    med -h | --help
+
+Options:
+    -g --graph              Produce SVG graph
+    -D --debug              Log debug on stderr
+    -h --help               Print this message
+       --version            Print version and exit
+       --test               Run internal tests
+'''
+
+import sys
+import os.path
+import logging
+import re
+from datetime import time as timeofday, datetime, timedelta
+
+try:
+    import abo.time
+except ImportError:
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib'))
+    import abo.time
+
+import abo.period
+import abo.text
+from abo.types import struct
+
+graph_line_min = 0.
+graph_line_max = 200.
+
+def main():
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
+    import docopt
+    opts = docopt.docopt(__doc__, sys.argv[1:], version='1')
+    if not opts['--debug']:
+        logging.disable(logging.DEBUG)
+    if opts['--test']:
+        import doctest
+        failures, tests = doctest.testmod()
+        sys.exit(0 if failures == 0 else 1)
+    period_words = opts['<period>'] or 'from 3 days ago to tomorrow'.split()
+    period = abo.period.parse_period(period_words)
+    medication = {}
+    simulation = {}
+    day = None
+    days = []
+    red = []
+    orange = []
+    green = []
+    when = None
+    reports = {}
+    reports[datetime.now()] = ' '
+    try:
+        for line in abo.text.number_lines(open(opts['<path>'])):
+            line = line.rstrip('\n')
+            def parse_tag(tag, default=None):
+                i = line.find(tag)
+                if i != -1:
+                    try:
+                        value_str = line[i + len(tag):].split(None, 1)[0]
+                    except IndexError:
+                        raise abo.text.LineError(f'missing {tag} value', line=line)
+                    if m := abo.time.re_hours_minutes.match(value_str):
+                        return abo.time.from_hours_minutes_match(m)
+                    else:
+                        raise abo.text.LineError(f'malformed {tag} value: {value_str!r}', line=line)
+                return default
+            # Parse "half-life" medication declarations at top of file.
+            if day is None:
+                half_life = parse_tag('half-life')
+                if half_life is not None:
+                    m = re_regime.search(line)
+                    if not m: raise abo.text.LineError('malformed medication', line=line)
+                    name = m.group('name')
+                    regime_amount = float(m.group('amount'))
+                    regime_interval = interval_from_regime_match(m)
+                    delay = parse_tag('delay', default=timedelta(0))
+                    peak = parse_tag('peak', default=timedelta(0))
+                    med = Medication(name, delay=delay, peak=peak, half_life=half_life, regime_amount=regime_amount, regime_interval=regime_interval)
+                    medication[name] = med
+                    simulation[name] = Simulation(med)
+                    continue
+            # Skip blank lines.
+            if not line: continue
+            # Parse HH:MM at start of line, after first day has been parsed.
+            # Otherwise non-indented line must parse as "Day DD Mon YYYY"
+            if not line[0].isspace():
+                m = re_time_of_day.match(line) if day is not None else None
+                if m:
+                    new_when = datetime.combine(day, timeofday(int(m.group('hour')), int(m.group('minute'))))
+                    line = line[m.end():]
+                    if when is not None:
+                        if new_when <= when:
+                            raise abo.text.LineError(f'time of day does not advance', line=line)
+                    when = new_when
+                    logging.debug(f'when = {when}')
+                else:
+                    try:
+                        new_day = datetime.strptime(line, '%a %d %b %Y').date()
+                        logging.debug(f'new_day = {new_day}')
+                        if day is not None and new_day <= day:
+                            raise abo.text.LineError(f'day does not advance', line=line)
+                        when = None
+                        day = new_day
+                        days.append(day)
+                    except ValueError as e:
+                        if day is not None:
+                            raise abo.text.LineError(f'malformed day: {line!r}', line=line)
+            # Skip lines until first day is parsed.
+            if day is None: continue
+            # Skip over indent.
+            line = line.lstrip()
+            # Parse single punctuation as reportable line.
+            if m := re_reportable.match(line):
+                line = line[m.end():].lstrip()
+                rep = m.group(0)
+                if when is None:
+                    raise abo.text.LineError('time of day unknown', line=line)
+                reports[when] = rep
+                (red if rep == '!' else green if rep == '+' else orange).append(when)
+            # Parse known medication.
+            for name, sim in simulation.items():
+                i = line.find(name)
+                if i != -1:
+                    if when is None:
+                        raise abo.text.LineError('time of day unknown', line=line)
+                    if m := re_regime.match(line[i:]):
+                        medication[name].revise_regime(when, float(m.group('amount')), interval_from_regime_match(m))
+                    elif m := re_dose.match(line[i + len(name):].lstrip()):
+                        sim.add_dose(float(m.group('amount')), when)
+    except abo.text.LineError as e:
+        fatal(str(e))
+
+    start_datetime = datetime.combine(period[0], timeofday.min)
+    end_datetime = datetime.combine(period[1], timeofday.max)
+
+    def filter(datetimes):
+        return [t for t in datetimes if t >= start_datetime and t <= end_datetime]
+
+    for sim in simulation.values():
+        sim.compute(start_datetime, end_datetime)
+
+    if reports:
+        fmt = '{:<17} {:1.1}' + ' {:>12}' * len(simulation)
+        print(fmt.format('', '', *simulation.keys()))
+        for when in sorted(filter(reports)):
+            print(fmt.format(when.strftime(r'%a %_d-%b %H:%M'),
+                             reports[when],
+                             *(f'{sim.load_at(when):6.1f} mg' for sim in simulation.values())))
+
+    if opts['--graph'] and days:
+        times = []
+        time = start_datetime
+        while time <= end_datetime:
+            times.append(time)
+            time += timedelta(minutes=15)
+        import matplotlib.pyplot as M
+        import matplotlib.dates as MD
+        fig = M.figure(figsize=(2.0 * (times[-1] - times[0]) / timedelta(days=1), 4.0))
+        ax = fig.subplots()
+        ax.set_title('Medication blood loads')
+        ax.set_ylabel('mg')
+        ax.xaxis.set_major_locator(MD.DayLocator())
+        ax.xaxis.set_minor_locator(MD.HourLocator([0, 6, 12, 18]))
+        ax.xaxis.set_major_formatter(MD.DateFormatter('%a %-d\n%b %Y'))
+        ax.xaxis.set_minor_formatter(MD.DateFormatter('%H'))
+        ax.grid(True, 'major', color='0.7')
+        ax.grid(True, 'minor', color='0.9')
+        ax.vlines(filter([datetime.now()]), graph_line_min, graph_line_max, color='0', linestyles='solid')
+        ax.vlines(filter(red), graph_line_min, graph_line_max, color='tab:red', linestyles='dotted')
+        ax.vlines(filter(orange), graph_line_min, graph_line_max, color='tab:orange', linestyles='dotted')
+        ax.vlines(filter(green), graph_line_min, graph_line_max, color='tab:green', linestyles='dotted')
+        for name, sim in simulation.items():
+            doses = [dose for dose in sim.doses if dose.when >= start_datetime and dose.when <= end_datetime]
+            lines = ax.plot([dose.when for dose in doses],
+                            [sim.medication.get_regime(dose.when).tick_amount for dose in doses],
+                            marker='|', linestyle='none')
+            ax.plot(times, [sim.load_at(time) for time in times], color=lines[0].get_color())
+        M.show()
+
+re_time_of_day = re.compile(r'^(?P<hour>\d\d):(?P<minute>\d\d)\b')
+re_reportable = re.compile(r'[^A-Za-z0-9_().-]')
+re_dose = re.compile(r'(?P<amount>\d*(?:\.\d+)?|\d+)\s*mg\b')
+re_regime = re.compile(r'^[\s-]*(?P<name>[A-Z]\S*)\s+(?:' + re_dose.pattern + r')\s+(?P<interval>BD|daily|every\s+' + abo.time.re_hours_minutes.pattern + ')')
+
+def interval_from_regime_match(m):
+    i = m.group('interval')
+    if i == 'BD': return timedelta(hours=12)
+    if i == 'daily': return timedelta(hours=24)
+    assert i.startswith('every'), f'i={i!r}'
+    interval = abo.time.from_hours_minutes_match(m)
+    assert interval is not None, f'i={i!r}'
+    return interval
+
+class Medication(object):
+
+    def __init__(self, name, delay, peak, half_life, regime_amount, regime_interval):
+        assert delay < peak
+        self.name = name
+        self.delay = delay
+        self.peak = peak
+        self.half_life = half_life
+        self.regime = Regime(self, regime_amount, regime_interval)
+        self.revised_regimes = {}
+        logging.debug(f'{name!r}: delay={delay}, peak={peak}, half-life={half_life}')
+
+    def revise_regime(self, from_time, amount, interval):
+        self.revised_regimes[from_time] = Regime(self, amount, interval)
+
+    def get_regime(self, when):
+        dose = self.regime
+        for from_time in sorted(self.revised_regimes):
+            if when < from_time:
+                break
+            dose = self.revised_regimes[from_time]
+        return dose
+
+    def dose(self, amount, when):
+        return Dose(medication=self, when=when, amount=amount)
+
+class Regime(object):
+
+    def __init__(self, medication, amount, interval):
+        self.medication = medication
+        self.amount = amount
+        self.interval = interval
+        self.tick_amount = self._compute_steady_state_peak()
+
+    def _compute_steady_state_peak(self):
+        load = 0.
+        for i in range(10):
+            load *= pow(0.5, self.interval / self.medication.half_life)
+            load += self.amount
+        load *= pow(0.5, (self.medication.peak - self.medication.delay) / self.medication.half_life)
+        return load
+
+class Dose(object):
+
+    def __init__(self, medication, when, amount):
+        self.medication = medication
+        self.when = when
+        self.amount = amount
+
+    def absorbed(self, when, interval):
+        # Absorption model is a simple window: zero during delay, then constant
+        # absorption until full load is absorbed at peak interval, then zero.
+        start = self.when + self.medication.delay
+        window = self.medication.peak - self.medication.delay
+        end = start + window
+        if when + interval <= start or when >= end: return 0.
+        return self.amount * (min(when + interval, end) - when) / window
+
+class Simulation(object):
+
+    def __init__(self, medication):
+        self.medication = medication
+        self.doses = []
+        self._load = {}
+        self.step = timedelta(minutes=1)
+        self.epoch = datetime(2000, 1, 1, 0, 0, 0)
+        self.first_dose_time = None
+        self.last_dose_time = None
+
+    def _floor(self, time):
+        assert self.epoch <= time
+        return time - (time - self.epoch) % self.step
+
+    def add_dose(self, amount, when):
+        self.doses.append(self.medication.dose(amount, when))
+        self._load = {}
+        if self.first_dose_time is None or when < self.first_dose_time:
+            self.first_dose_time = self._floor(when)
+        if self.last_dose_time is None or when > self.last_dose_time:
+            self.last_dose_time = self._floor(when)
+
+    def compute(self, start_time=None, end_time=None):
+        if self.doses and not self._load:
+            time = start_time - self.medication.half_life * 10 if start_time else self.first_dose_time
+            if not end_time: end_time = self._floor(self.last_dose_time + self.medication.half_life * 10)
+            level = 0.
+            step_decay = pow(0.5, self.step / self.medication.half_life)
+            while time <= end_time:
+                for dose in self.doses:
+                    level += dose.absorbed(time, self.step)
+                level *= step_decay
+                self._load[time] = level
+                time += self.step
+
+    def load_at(self, when):
+        return self._load.get(self._floor(when), 0.)
+
+def fatal(message, status=1):
+    print("%s: %s" % (os.path.basename(sys.argv[0]), message), file=sys.stderr)
+    sys.exit(status)
+
+if __name__ == "__main__":
+    main()
