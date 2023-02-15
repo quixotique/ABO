@@ -162,7 +162,9 @@ scale=
 edgepix=$((opt_edge * $scanres * 10 / 254))
 
 write() {
-    cat >|"${1?}"
+    local dst="${1?}"
+    rm -f "$dst"
+    cat >"$dst"
 }
 
 $opt_scan && run scanimage --progress ${opt_device:+--device "$optdevice"} --format pnm --mode $scanmode --resolution $scanres $scansize |
@@ -185,16 +187,18 @@ fi
 
 if [ -n "$scale" ]; then
     run pnmscale $scale "$stem-$scanres-norm.$scansuffix" |
-        run write "$stem-$res-norm.$scansuffix"
+        run write "$stem-$res-scaled.$scansuffix"
+else
+    run ln -f "$stem-$scanres-norm.$scansuffix" "$stem-$res-scaled.$scansuffix"
 fi
 
 case $opt_rotate in
 90|180|270)
-    run pnmflip -rotate$opt_rotate "$stem-$res-norm.$scansuffix" |
+    run pnmflip -rotate$opt_rotate "$stem-$res-scaled.$scansuffix" |
         run write "$stem-$res-rotated.$scansuffix"
     ;;
 0)
-    run ln -f "$stem-$res-norm.$scansuffix" "$stem-$res-rotated.$scansuffix"
+    run ln -f "$stem-$res-scaled.$scansuffix" "$stem-$res-rotated.$scansuffix"
     ;;
 *)
     fatal "opt_rotate=$opt_rotate"
