@@ -15,7 +15,9 @@ def main():
 
     # Parse command line.
     parser = argparse.ArgumentParser()
+    parser.add_argument('--calendar', '-c', action='store_true', help='print calendar report')
     parser.add_argument('--decimal', '-d', action='store_true', help='print times as decimal h.hh instead of h:mm')
+    parser.add_argument('--task', '-t', action='store_true', help='print task report')
     parser.add_argument('path', nargs='+')
     args = parser.parse_args()
 
@@ -27,9 +29,13 @@ def main():
         result += process(path)
 
     # Print reports.
-    print_calendar_report(result)
-    print()
-    print_task_report(result)
+    blank_line = False
+    if args.calendar or not args.task:
+        print_calendar_report(result)
+        blank_line = True
+    if args.task or not args.calendar:
+        if blank_line: print()
+        print_task_report(result)
 
 def process(path):
     # First pass to discover special labels.
