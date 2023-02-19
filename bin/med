@@ -3,13 +3,14 @@
 # Copyright 2023 Andrew Bettison
 
 '''Usage:
-    med [-Dg] <path> [<period>...]
+    med [-Dg] [--period=PERIOD] <path>...
     med --test
     med --version
     med -h | --help
 
 Options:
     -g --graph              Produce SVG graph
+    -p --period=PERIOD      Limit graph to given period
     -D --debug              Log debug on stderr
     -h --help               Print this message
        --version            Print version and exit
@@ -46,7 +47,7 @@ def main():
         import doctest
         failures, tests = doctest.testmod()
         sys.exit(0 if failures == 0 else 1)
-    period_words = opts['<period>'] or 'from 3 days ago to tomorrow'.split()
+    period_words = (opts['--period'] or 'from 3 days ago to tomorrow').split()
     period = abo.period.parse_period(period_words)
     medication = {}
     simulation = {}
@@ -59,83 +60,84 @@ def main():
     reports = {}
     reports[datetime.now()] = ' '
     try:
-        for line in abo.text.number_lines(open(opts['<path>'])):
-            line = line.rstrip('\n')
-            def parse_tag(tag, default=None):
-                i = line.find(tag)
-                if i != -1:
-                    try:
-                        value_str = line[i + len(tag):].split(None, 1)[0]
-                    except IndexError:
-                        raise abo.text.LineError(f'missing {tag} value', line=line)
-                    if m := abo.time.re_hours_minutes.match(value_str):
-                        return abo.time.from_hours_minutes_match(m)
+        for path in opts['<path>']:
+            for line in abo.text.number_lines(open(path), name=path):
+                line = line.rstrip('\n')
+                def parse_tag(tag, default=None):
+                    i = line.find(tag)
+                    if i != -1:
+                        try:
+                            value_str = line[i + len(tag):].split(None, 1)[0]
+                        except IndexError:
+                            raise abo.text.LineError(f'missing {tag} value', line=line)
+                        if m := abo.time.re_hours_minutes.match(value_str):
+                            return abo.time.from_hours_minutes_match(m)
+                        else:
+                            raise abo.text.LineError(f'malformed {tag} value: {value_str!r}', line=line)
+                    return default
+                # Parse "half-life" medication declarations at top of file.
+                if day is None:
+                    half_life = parse_tag('half-life')
+                    if half_life is not None:
+                        m = re_regime.search(line)
+                        if not m: raise abo.text.LineError('malformed medication', line=line)
+                        name = m.group('name')
+                        regime_amount = float(m.group('amount'))
+                        regime_interval = interval_from_regime_match(m)
+                        delay = parse_tag('delay', default=timedelta(0))
+                        peak = parse_tag('peak', default=timedelta(0))
+                        med = Medication(name, delay=delay, peak=peak, half_life=half_life, regime_amount=regime_amount, regime_interval=regime_interval)
+                        medication[name] = med
+                        simulation[name] = Simulation(med)
+                        continue
+                # Skip blank lines.
+                if not line: continue
+                # Parse HH:MM at start of line, after first day has been parsed.
+                # Otherwise non-indented line must parse as "Day DD Mon YYYY"
+                if not line[0].isspace():
+                    m = re_time_of_day.match(line) if day is not None else None
+                    if m:
+                        new_when = datetime.combine(day, timeofday(int(m.group('hour')), int(m.group('minute'))))
+                        line = line[m.end():]
+                        if when is not None:
+                            if new_when <= when:
+                                raise abo.text.LineError(f'time of day does not advance', line=line)
+                        when = new_when
+                        logging.debug(f'when = {when}')
                     else:
-                        raise abo.text.LineError(f'malformed {tag} value: {value_str!r}', line=line)
-                return default
-            # Parse "half-life" medication declarations at top of file.
-            if day is None:
-                half_life = parse_tag('half-life')
-                if half_life is not None:
-                    m = re_regime.search(line)
-                    if not m: raise abo.text.LineError('malformed medication', line=line)
-                    name = m.group('name')
-                    regime_amount = float(m.group('amount'))
-                    regime_interval = interval_from_regime_match(m)
-                    delay = parse_tag('delay', default=timedelta(0))
-                    peak = parse_tag('peak', default=timedelta(0))
-                    med = Medication(name, delay=delay, peak=peak, half_life=half_life, regime_amount=regime_amount, regime_interval=regime_interval)
-                    medication[name] = med
-                    simulation[name] = Simulation(med)
-                    continue
-            # Skip blank lines.
-            if not line: continue
-            # Parse HH:MM at start of line, after first day has been parsed.
-            # Otherwise non-indented line must parse as "Day DD Mon YYYY"
-            if not line[0].isspace():
-                m = re_time_of_day.match(line) if day is not None else None
-                if m:
-                    new_when = datetime.combine(day, timeofday(int(m.group('hour')), int(m.group('minute'))))
-                    line = line[m.end():]
-                    if when is not None:
-                        if new_when <= when:
-                            raise abo.text.LineError(f'time of day does not advance', line=line)
-                    when = new_when
-                    logging.debug(f'when = {when}')
-                else:
-                    try:
-                        new_day = datetime.strptime(line, '%a %d %b %Y').date()
-                        logging.debug(f'new_day = {new_day}')
-                        if day is not None and new_day <= day:
-                            raise abo.text.LineError(f'day does not advance', line=line)
-                        when = None
-                        day = new_day
-                        days.append(day)
-                    except ValueError as e:
-                        if day is not None:
-                            raise abo.text.LineError(f'malformed day: {line!r}', line=line)
-            # Skip lines until first day is parsed.
-            if day is None: continue
-            # Skip over indent.
-            line = line.lstrip()
-            # Parse single punctuation as reportable line.
-            if m := re_reportable.match(line):
-                line = line[m.end():].lstrip()
-                rep = m.group(0)
-                if when is None:
-                    raise abo.text.LineError('time of day unknown', line=line)
-                reports[when] = rep
-                (red if rep == '!' else green if rep == '+' else orange).append(when)
-            # Parse known medication.
-            for name, sim in simulation.items():
-                i = line.find(name)
-                if i != -1:
+                        try:
+                            new_day = datetime.strptime(line, '%a %d %b %Y').date()
+                            logging.debug(f'new_day = {new_day}')
+                            if day is not None and new_day <= day:
+                                raise abo.text.LineError(f'day does not advance', line=line)
+                            when = None
+                            day = new_day
+                            days.append(day)
+                        except ValueError as e:
+                            if day is not None:
+                                raise abo.text.LineError(f'malformed day: {line!r}', line=line)
+                # Skip lines until first day is parsed.
+                if day is None: continue
+                # Skip over indent.
+                line = line.lstrip()
+                # Parse single punctuation as reportable line.
+                if m := re_reportable.match(line):
+                    line = line[m.end():].lstrip()
+                    rep = m.group(0)
                     if when is None:
                         raise abo.text.LineError('time of day unknown', line=line)
-                    if m := re_regime.match(line[i:]):
-                        medication[name].revise_regime(when, float(m.group('amount')), interval_from_regime_match(m))
-                    elif m := re_dose.match(line[i + len(name):].lstrip()):
-                        sim.add_dose(float(m.group('amount')), when)
+                    reports[when] = rep
+                    (red if rep == '!' else green if rep == '+' else orange).append(when)
+                # Parse known medication.
+                for name, sim in simulation.items():
+                    i = line.find(name)
+                    if i != -1:
+                        if when is None:
+                            raise abo.text.LineError('time of day unknown', line=line)
+                        if m := re_regime.match(line[i:]):
+                            medication[name].revise_regime(when, float(m.group('amount')), interval_from_regime_match(m))
+                        elif m := re_dose.match(line[i + len(name):].lstrip()):
+                            sim.add_dose(float(m.group('amount')), when)
     except abo.text.LineError as e:
         fatal(str(e))
 
