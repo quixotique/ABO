@@ -18,6 +18,7 @@ Options:
 '''
 
 import sys
+import shutil
 import os.path
 import logging
 import re
@@ -285,16 +286,27 @@ class Simulation(object):
 
     def compute(self, start_time=None, end_time=None):
         if self.doses and not self._load:
-            time = start_time - self.medication.half_life * 10 if start_time else self.first_dose_time
+            begin_time = start_time - self.medication.half_life * 10 if start_time else self.first_dose_time
             if not end_time: end_time = self._floor(self.last_dose_time + self.medication.half_life * 10)
             level = 0.
             step_decay = pow(0.5, self.step / self.medication.half_life)
+            termwidth, termheight = shutil.get_terminal_size()
+            barwidth = termwidth - 18
+            last_percent = None
+            time = begin_time
             while time <= end_time:
+                progress = (time - begin_time) / (end_time - begin_time)
+                percent = round(progress * 100)
+                if percent != last_percent:
+                    bar = ('#' * round(progress * barwidth)).ljust(barwidth) if barwidth > 0 else ''
+                    print(f'\r{self.medication.name:<10.10} [{bar}] {percent:>3}%', end='')
+                    last_percent = percent
                 for dose in self.doses:
                     level += dose.absorbed(time, self.step)
                 level *= step_decay
                 self._load[time] = level
                 time += self.step
+            print()
 
     def load_at(self, when):
         return self._load.get(self._floor(when), 0.)
