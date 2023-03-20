@@ -50,6 +50,7 @@ def main():
         sys.exit(0 if failures == 0 else 1)
     period_words = (opts['--period'] or 'from 3 days ago to tomorrow').split()
     period = abo.period.parse_period(period_words)
+    subject_name = ''
     medication = {}
     simulation = {}
     day = None
@@ -76,8 +77,12 @@ def main():
                         else:
                             raise abo.text.LineError(f'malformed {tag} value: {value_str!r}', line=line)
                     return default
-                # Parse "half-life" medication declarations at top of file.
+                # Parse metadata and "half-life" medication declarations at top of file.
                 if day is None:
+                    m = re_name.match(line)
+                    if m:
+                        subject_name = m.group('name')
+                        continue
                     half_life = parse_tag('half-life')
                     if half_life is not None:
                         m = re_regime.search(line)
@@ -169,7 +174,7 @@ def main():
         import matplotlib.dates as MD
         fig = M.figure(figsize=(2.0 * (times[-1] - times[0]) / timedelta(days=1), 4.0))
         ax = fig.subplots()
-        ax.set_title('Medication blood loads')
+        ax.set_title('Medication loads' + (', ' + subject_name if subject_name else ''))
         ax.set_ylabel('mg')
         ax.xaxis.set_major_locator(MD.DayLocator())
         ax.xaxis.set_minor_locator(MD.HourLocator([0, 6, 12, 18]))
@@ -189,6 +194,7 @@ def main():
             ax.plot(times, [sim.load_at(time) for time in times], color=lines[0].get_color())
         M.show()
 
+re_name = re.compile(r'^#\s*name:\s*(?P<name>.*\S)\s*$')
 re_time_of_day = re.compile(r'^(?P<hour>\d\d):(?P<minute>\d\d)\b')
 re_reportable = re.compile(r'[^A-Za-z0-9_().-]')
 re_dose = re.compile(r'(?P<amount>\d*(?:\.\d+)?|\d+)\s*mg\b')
