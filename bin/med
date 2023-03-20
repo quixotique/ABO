@@ -3,7 +3,7 @@
 # Copyright 2023 Andrew Bettison
 
 '''Usage:
-    med [-Dg] [--period=PERIOD] <path>...
+    med [-Dgn] [--period=PERIOD] <path>...
     med --test
     med --version
     med -h | --help
@@ -11,6 +11,7 @@
 Options:
     -g --graph              Produce SVG graph
     -p --period=PERIOD      Limit graph to given period
+    -n --no-now-line        Omit the "now" line from graph
     -D --debug              Log debug on stderr
     -h --help               Print this message
        --version            Print version and exit
@@ -182,7 +183,8 @@ def main():
         ax.xaxis.set_minor_formatter(MD.DateFormatter('%H'))
         ax.grid(True, 'major', color='0.7')
         ax.grid(True, 'minor', color='0.9')
-        ax.vlines(filter([datetime.now()]), graph_line_min, graph_line_max, color='0', linestyles='solid')
+        if not opts['--no-now-line']:
+            ax.vlines(filter([datetime.now()]), graph_line_min, graph_line_max, color='0', linestyles='solid')
         ax.vlines(filter(red), graph_line_min, graph_line_max, color='tab:red', linestyles='dotted')
         ax.vlines(filter(orange), graph_line_min, graph_line_max, color='tab:orange', linestyles='dotted')
         ax.vlines(filter(green), graph_line_min, graph_line_max, color='tab:green', linestyles='dotted')
