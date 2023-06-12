@@ -62,6 +62,10 @@ def main():
     when = None
     reports = {}
     reports[datetime.now()] = ' '
+    def get_medication(name):
+        med = medication.get(name)
+        if not med: raise abo.text.LineError(f'unknown medication: {name!r}', line=name)
+        return med
     try:
         for path in opts['<path>']:
             for line in abo.text.number_lines(open(path), name=path):
@@ -76,7 +80,7 @@ def main():
                         if med.half_life:
                             simulation[med.name] = Simulation(med)
                         continue
-                    if regime := Regime.extract_from_text(line, medication.get):
+                    if regime := Regime.extract_from_text(line, get_medication):
                         regime.medication.add_regime(datetime.min, regime)
                         continue
                     if re_comment.match(line):
@@ -111,19 +115,28 @@ def main():
                 if day is None: continue
                 # Skip over indent.
                 line = line.lstrip()
+                def get_when():
+                    if when is None: raise abo.text.LineError('time of day unknown', line=line)
+                    return when
                 # Parse single punctuation as reportable line.
                 if m := re_reportable.match(line):
                     line = line[m.end():].lstrip()
                     rep = m.group(0)
-                    if when is None:
-                        raise abo.text.LineError('time of day unknown', line=line)
                     reports[when] = rep
-                    (red if rep == '!' else green if rep == '+' else orange).append(when)
+                    (red if rep == '!' else green if rep == '+' else orange).append(get_when())
                 # Parse dose.
-                if dose := Dose.extract_from_text(line, when, medication.get):
+                if dose := Dose.extract_from_text(line, get_when, medication.get):
                     if sim := simulation.get(dose.medication.name):
                         sim.add_dose(dose)
                     continue
+                # Parse new regime.
+                if regime := Regime.extract_from_text(line, get_medication):
+                    regime.medication.add_regime(get_when(), regime)
+                    continue
+                if m := re_stop_regime.match(line):
+                    get_medication(m.group('name')).add_regime(get_when(), None)
+                    continue
+
     except abo.text.LineError as e:
         fatal(str(e))
 
@@ -187,6 +200,7 @@ re_medication = re.compile(re_start_of_line.pattern + 'MED\s+' + re_medication_n
 re_take_regime = re.compile(re_start_of_line.pattern +
                             'TAKE\s+' + re_medication_name.pattern +
                             r'\s+(?:' + re_dosage.pattern + r')\s+(?P<interval>BD|daily|every\s+' + abo.time.re_hours_minutes.pattern + ')')
+re_stop_regime = re.compile(re_start_of_line.pattern + 'STOP\s+' + re_medication_name.pattern)
 re_dose = re.compile(re_start_of_line.pattern + re_medication_name.pattern + r'\s+' + re_dosage.pattern)
 
 def extract(rexp, text):
@@ -242,7 +256,7 @@ class Medication(object):
 
     def add_regime(self, from_time, regime):
         assert isinstance(from_time, datetime)
-        assert isinstance(regime, Regime)
+        assert regime is None or isinstance(regime, Regime)
         self.regimes[from_time] = regime
 
     def get_regime(self, when):
@@ -262,7 +276,7 @@ class Regime(object):
         if not m: return None
         name = m.group('name')
         med = medication_factory(name)
-        if not med: raise abo.text.LineError(f'unknown medication: {name!r}', line=text)
+        assert isinstance(med, Medication)
         dosage = float(m.group('dosage'))
         interval = None
         i = m.group('interval')
@@ -282,6 +296,9 @@ class Regime(object):
         self.interval = interval
         self.tick_amount = self._compute_steady_state_peak()
 
+    def __repr__(self):
+        return f'Regime({self.medication.name!r}, dosage={self.dosage!r}, interval={self.interval!r})'
+
     def _compute_steady_state_peak(self):
         load = 0.
         if self.medication.half_life:
@@ -294,16 +311,14 @@ class Regime(object):
 class Dose(object):
 
     @classmethod
-    def extract_from_text(cls, text, when, medication_factory):
+    def extract_from_text(cls, text, when_factory, medication_factory):
         m, text = extract(re_dose, text)
         if not m: return None
         name = m.group('name')
         med = medication_factory(name)
         if not med: return None
-        if when is None:
-            raise abo.text.LineError('time of day unknown', line=text)
         dosage = float(m.group('dosage'))
-        return cls(med, when, dosage)
+        return cls(med, when_factory(), dosage)
 
     def __init__(self, medication, when, dosage):
         assert isinstance(medication, Medication)
