@@ -330,10 +330,9 @@ class Dose(object):
         # Absorption model is a simple window: zero during delay, then constant
         # absorption until full load is absorbed at peak interval, then zero.
         start = self.when + self.medication.delay
-        window = self.medication.peak - self.medication.delay
-        end = start + window
+        end = self.when + self.medication.peak
         if when + interval <= start or when >= end: return 0.
-        return self.dosage * (min(when + interval, end) - when) / window
+        return self.dosage * (min(when + interval, end) - when) / (end - start)
 
 class Simulation(object):
 
