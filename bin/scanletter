@@ -36,6 +36,7 @@ Options:
   -e,--edge N          blank N mm of margin (default $opt_edge)
   -j,--jpeg[=N]        generate JPEG PDF, quality N (default $opt_jpeg_quality)
   -T,--title TEXT      set title of PDF (default --output file name)
+  -S,--subject TEXT    set subject of PDF (default blank)
   -h,--help            print this message on standard output
 "
 }
@@ -55,6 +56,7 @@ opt_scan=true
 opt_rotate=0
 opt_mode=greyscale
 opt_title=
+opt_subject=
 while [ $# -ne 0 ]; do
     arg="$1"
     case "$arg" in
@@ -70,6 +72,7 @@ while [ $# -ne 0 ]; do
     -o|--output) shift; [ $# -ne 0 ] || fatal_usage "missing argument to $arg"; opt_output="$1";;
     --title=) opt_title="${arg#*=}";;
     -T|--title) shift; [ $# -ne 0 ] || fatal_usage "missing argument to $arg"; opt_title="$1";;
+    -S|--subject) shift; [ $# -ne 0 ] || fatal_usage "missing argument to $arg"; opt_subject="$1";;
     -C|--fullcolour) opt_mode=fullcolour;;
     -c|--quantcolour) opt_mode=quantcolour;;
     -m|--monochrome) opt_mode=monochrome;;
@@ -91,6 +94,7 @@ while [ $# -ne 0 ]; do
 done
 
 pdftitle="${opt_title:-${opt_output##*/}}"
+pdfsubject="$opt_subject"
 
 pdfpagesize=
 case $opt_pagesize in
@@ -209,11 +213,13 @@ case $opt_rotate in
 esac
 
 tiff_to_pdf() {
+    local -a opts
     if $opt_jpeg; then
-        run tiff2pdf ${pdfpagesize:+ -p "$pdfpagesize"} -t "$pdftitle" -F -j -q $opt_jpeg_quality "$@"
+        opts=(-j -q $opt_jpeg_quality)
     else
-        run tiff2pdf ${pdfpagesize:+ -p "$pdfpagesize"} -t "$pdftitle" -F -z "$@"
+        opts=(-z)
     fi
+    run tiff2pdf ${pdfpagesize:+ -p "$pdfpagesize"} -t "$pdftitle" -s "$pdfsubject" -F "${opts[@]}" "$@"
 }
 
 case $opt_mode in
