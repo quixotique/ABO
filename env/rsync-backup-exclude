@@ -1,0 +1,12 @@
+/tmp/
+/Vault/
+/camera1/
+/.ssh/
+/.armory/
+/.bitcoin/
+/.couchpotato/cache/
+/.purple/logs/
+/.cargo/
+/acacia/
+/MH/,*
+/MH/*/,*

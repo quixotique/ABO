@@ -14,6 +14,7 @@ __shellboost_include libsh/install.sh || exit $?
 parse_command_line "$@"
 
 runf cd "${HOME?}"
-link "$here/env/mh_profile"   .mh_profile
-link "$here/env/mhl.headers"  .mhl.headers
-link "$here/env/nmh"          etc/nmh
+link "$here/env/rsync-backup-exclude"  .rsync-backup-exclude
+link "$here/env/mh_profile"            .mh_profile
+link "$here/env/mhl.headers"           .mhl.headers
+link "$here/env/nmh"                   etc/nmh
