@@ -185,7 +185,8 @@ class Account(object):
             and self.label == other.label
             and self.parent == other.parent
             and self.atype == other.atype
-            and self.wild == other.wild)
+            and self.wild == other.wild
+            and self.tags == other.tags)
 
     def __ne__(self, other):
         if not isinstance(other, Account):
@@ -441,12 +442,40 @@ class Chart(object):
     ...     [rent] Rent
     ...     [prizes] Prizes
     ... =AL Cash assets [cash_assets]
-    ...   [bank] Bank account
-    ...   [loose_change] Loose change
+    ...   [bank] Bank account =cash
+    ...   [loose_change] Loose change =cash
+    ... Investments [inv] =PL
+    ...   Shares
+    ...     A [a]
+    ... #
+    ...     B [b]
     ... ''')
 
-    >>> c1.accounts() == c2.accounts()
-    True
+    >>> for a in c2.accounts(): print(repr(str(a)), repr(a.label), repr(a.atype), repr(tuple(sorted(a.tags))))
+    ':Cash assets' 'cash_assets' AccountType.AssetLiability ('AL',)
+    ':Cash assets:Bank account' 'bank' AccountType.AssetLiability ('AL', 'cash')
+    ':Cash assets:Loose change' 'loose_change' AccountType.AssetLiability ('AL', 'cash')
+    ':Expenses' 'exp' AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household' None AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household:Consumibles' None AccountType.ProfitLoss ('PL', 'cons')
+    ':Expenses:Household:Consumibles:Food' 'food' AccountType.ProfitLoss ('PL', 'cons')
+    ':Expenses:Household:Transport' None AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household:Transport:Car' None AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household:Transport:Car:Gas' 'petrol' AccountType.ProfitLoss ('PL', 'energy')
+    ':Expenses:Household:Transport:Car:rego, insurance, maintenance' 'car' AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household:Transport:Taxi journeys' 'taxi' AccountType.ProfitLoss ('PL',)
+    ':Expenses:Household:Utilities' None AccountType.ProfitLoss ('PL', 'UTIL')
+    ':Expenses:Household:Utilities:Electricity' 'elec' AccountType.ProfitLoss ('PL', 'UTIL', 'energy')
+    ':Expenses:Household:Utilities:Gas' 'gas' AccountType.ProfitLoss ('PL', 'UTIL', 'energy')
+    ':Expenses:Household:Utilities:Water usage' 'water' AccountType.ProfitLoss ('PL', 'UTIL', 'cons')
+    ':Income' 'inc' AccountType.ProfitLoss ('PL',)
+    ':Income:Prizes' 'prizes' AccountType.ProfitLoss ('PL',)
+    ':Income:Rent' 'rent' AccountType.ProfitLoss ('PL',)
+    ':Income:Salary' None AccountType.ProfitLoss ('PL',)
+    ':Investments' 'inv' AccountType.ProfitLoss ('PL',)
+    ':Investments:Shares' None AccountType.ProfitLoss ('PL',)
+    ':Investments:Shares:A' 'a' AccountType.ProfitLoss ('PL',)
+    ':Investments:Shares:B' 'b' AccountType.ProfitLoss ('PL',)
 
     >>> p1 = c2.parse_predicate('=AL')
     >>> for a in c2.accounts():

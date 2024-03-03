@@ -221,6 +221,8 @@ def undent_lines(lines):
     indent = []
     for line in lines:
         iline = line.lstrip()
+        if not line or line.startswith('#'):
+            continue
         sp = line[:-len(iline)]
         if not sp:
             indent = []
