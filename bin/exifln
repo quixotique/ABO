@@ -42,6 +42,8 @@ import time
 import re
 import logging
 import filecmp
+import itertools
+import copy
 from collections import defaultdict
 from functools import cache
 
@@ -60,13 +62,15 @@ def main():
     logger.setLevel(logging.INFO if opts['--verbose'] else logging.WARNING)
     dst_dir_template = os.path.normpath(opts['--dst-dir'] or '.')
     dst_filename_template = '{yyyy}-{mm}-{dd}-{s}.{ext}'
-    interpolate_time(dst_dir_template, (0, 0, 0, 0, 0, 0), allow_seq=False) # fail early on bad template
+    interpolate_time(dst_dir_template, (0, 0, 0, 0, 0, 0), strict=True) # fail early on bad template
     arena = Arena()
     for src_path in opts['SRC']:
         arena.add_source_path(src_path, opts['--recurse'])
     while arena.read_exif_metadata():
         arena.compute_families(dst_dir_template, dst_filename_template)
-    arena.print_families()
+    arena.compute_dst_paths()
+    arena.plan_links()
+    arena.print_links()
     sys.exit(0)
     # Figure out destination pathnames from all named files.
     destination = {}
@@ -78,7 +82,7 @@ def main():
         for time, path in paths:
             if path not in destination:
                 n += 1
-                dst_dir = interpolate_time(dst_dir_template, time)
+                dst_dir = interpolate_time(dst_dir_template, time, strict=True)
                 dst = os.path.normpath(('%s/%s-%0' + str(w) + 'u%s') % (dst_dir, stem, n, suffix))
                 name = os.path.basename(path)
                 if dst != name:
@@ -124,27 +128,31 @@ class Metadata(object):
         self.dst_dir = None
         self.dst_ext = None
         self.family_filename = None
+        self.sequence = None
         self.dst_path = None
         self.sequence = None
         self.sequence_ndigits = None
+
+    def is_linkable(self):
+        return (self.is_src or self.is_family) and self.dst_path is not None
 
 class Arena(object):
     def __init__(self):
         self.metadata_by_ino = defaultdict(lambda: Metadata())
         self.ino_by_path = {}
-        self.inos_by_family = defaultdict(lambda: [])
+        self.inos_by_family = defaultdict(lambda: set())
         self.no_metadata_by_ino = {}
 
     def add_source_path(self, src_path, opt_recurse=False):
-        for m in self._add_path(src_path, opt_recurse):
+        for m in self._add_path(src_path, opt_recurse, opt_print_skip=True):
             m.is_src = True
 
-    def _add_path(self, path, opt_recurse):
+    def _add_path(self, path, opt_recurse, opt_print_skip=False):
         if os.path.isdir(path):
             for dirent in os.scandir(path):
                 if dirent.is_file() or (opt_recurse and dirent.is_dir()):
-                    yield from self._add_path(dirent.path, opt_recurse)
-                else:
+                    yield from self._add_path(dirent.path, opt_recurse, opt_print_skip)
+                elif opt_print_skip:
                     print(f"Skip: {dirent.path}" + ('/' if dirent.is_dir() else ''))
         else:
             ext = normalised_extension_of(path)
@@ -165,35 +173,75 @@ class Arena(object):
         return m
 
     def read_exif_metadata(self):
-        # Precompute loop scope to avoid mutation while iterating.
-        query_inos = dict((ino, m) for ino, m in self.metadata_by_ino.items() if (m.is_src or m.is_family) and m.create_time is None)
-        if not query_inos: return False
-        for ino, m, create_time in zip(query_inos.keys(),
-                                       query_inos.values(),
-                                       exif_creation_time(m.paths[0] for m in query_inos.values())):
+        # Precompute loop domain to avoid mutation while iterating.
+        query_metadatas = [m for m in self.metadata_by_ino.values() if (m.is_src or m.is_family) and m.create_time is None]
+        if not query_metadatas: return False
+        for m, create_time in zip(query_metadatas, exif_creation_time(m.paths[0] for m in query_metadatas)):
             if create_time is not None:
                 assert m.create_time is None
                 m.create_time = create_time
             else:
-                self.no_metadata_by_ino[ino] = self.metadata_by_ino[ino]
-                del self.metadata_by_ino[ino]
+                self.no_metadata_by_ino[m.ino] = m
+                del self.metadata_by_ino[m.ino]
                 print(f"No EXIF metadata: {m.paths[0]}")
         return True
 
     def compute_families(self, dst_dir_template, dst_filename_template):
-        # Precompute loop scope to avoid mutation while iterating.
-        compute_metadatas = [m for ino, m in self.metadata_by_ino.items() if (m.is_src or m.is_family) and m.create_time and m.dst_dir is None]
+        # Precompute loop domain to avoid mutation while iterating.
+        compute_metadatas = [m for m in self.metadata_by_ino.values() if (m.is_src or m.is_family) and m.create_time and m.dst_dir is None]
         for m in compute_metadatas:
             assert m.dst_dir is None
             assert m.create_time
-            m.dst_dir = interpolate_time(dst_dir_template, m.create_time, allow_seq=False)
-            m.family_filename = interpolate_time(dst_filename_template, m.create_time, allow_seq=True)
+            m.dst_dir = interpolate_time(dst_dir_template, m.create_time, strict=True)
+            m.family_filename = interpolate_time(dst_filename_template, m.create_time, strict=False)
             family = os.path.join(m.dst_dir, m.family_filename)
-            self.inos_by_family[family].append(m.ino)
+            self.inos_by_family[family].add(m.ino)
             # Scan destination directories for existing family members.
             family_regex = regexify(family)
             for m in self._add_path(m.dst_dir, opt_recurse=False):
                 m.is_family = m.is_family or any(filter(family_regex.match, m.paths))
+
+    def compute_dst_paths(self):
+        for family, inos in self.inos_by_family.items():
+            metadatas = sorted(map(self.metadata_by_ino.get, inos), key=lambda m: m.create_time)
+            for m, seq in zip(metadatas, itertools.count(1)):
+                m.sequence = seq
+                filename = interpolate_extension(interpolate_sequence(m.family_filename, seq, len(metadatas)), m.dst_ext)
+                m.dst_path = os.path.join(m.dst_dir, filename)
+
+    def plan_links(self):
+        plan = []
+        ino_by_path = self.ino_by_path.copy()
+        metadata_by_ino = copy.deepcopy(self.metadata_by_ino)
+        todo = set(m for m in metadata_by_ino.values() if m.is_linkable())
+        while todo:
+            defer = set()
+            stalled = True
+            while todo:
+                m = todo.pop()
+                ino = ino_by_path.get(m.dst_path)
+                if ino is not None:
+                    dm = metadata_by_ino.get(ino)
+                    if dm is not None and dm.is_linkable():
+                        defer.add(m)
+                    else:
+                        # immovable
+                else:
+                    plan.append((m.paths[0], m.dst_path))
+                    del existing_paths[m.paths[0]]
+                    existing_paths[m.dst_path] = m
+                    stalled = False
+            if stalled:
+                pass
+            todo = defer
+
+    def print_links(self):
+        for m in sorted(self.metadata_by_ino.values(), key=lambda m: m.create_time):
+            if m.is_src and m.dst_path is not None:
+                print(f"{m.paths[0]} -> {m.dst_path}", end='')
+                if m.dst_path in self.ino_by_path:
+                    print(" -- would overwrite existing")
+                print('')
 
     def extract_exif_data(self):
         for prefix, inos in self.inos_by_dst_prefix.items():
@@ -245,14 +293,14 @@ def exif_creation_time(paths):
                         pass
             yield ctime
 
-def interpolate_time(template, time, allow_seq=True):
+def interpolate_time(template, time, strict=False):
     year, month, day, hour, minute, second = time
     def replace(m):
         code = m.group(1)
         if code == 'yyyy': return '%04u' % year
         if code == 'mm': return '%02u' % month
         if code == 'dd': return '%02u' % day
-        if code in ('s', 'ext') and allow_seq: return '{' + code + '}'
+        if code in ('s', 'ext') and not strict: return '{' + code + '}'
         fail("invalid substitution: " + m.group(0))
     return re.sub(r'{([^}]*)}', replace, template)
 
