@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+# vim: sts=4 sw=4 expandtab
+
+r'''Usage:
+    find-linked [--into=DIR...] [PATH...]
+    find-linked -h | --help
+
+Options:
+    -i --into=DIR   Find files under PATH that have hard links under DIR [default .]
+    -h --help       Show this message
+'''
+
+import sys
+import os.path
+from collections import defaultdict
+
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
+import docopt
+
+def main():
+    global myname
+    myname = os.path.basename(sys.argv[0])
+    opts = docopt.docopt(__doc__, sys.argv[1:], version=1.0)
+    into = index_linked_files(opts['--into'] or '.')
+    for base_path in sorted(opts['PATH']):
+        for dirpath, dirnames, filenames in os.walk(base_path):
+            for filename in sorted(filenames):
+                filepath = os.path.join(dirpath, filename)
+                st = os.stat(filepath)
+                if st.st_nlink > 1:
+                    assert st.st_ino != 0
+                    fid = (st.st_dev, st.st_ino)
+                    if fid in into:
+                        print(filepath)
+
+def index_linked_files(base_paths):
+    index = defaultdict(lambda: [])
+    for base_path in base_paths:
+        for dirpath, dirnames, filenames in os.walk(base_path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                st = os.stat(filepath)
+                if st.st_nlink > 1:
+                    assert st.st_ino != 0
+                    fid = (st.st_dev, st.st_ino)
+                    index[fid].append(filepath)
+    return index
+
+def fail(msg):
+    global myname
+    print('%s: %s' % (myname, msg), file=sys.stderr)
+    sys.exit(1)
+
+if __name__ == '__main__':
+    main()
