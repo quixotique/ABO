@@ -133,6 +133,7 @@ class Metadata(object):
         self.sequence = None
         self.sequence_ndigits = None
 
+    @property
     def is_linkable(self):
         return (self.is_src or self.is_family) and self.dst_path is not None
 
@@ -209,11 +210,53 @@ class Arena(object):
                 filename = interpolate_extension(interpolate_sequence(m.family_filename, seq, len(metadatas)), m.dst_ext)
                 m.dst_path = os.path.join(m.dst_dir, filename)
 
+    def move(self, src_path, dst_path):
+        pass
+
+    def plan_moves(self):
+        # Delete all non-source family files except those that are correct
+        # destination files.
+        for m in self.metadata_by_ino.values():
+            if m.dst_path is not None:
+                i = 1
+                while i < len(m.paths):
+                    if m_paths[i] == m.dst_path:
+                        i += 1
+                    else:
+                        self.delete(m.paths[i])
+                        del self.ino_by_path[m.paths[i]]
+                        del m.paths[i]
+                        stalled = False
+        # Move all family files with incorrect paths to their correct
+        # destination paths.
+        todo = set(m for m in self.metadata_by_ino.values() if m.is_family and m.dst_path is not None and m.dst_path not in m.paths)
+        defer = set()
+        stalled = True
+        while todo:
+            m = todo.pop()
+            assert len(m.paths) == 1
+            ino = self.ino_by_path.get(m.dst_path)
+            if ino is None:
+                self.move(m.paths[0], m.dst_path)
+                del self.ino_by_path[m.paths[0]]
+                m.paths[0] = m.dst_path
+                self.ino_by_path[m.dst_path] = m
+                stalled = False
+            else:
+                md = self.metadata_by_ino.get(ino)
+                if md is not None:
+                    defer.add(m)
+                else:
+                    # immovable
+            if stalled:
+                pass
+            todo = defer
+
     def plan_links(self):
         plan = []
         ino_by_path = self.ino_by_path.copy()
         metadata_by_ino = copy.deepcopy(self.metadata_by_ino)
-        todo = set(m for m in metadata_by_ino.values() if m.is_linkable())
+        todo = set(m for m in metadata_by_ino.values() if m.dst_path and m.is_family)
         while todo:
             defer = set()
             stalled = True
@@ -222,13 +265,13 @@ class Arena(object):
                 ino = ino_by_path.get(m.dst_path)
                 if ino is not None:
                     dm = metadata_by_ino.get(ino)
-                    if dm is not None and dm.is_linkable():
+                    if dm is not None and dm.is_linkable:
                         defer.add(m)
                     else:
                         # immovable
                 else:
-                    plan.append((m.paths[0], m.dst_path))
-                    del existing_paths[m.paths[0]]
+                    plan.append(lambda a: a.link(m.paths[0], m.dst_path))
+                    del ino_by_path[m.paths[0]]
                     existing_paths[m.dst_path] = m
                     stalled = False
             if stalled:
