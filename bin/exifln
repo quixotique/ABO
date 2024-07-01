@@ -66,8 +66,7 @@ def main():
     arena = Arena()
     for src_path in opts['SRC']:
         arena.add_source_path(src_path, opts['--recurse'])
-    while arena.read_exif_metadata():
-        arena.compute_families(dst_dir_template, dst_filename_template)
+    arena.populate(dst_dir_template, dst_filename_template)
     arena.compute_dst_paths()
     arena.plan_links()
     arena.print_links()
@@ -132,9 +131,9 @@ class Metadata(object):
         self.sequence = None
         self.sequence_ndigits = None
 
-        @property
-        def src_or_family_path(self):
-            return self.src_paths.get(0) or self.family_paths.get(0)
+    @property
+    def src_or_family_path(self):
+        return self.src_paths.get(0) or self.family_paths.get(0)
 
 class Arena(object):
     def __init__(self):
@@ -146,6 +145,11 @@ class Arena(object):
     def add_source_path(self, src_path, opt_recurse=False):
         for m, path in self._add_path(src_path, opt_recurse, opt_print_skip=True):
             m.src_paths.add(path)
+
+    def populate(self, dst_dir_template, dst_filename_template):
+        # Read file metadata in batches, to avoid invoking exiftool once per file.
+        while arena._read_exif_metadata():
+            arena._compute_families(dst_dir_template, dst_filename_template)
 
     def _add_path(self, path, opt_recurse, opt_print_skip=False):
         if os.path.isdir(path):
@@ -170,11 +174,11 @@ class Arena(object):
         self.ino_by_path[path] = m.ino
         return m
 
-    def read_exif_metadata(self):
+    def _read_exif_metadata(self):
         # Precompute loop domain to avoid mutation while iterating.
-        query_metadatas = [m for m in self.metadata_by_ino.values() if (m.src_paths or m.family_paths) and m.create_time is None]
+        query_metadatas = [m for m in self.metadata_by_ino.values() if m.src_or_family_path and m.create_time is None]
         if not query_metadatas: return False
-        for m, create_time in zip(query_metadatas, exif_creation_time(m.paths[0] for m in query_metadatas)):
+        for m, create_time in zip(query_metadatas, exif_creation_time(m.src_or_family_path for m in query_metadatas)):
             if create_time is not None:
                 assert m.create_time is None
                 m.create_time = create_time
@@ -184,8 +188,8 @@ class Arena(object):
                 print(f"No EXIF metadata: {m.paths[0]}")
         return True
 
-    def compute_families(self, dst_dir_template, dst_filename_template):
-        # Precompute loop domain to avoid mutation while iterating.
+    def _compute_families(self, dst_dir_template, dst_filename_template):
+        # Precompute loop elements to avoid mutation while iterating.
         compute_metadatas = [m for m in self.metadata_by_ino.values() if m.src_or_family_path and m.create_time and m.dst_dir is None]
         for m in compute_metadatas:
             assert m.dst_dir is None
@@ -209,46 +213,54 @@ class Arena(object):
                 m.dst_path = os.path.join(m.dst_dir, filename)
 
     def move(self, src_path, dst_path):
-        pass
+        m = self.ino_by_path[src_path]
+        assert dst_path not in self.ino_by_path
+        # TODO move
+        del self.ino_by_path[src_path]
+        self.ino_by_path[dst_path] = m
+
+    def delete(self, path):
+        assert path in self.ino_by_path
+        # TODO unlink
+        del self.ino_by_path[path]
 
     def plan_moves(self):
-        # Delete all family files leaving only source files.  Keep one family
-        # file if there are no source files.  Keep any family files that are
-        # correct destination files.
+        # Delete all family files leaving only source files.  Keep one family file if there are no
+        # source files.  Do not delete a family file if it is the destination file.
         for m in self.metadata_by_ino.values():
             if m.dst_path is not None:
-                i = 0 if m.src_paths else 1
-                while i < len(m.family_paths):
-                    if m.family_paths[i] == m.dst_path:
-                        i += 1
-                    else:
-                        self.delete(m.family_paths[i])
-                        del self.ino_by_path[m.family_paths[i]]
-                        del m.family_paths[i]
-        # Move all remaining family files with incorrect paths to their correct
-        # destination paths.
-        todo = set(m for m in self.metadata_by_ino.values() if m.is_family and m.dst_path is not None and m.dst_path not in m.paths)
-        defer = set()
-        stalled = True
-        while todo:
-            m = todo.pop()
-            assert len(m.paths) == 1
-            ino = self.ino_by_path.get(m.dst_path)
-            if ino is None:
-                self.move(m.paths[0], m.dst_path)
-                del self.ino_by_path[m.paths[0]]
-                m.paths[0] = m.dst_path
-                self.ino_by_path[m.dst_path] = m
-                stalled = False
-            else:
-                md = self.metadata_by_ino.get(ino)
-                if md is not None:
-                    defer.add(m)
+                dst_is_family = m.dst_path in m.family_paths
+                keep = 0 if m.src_paths or dst_is_family else 1
+                while len(m.family_paths) > keep:
+                    path = m.family_paths.pop()
+                    if path != m.dst_path:
+                        self.delete(path)
+                if dst_is_family:
+                    assert not m.family_paths
+                    m.family_paths.add(m.dst_path)
+        # Move all remaining family files with incorrect paths to their correct destination paths.
+        to_move = set(m for m in self.metadata_by_ino.values()
+                         if m.dst_path is not None and m.family_paths and m.dst_path not in m.family_paths)
+        while to_move:
+            defer = set()
+            stalled = True
+            while to_move:
+                m = to_move.pop()
+                assert len(m.family_paths) == 1
+                assert m.dst_path not in m.family_paths
+                ino = self.ino_by_path.get(m.dst_path)
+                if ino is None:
+                    self.move(m.family_paths.pop(), m.dst_path)
+                    stalled = False
                 else:
-                    # immovable
+                    md = self.metadata_by_ino.get(ino)
+                    if md is not None:
+                        defer.add(m)
+                    else:
+                        # immovable
             if stalled:
                 pass
-            todo = defer
+            to_move = defer
 
     def plan_links(self):
         plan = []
