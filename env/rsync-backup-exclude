@@ -8,5 +8,6 @@
 /.purple/logs/
 /.cargo/
 /acacia/
+/Shows/
 /MH/,*
 /MH/*/,*
