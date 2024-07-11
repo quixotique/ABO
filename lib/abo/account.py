@@ -732,7 +732,7 @@ class Chart(object):
         +   r'(?::(?P<qual>' + Account.rxpat_tag + r'(?:,' + Account.rxpat_tag + r')*))?'
         +   r'\s*(?:"(?P<name1>[^"]+)"|“(?P<name2>[^”]+)”)$')
     _regex_label = re.compile(r'\[(' + Account._rxpat_label + r')]')
-    _regex_tag = re.compile(r'\s*=(' + Account.rxpat_tag + ')\s*')
+    _regex_tag = re.compile(r'\s*=(' + Account.rxpat_tag + r')\s*')
 
     @classmethod
     def parse_tags(cls, text):
