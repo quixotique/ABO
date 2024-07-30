@@ -225,19 +225,21 @@ class Arena(object):
         del self.ino_by_path[path]
 
     def plan_moves(self):
-        # Delete all family files leaving only source files.  Keep one family file if there are no
+        # Delete all family files, leaving only source files.  Keep one family file if there are no
         # source files.  Do not delete a family file if it is the destination file.
         for m in self.metadata_by_ino.values():
             if m.dst_path is not None:
-                dst_is_family = m.dst_path in m.family_paths
-                keep = 0 if m.src_paths or dst_is_family else 1
-                while len(m.family_paths) > keep:
-                    path = m.family_paths.pop()
-                    if path != m.dst_path:
-                        self.delete(path)
-                if dst_is_family:
-                    assert not m.family_paths
-                    m.family_paths.add(m.dst_path)
+                if m.dst_path in m.family_paths:
+                    m.family_paths.remove(m.dst_path)
+                    keep = m.dst_path
+                elif not m.src_paths:
+                    keep = m.family_paths.pop()
+                else:
+                    keep = None
+                while m.family_paths:
+                    self.delete(m.family_paths.pop())
+                if keep:
+                    m.family_paths.add(keep)
         # Move all remaining family files with incorrect paths to their correct destination paths.
         to_move = set(m for m in self.metadata_by_ino.values()
                          if m.dst_path is not None and m.family_paths and m.dst_path not in m.family_paths)
@@ -246,6 +248,7 @@ class Arena(object):
             stalled = True
             while to_move:
                 m = to_move.pop()
+                assert m.dst_path is not None
                 assert len(m.family_paths) == 1
                 assert m.dst_path not in m.family_paths
                 ino = self.ino_by_path.get(m.dst_path)
@@ -259,6 +262,7 @@ class Arena(object):
                     else:
                         # immovable
             if stalled:
+                # TODO Break the stall by doing a file swap
                 pass
             to_move = defer
 
