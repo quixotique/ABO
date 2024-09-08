@@ -7,27 +7,26 @@ NL='
 '
 opt_force=false
 
-ensure_in_path pgrep mhpath inc sed save
+ensure_in_path pgrep sed inc rm truncate save
 
 ! $opt_force && pgrep thunderbird >/dev/null && fatal "thunderbird is running"
 profiles_ini_path="$HOME/.thunderbird/profiles.ini"
 profile_dir="$(sed -ne '/^Path=/s///p' "$profiles_ini_path" 2>/dev/null)"
 [[ -n $profile_dir ]] || fatal "no Path= in $profiles_ini_path"
 profile_path="$HOME/.thunderbird/$profile_dir"
-[[ -d $profile_path ]] || fatal "cannot determine profile directory"
+[[ -d $profile_path ]] || fatal "not a profile directory: $profile_path"
 mbox_path="$profile_path/Mail/Local Folders/Archives"
 [[ -f $mbox_path ]] || fatal "not a file: $mbox_path"
 
 if [[ -s $mbox_path ]]; then
-    run inc -file "$mbox_path" -truncate +refile
-    [[ -s $mbox_path ]] && fatal "not truncated: $mbox_path"
-    mh_folder_path="$(mhpath +refile)"
-    run cd "$mh_folder_path" >/dev/null
-    oIFS="$IFS"
-    IFS="$NL"
-    mh_message_paths=($(mhpath +refile all))
-    IFS="$oIFS"
-    run sed -i -e 's/$//' "${mh_message_paths[@]#$mh_folder_path/}"
+    tmp_path="${TMPDIR:-/tmp}/inctb-$$.mbox"
+    [[ -e $tmp_path ]] && fatal "file already exists: $tmp_path"
+    trap 's=$?; [[ -e $tmp_path ]] && run rm -f "$tmp_path"; exit $s' 0 1 2 15
+    run sed -e 's/\r$//' "$mbox_path" >"$tmp_path"
+    run inc -file "$tmp_path" -truncate +refile
+    [[ -s $tmp_path ]] && fatal "not truncated: $tmp_path"
+    run rm -r "$tmp_path"
+    run truncate --size=0 "$mbox_path"
 fi
 
 [[ -e $mbox_path.msf ]] && run rm -f "$mbox_path.msf"
