@@ -18,9 +18,9 @@ target=
 
 ensure_in_path pdftk
 
-while [ $# -ne 0 ]; do
+while [[ $# -ne 0 ]]; do
    opt="$1"
-   case "$opt" in
+   case $opt in
    -h|--help) usage; exit 0;;
    -n|--dry-run) opt_dry_run=true;;
    -*) fatal_usage "unrecognised option: $1";;
@@ -29,7 +29,7 @@ while [ $# -ne 0 ]; do
    shift
 done
 
-[[ $# -gt 0 ]] || fatal_usage "missing argument: target PDF file"
+[[ $# -ge 1 ]] || fatal_usage "missing argument: target PDF file"
 
 target="${1?}"
 shift
