@@ -4,3 +4,6 @@
 [submodule "lib/mako"]
 	path = lib/mako
 	url = https://bitbucket.org/zzzeek/mako.git
+[submodule "lib/pyexiftool"]
+	path = lib/pyexiftool
+	url = https://github.com/sylikc/pyexiftool.git

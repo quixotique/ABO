@@ -1,0 +1,460 @@
+#!/usr/bin/env python3
+# vim: sts=4 sw=4 expandtab
+
+r'''Usage:
+    exifmv [-rtvD] [--dst-dir=DST] [--recurse] [--link] [--dry-run] [--quiet] [--debug] SRC...
+    exifmv -h | --help
+
+For every source file or directory SRC (and subdirectories thereof if recursing
+into directories), extracts EXIF creation-time metadata, and if successful,
+moves the source file to the destination file DST/{yyyy}-{mm}-{dd}-{s}.{ext}
+
+The destination file template expands as follows:
+    {yyyy} EXIF year, eg, 2024
+    {mm}   EXIF month, 01, 02, ..., 12
+    {dd}   EXIF day of month: 01, 02, ..., 31
+    {s}    automatically generated sequence number starting at 1 that keeps
+           the destination files in timestamp order, zero padded to the
+           maximum value; eg: 001, 002, ..., 102
+    {ext}  source file's normalised extension: jpg, mov
+
+Deletes duplicate files from both SRC and DST.
+
+Renames existing files in destination directories to keep all the sequence
+numbers in order and the same number of digits.
+
+Any or all SRC files/directories may overlap with DST.  Deletions, links and
+renames are performed in an order that avoids clobbering any existing files,
+making use of temporary files if necessary to avoid loops.
+
+Options:
+    -d --dst-dir=DST    Template (see below) for directory into which files are
+                        moved/linked [default .]
+    -r --recurse        Recurse into subdirectories of SRC
+    -l --link           Hard-link source files to destination files, instead of
+                        moving
+    -n --dry-run        Print commands but do not execute
+    -q --quiet          Do not print commands before executing
+    -D --debug          Print debug trace
+    -h --help           Show this message
+'''
+
+import copy
+import filecmp
+import hashlib
+import itertools
+import logging
+import os
+import os.path
+import re
+import shlex
+import subprocess
+import sys
+import time
+from collections import defaultdict
+from functools import cache
+
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
+import docopt
+
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'pyexiftool'))
+import exiftool
+
+def main():
+    global myname, logger, exiftool_logger
+    myname = os.path.basename(sys.argv[0])
+    logging.basicConfig(stream=sys.stderr)
+    logger = logging.getLogger()
+    exiftool_logger = logging.getLogger('exiftool')
+    opts = docopt.docopt(__doc__, sys.argv[1:], version=2.0)
+    logger.setLevel(logging.DEBUG if opts['--debug'] else logging.WARNING)
+    exiftool_logger.setLevel(logging.WARNING)
+    dst_dir_template = os.path.normpath(opts['--dst-dir'] or '.')
+    dst_filename_template = '{yyyy}-{mm}-{dd}-{s}.{ext}'
+    interpolate_time(dst_dir_template, (0, 0, 0, 0, 0, 0), strict=True) # fail early on bad template
+    opt_quiet = opts['--quiet']
+    opt_link = opts['--link']
+    arena = Arena()
+    for src_path in opts['SRC']:
+        arena.add_source_path(src_path, opts['--recurse'])
+    arena.populate(dst_dir_template, dst_filename_template, quiet=opt_quiet)
+    arena.deduplicate(link=opt_link, quiet=opt_quiet)
+    arena.compute_dst_paths()
+    arena.plan_moves(link=opt_link)
+    arena.execute_plan(quiet=opt_quiet, dry_run=opts['--dry-run'])
+    sys.exit(0)
+
+class Metadata(object):
+    def __init__(self):
+        self.ino = None
+        self.src_paths = set()
+        self.family_paths = set()
+        self.create_time = None
+        self.dst_dir = None
+        self.dst_ext = None
+        self.family_filename_template = None
+        self.family_path_template = None
+        self.sequence = None
+        self.dst_path = None
+        self.sequence = None
+        self.sequence_ndigits = None
+
+    @property
+    def src_and_family_paths(self):
+        return itertools.chain(self.src_paths, self.family_paths)
+
+    @property
+    def src_or_family_path(self):
+        return next(self.src_and_family_paths, None)
+
+    def remove_from_src_and_family_paths(self, path):
+        assert path in self.src_and_family_paths, f"{path=}"
+        self.src_paths.discard(path)
+        self.family_paths.discard(path)
+
+class Step(object):
+    def __init__(self, cmd, why=''):
+        self.cmd = cmd
+        self.why = why
+
+    def __str__(self):
+        return ' '.join(map(shlex.quote, self.cmd)) + (' # ' + self.why if self.why else '')
+
+class Arena(object):
+    def __init__(self):
+        self.metadata_by_ino = defaultdict(lambda: Metadata())
+        self.ino_by_path = {}
+        self.inos_by_family = defaultdict(lambda: set())
+        self.no_metadata_by_ino = {}
+        self.existing_dst_dir_paths = set()
+        self.plan = []
+
+    def add_source_path(self, src_path, opt_recurse=False):
+        for m, path in self._add_path(src_path, opt_recurse, opt_print_skip=True):
+            m.src_paths.add(path)
+
+    def populate(self, dst_dir_template, dst_filename_template, quiet=False):
+        # Read file metadata in batches, to avoid invoking exiftool once per file.
+        while self._read_exif_metadata(quiet):
+            # Precompute loop elements to avoid mutation while iterating.
+            metadatas = [m for m in self.metadata_by_ino.values() if m.src_or_family_path and m.create_time and m.dst_dir is None]
+            for m in metadatas:
+                assert m.dst_dir is None
+                assert m.create_time
+                m.dst_dir = interpolate_time(dst_dir_template, m.create_time, strict=True)
+                m.family_filename_template = interpolate_time(dst_filename_template, m.create_time, strict=False)
+                m.family_path_template = os.path.join(m.dst_dir, m.family_filename_template)
+                logger.debug(f'family {m.src_or_family_path} = {m.family_path_template}')
+                self.inos_by_family[m.family_path_template].add(m.ino)
+                # Scan destination directories for existing family members.
+                family_path_regex = regexify(m.family_path_template)
+                for m, path in self._add_path(m.dst_dir, opt_recurse=False):
+                    if family_path_regex.fullmatch(path):
+                        m.src_paths.discard(path)
+                        m.family_paths.add(path)
+
+    def _add_path(self, path, opt_recurse, opt_print_skip=False):
+        if os.path.isdir(path):
+            for dirent in os.scandir(path):
+                if dirent.is_file() or (opt_recurse and dirent.is_dir()):
+                    yield from self._add_path(dirent.path, opt_recurse, opt_print_skip)
+                elif opt_print_skip:
+                    print(f"Skip: {dirent.path}" + ('/' if dirent.is_dir() else ''))
+        else:
+            ext = normalised_extension_of(path)
+            if ext is None:
+                if opt_print_skip: print(f"Skip: {path}")
+            elif path not in self.ino_by_path:
+                logger.info(path)
+                m = self._add_file_metadata(path, os.stat(path))
+                m.dst_ext = ext
+                yield m, path
+
+    def _add_file_metadata(self, path, st):
+        assert path not in self.ino_by_path
+        m = self.metadata_by_ino[st.st_ino]
+        m.ino = st.st_ino
+        self.ino_by_path[path] = m.ino
+        return m
+
+    def _read_exif_metadata(self, quiet=False):
+        # Precompute loop domain to avoid mutation while iterating.
+        metadatas = [m for m in self.metadata_by_ino.values() if m.src_or_family_path and m.create_time is None]
+        if not metadatas: return False
+        if not quiet:
+            print('exiftool ' + pluralise(metadatas, "file"))
+        for m, create_time in zip(metadatas, exif_creation_times(m.src_or_family_path for m in metadatas)):
+            if create_time is not None:
+                assert m.create_time is None
+                m.create_time = create_time
+            else:
+                self.no_metadata_by_ino[m.ino] = m
+                del self.metadata_by_ino[m.ino]
+                print(f"No EXIF metadata: {m.src_or_family_path}")
+        return True
+
+    def deduplicate(self, link=False, quiet=False):
+        # Only consider potentially identical files, ie, that share a create-time with another file.
+        inos_by_create_time = defaultdict(lambda: set())
+        for m in self.metadata_by_ino.values():
+            inos_by_create_time[m.create_time].add(m.ino)
+        inos = list(itertools.chain(*(inos for inos in inos_by_create_time.values() if len(inos) > 1)))
+        if not quiet:
+            print('md5sum ' + pluralise(inos, "file"))
+        inos_by_hash = defaultdict(lambda: set())
+        for ino in inos:
+            # Use MD5 because it is fast and any collisions will get sorted out by a file compare
+            # below.
+            with open(self.metadata_by_ino[ino].src_or_family_path, "rb") as f:
+                inos_by_hash[hashlib.file_digest(f, "md5").digest()].add(ino)
+        for inos in inos_by_hash.values():
+            m = self.metadata_by_ino[inos.pop()]
+            bins = [[m.ino]]
+            while inos:
+                md = self.metadata_by_ino[inos.pop()]
+                for bin in bins:
+                    if filecmp.cmp(m.src_or_family_path, md.src_or_family_path, False):
+                        bin.append(md.ino)
+                        break
+                else:
+                    bins.append([md.ino])
+            for bin in bins:
+                # When choosing which duplicate files to delete, prefer to keep the file that has an
+                # existing family file.
+                bin.sort(key=lambda ino: len(self.metadata_by_ino[ino].family_paths))
+                m = self.metadata_by_ino[bin.pop()]
+                # Delete duplicate source and family files.
+                while bin:
+                    md = self.metadata_by_ino[bin.pop(0)]
+                    for path in md.src_and_family_paths:
+                        self.delete(path, f'duplicate of {m.src_or_family_path}')
+                    md.src_paths.clear()
+                    md.family_paths.clear()
+                    self.inos_by_family[md.family_path_template].discard(md.ino)
+
+    def compute_dst_paths(self):
+        dst_paths = set()
+        for family, inos in sorted(self.inos_by_family.items()):
+            logger.debug(f'family {family}')
+            metadatas = sorted(map(self.metadata_by_ino.get, inos), key=lambda m: m.create_time)
+            for m, seq in zip(metadatas, itertools.count(1)):
+                m.sequence = seq
+                filename = interpolate_extension(interpolate_sequence(m.family_filename_template, seq, len(metadatas)), m.dst_ext)
+                m.dst_path = os.path.join(m.dst_dir, filename)
+                logger.debug(f'   {m.src_or_family_path} -> {m.dst_path}')
+                assert m.dst_path not in dst_paths, f"duplicate destination path: {m.dst_path}"
+                dst_paths.add(m.dst_path)
+
+    def make_temp_path(self, orig_path):
+        for seq in itertools.count(1):
+            tmp_path = f'{orig_path}.tmp{seq}'
+            if tmp_path not in self.ino_by_path: return tmp_path
+
+    def ensure_directory(self, dst_path):
+        dir_path = os.path.dirname(dst_path)
+        if dir_path in self.existing_dst_dir_paths:
+            return
+        if os.path.isdir(dir_path):
+            pass
+        elif os.path.exists(dir_path):
+            fail('cannot create directory: ' + dir_path)
+        else:
+            self.plan.append(Step(cmd=('mkdir', '-p', dir_path)))
+        self.existing_dst_dir_paths.add(dir_path)
+
+    def link(self, src_path, dst_path):
+        m = self.ino_by_path[src_path]
+        assert dst_path not in self.ino_by_path
+        self.ensure_directory(dst_path)
+        self.plan.append(Step(cmd=('ln', src_path, dst_path)))
+        self.ino_by_path[dst_path] = m
+
+    def move(self, src_path, dst_path):
+        m = self.ino_by_path[src_path]
+        assert dst_path not in self.ino_by_path
+        self.ensure_directory(dst_path)
+        self.plan.append(Step(cmd=('mv', src_path, dst_path)))
+        del self.ino_by_path[src_path]
+        self.ino_by_path[dst_path] = m
+
+    def delete(self, path, why=''):
+        assert path in self.ino_by_path
+        self.plan.append(Step(cmd=('rm', path), why=why))
+        del self.ino_by_path[path]
+
+    def plan_moves(self, link=False):
+        # Delete existing family files, leaving only source files.  Keep one family file if there
+        # are no source files.  Do not delete a family file if it is the destination file.
+        for m in self.metadata_by_ino.values():
+            if m.dst_path is not None:
+                if m.dst_path in m.family_paths:
+                    m.family_paths.remove(m.dst_path)
+                    keep = m.dst_path
+                else:
+                    keep = None if m.src_paths or not m.family_paths else m.family_paths.pop()
+                while m.family_paths:
+                    self.delete(m.family_paths.pop(), f'already at {m.dst_path}')
+                if keep:
+                    m.family_paths.add(keep)
+        # Move or link files to their correct destination paths.
+        to_do = list(m for m in self.metadata_by_ino.values() if m.dst_path is not None)
+        to_do.sort(key=lambda m: m.dst_path)
+        immovable = list()
+        while to_do:
+            defer = list()
+            blockers = list()
+            progressed = False
+            while to_do:
+                m = to_do.pop(0)
+                assert m.dst_path is not None
+                assert next(m.src_and_family_paths, None) is not None
+                done = False
+                if m.dst_path in m.src_and_family_paths:
+                    if not link:
+                        m.remove_from_src_and_family_paths(m.dst_path)
+                    done = True
+                else:
+                    dst_ino = self.ino_by_path.get(m.dst_path)
+                    if dst_ino is None:
+                        src_path = m.src_or_family_path
+                        if link:
+                            self.link(src_path, m.dst_path)
+                        else:
+                            self.move(src_path, m.dst_path)
+                            m.remove_from_src_and_family_paths(src_path)
+                        done = True
+                    else:
+                        dst_m = self.metadata_by_ino.get(dst_ino)
+                        if dst_m is not None:
+                            defer.append(m)
+                            blockers.append((m.dst_path, dst_m))
+                        else:
+                            immovable.append(m)
+                if done:
+                    if not link:
+                        for path in list(m.src_and_family_paths):
+                            self.delete(path, f'moved to {m.dst_path}')
+                            m.remove_from_src_and_family_paths(src_path)
+                    progressed = True
+            if not progressed:
+                if not blockers: break
+                # Break the loop by moving a blocking file to a temporary path.
+                dst_path, m = blockers[0]
+                tmp_path = self.make_temp_path(dst_path)
+                self.move(dst_path, tmp_path)
+                m.remove_from_src_and_family_paths(dst_path)
+                m.src_paths.add(tmp_path)
+            to_do = defer
+        if to_do:
+            assert immovable
+            assert immovable[0].dst_path is not None
+            fail("cannot overwrite: " + immovable[0].dst_path)
+
+    def execute_plan(self, quiet=False, dry_run=False):
+        for step in self.plan:
+            if not quiet:
+                print(step)
+            if not dry_run:
+                subprocess.run(step.cmd, check=True)
+
+    def extract_exif_data(self):
+        for prefix, inos in self.inos_by_dst_prefix.items():
+            metadatas = [m.metadata_by_ino[ino] for ino in inos]
+            metadatas.sort(key=lambda ino: self.metadata_by_ino[ino].create_time)
+            ndigits = len(f'{len(inos) + 1}')
+            for sequence, m in enumerate(metadatas, start=1):
+                m.sequence = sequence
+                m.sequence_ndigits = ndigits
+
+def normalised_extension_of(path):
+    i = path.rfind('.')
+    root, ext = path, ''
+    if i != -1 and i < len(path) - 1:
+        root, ext = path[:i], path[i+1:]
+    ext = ext.lower()
+    if ext in ('jpg', 'jpeg', 'pjpg', 'pjpeg'): return 'jpg'
+    if ext in ('png',): return 'png'
+    if ext in ('mov',): return 'mov'
+    if ext in ('mp4',): return 'mp4'
+    return None
+
+@cache
+def scandir(path):
+    return os.scandir(path)
+
+def exif_creation_times(paths):
+    global exiftool_logger
+    paths = list(paths)
+    logger.debug(f'invoke exiftool on {len(paths)} paths')
+    with exiftool.ExifToolHelper(check_execute=False, logger=exiftool_logger) as exif:
+        for metadata in exif.get_metadata(paths):
+            ctime = None
+            #for k, v in metadata.items():
+            #    print(f"{k}={v}")
+            for tag in ('EXIF:DateTimeOriginal',
+                        'EXIF:CreateDate',
+                        'EXIF:DateTimeDigitized',
+                        'Image:DateTime',
+                        'QuickTime:CreationDate',
+                        'QuickTime:CreateDate',
+                        'QuickTime:MediaCreateDate',
+                        ):
+                if tag in metadata:
+                    value = str(metadata[tag])
+                    value = re.sub(r': (\d)', r':0\1', value)
+                    try:
+                        t = time.strptime(value, '%Y:%m:%d %H:%M:%S')
+                        ctime = (t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec)
+                        break
+                    except ValueError:
+                        pass
+            yield ctime
+
+def interpolate_time(template, time, strict=False):
+    year, month, day, hour, minute, second = time
+    def replace(m):
+        code = m.group(1)
+        if code == 'yyyy': return '%04u' % year
+        if code == 'mm': return '%02u' % month
+        if code == 'dd': return '%02u' % day
+        if code in ('s', 'ext') and not strict: return '{' + code + '}'
+        fail("invalid substitution: " + m.group(0))
+    return re.sub(r'{([^}]*)}', replace, template)
+
+def interpolate_sequence(template, seq, max_seq=1):
+    w = len('%u' % max_seq)
+    def replace(m):
+        code = m.group(1)
+        if code == 'ext': return '{ext}'
+        if code == 's': return f'%0{w}u' % seq
+        fail("invalid substitution: " + m.group(0))
+    return re.sub(r'{([^}]*)}', replace, template)
+
+def interpolate_extension(template, ext):
+    def replace(m):
+        code = m.group(1)
+        if code == 'ext': return ext
+        fail("invalid substitution: " + m.group(0))
+    return re.sub(r'{([^}]*)}', replace, template)
+
+def regexify(template):
+    def replace(m):
+        frag = m.group(0)
+        if frag == '{yyyy}': return r'\d{4}'
+        if frag == '{mm}': return r'\d{2}'
+        if frag == '{dd}': return r'\d{2}'
+        if frag == '{s}': return r'\d+'
+        if frag == '{ext}': return r'[A-Za-z0-9]+'
+        return re.escape(frag)
+    return re.compile(re.sub(r'{[^}]*}|[^{]*', replace, template))
+
+def pluralise(seq, what):
+    return f'{len(seq)} {what}' + ("" if len(seq) == 1 else "s")
+
+def fail(msg):
+    global myname
+    print('%s: %s' % (myname, msg), file=sys.stderr)
+    sys.exit(1)
+
+if __name__ == '__main__':
+    main()
