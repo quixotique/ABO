@@ -196,11 +196,11 @@ re_non_punctuation = re.compile(r'[^\s,;:]+')
 re_start_of_line = re.compile(r'^\s*-?\s*')
 re_medication_name = re.compile(r'(?P<name>[A-Z]\S*)')
 re_dosage = re.compile(r'(?P<dosage>\d*(?:\.\d+)?|\d+)\s*mg\b')
-re_medication = re.compile(re_start_of_line.pattern + 'MED\s+' + re_medication_name.pattern)
+re_medication = re.compile(re_start_of_line.pattern + r'MED\s+' + re_medication_name.pattern)
 re_take_regime = re.compile(re_start_of_line.pattern +
-                            'TAKE\s+' + re_medication_name.pattern +
+                            r'TAKE\s+' + re_medication_name.pattern +
                             r'\s+(?:' + re_dosage.pattern + r')\s+(?P<interval>BD|daily|every\s+' + abo.time.re_hours_minutes.pattern + ')')
-re_stop_regime = re.compile(re_start_of_line.pattern + 'STOP\s+' + re_medication_name.pattern)
+re_stop_regime = re.compile(re_start_of_line.pattern + r'STOP\s+' + re_medication_name.pattern)
 re_dose = re.compile(re_start_of_line.pattern + re_medication_name.pattern + r'\s+' + re_dosage.pattern)
 
 def extract(rexp, text):

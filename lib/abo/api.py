@@ -251,7 +251,7 @@ class API_Invoice(API_Movement):
     _re_ref = re.compile(r'\s*\binv:([A-Za-z0-9.-]+)')
 
     @staticmethod
-    def ref_sort_key(text, _re_split = re.compile('(\d+)')):
+    def ref_sort_key(text, _re_split = re.compile(r'(\d+)')):
         return tuple(int(part) if part.isdigit() else part.lower() for part in re.split(_re_split, text))
 
     @classmethod

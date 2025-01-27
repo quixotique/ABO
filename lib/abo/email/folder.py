@@ -67,7 +67,7 @@ class Filer(object):
 
     @staticmethod
     def pattern_to_regex(pattern):
-        regex = ''.join('@(?:.*\.)?' if s in ('@', '@*.') else '(?:' if s == '{' else ')' if s == '}' else '|' if s == ',' else fnmatch.translate(s).replace('\Z', '') if s else '' for s in re.split(r'(@\*\.|[@{,}])', pattern))
+        regex = ''.join(r'@(?:.*\.)?' if s in ('@', '@*.') else '(?:' if s == '{' else ')' if s == '}' else '|' if s == ',' else fnmatch.translate(s).replace(r'\Z', '') if s else '' for s in re.split(r'(@\*\.|[@{,}])', pattern))
         #print(regex, file=sys.stderr)
         try:
             return re.compile(regex, re.IGNORECASE)
