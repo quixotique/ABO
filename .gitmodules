@@ -1,9 +1,9 @@
-[submodule "lib/docopt"]
-	path = lib/docopt
-	url = git@github.com:docopt/docopt.git
 [submodule "lib/mako"]
 	path = lib/mako
 	url = https://bitbucket.org/zzzeek/mako.git
 [submodule "lib/pyexiftool"]
 	path = lib/pyexiftool
 	url = https://github.com/sylikc/pyexiftool.git
+[submodule "lib/docopt-ng"]
+	path = lib/docopt-ng
+	url = git@github.com:jazzband/docopt-ng.git

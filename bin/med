@@ -40,7 +40,7 @@ graph_line_max = 200.
 
 def main():
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt-ng'))
     import docopt
     opts = docopt.docopt(__doc__, sys.argv[1:], version='1')
     if not opts['--debug']:

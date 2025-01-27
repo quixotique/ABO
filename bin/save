@@ -23,7 +23,7 @@ import subprocess
 import email.utils
 
 lib_path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib')
-sys.path += [lib_path, os.path.join(lib_path, 'docopt')]
+sys.path += [lib_path, os.path.join(lib_path, 'docopt-ng')]
 
 import abo.email.folder
 import docopt

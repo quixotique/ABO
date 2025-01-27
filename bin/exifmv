@@ -54,7 +54,7 @@ import time
 from collections import defaultdict
 from functools import cache
 
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt'))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'docopt-ng'))
 import docopt
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '..', 'lib', 'pyexiftool'))
