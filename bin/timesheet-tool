@@ -90,7 +90,7 @@ def process(path):
             if day is not None:
                 day.payable = day.logged.slice(exclude_labels=not_payable_labels)
                 day.reportable = day.logged.slice(exclude_labels=no_report_labels)
-                if daily_pay and day.paid is None: day.paid = daily_pay.minutes
+                if daily_pay and day.paid_minutes is None: day.paid_minutes = daily_pay.minutes
                 result.add_day(day)
                 continue
             raise ParseError('malformed line', line=cursor.current())
@@ -103,14 +103,15 @@ def format_duration_or_none(minutes):
     return Duration.format(minutes) if minutes is not None else '-'
 
 def print_calendar_report(result):
-    paidkeys = ('Paid',) if result.paid is not None else ()
+    paidkeys = ('Paid',) if result.paid_minutes is not None else ()
     colfmt = '%10.10s'
     colrule = '-' * 10
+    colblank = ' ' * 10
     fmt = '%-16.16s ' + (' ' + colfmt) * (4 + len(result.reported) + len(paidkeys)) + ' %-25s'
-    avfmt = '%-16.16s ' + (' ' + colfmt) * 2 + ' %s'
+    avfmt = '%-18.18s' + colfmt + (' ' + colblank) * (2 + len(result.reported)) + (' ' + colfmt) * 2
     reportkeys = sorted(result.reported)
-    print(fmt % (('', 'Logged', 'Payable', 'Reportable', 'Reported') + tuple(reportkeys) + paidkeys + ('',)))
-    print(fmt % (('',) + (colrule,) * (4 + len(reportkeys) + len(paidkeys)) + ('',)))
+    print(fmt % (('', 'Logged', 'Reportable', 'Reported') + tuple(reportkeys) + ('Payable',) + paidkeys + ('',)))
+    print(fmt % (('',) + (colrule,) * (3 + len(reportkeys) + 1 + len(paidkeys)) + ('',)))
     for day in sorted(result.days):
         notes = []
         if day.is_pubhol:
@@ -119,35 +120,35 @@ def print_calendar_report(result):
             notes.append('weekend')
         elif day.is_personal_leave:
             notes.append('personal leave')
-        elif day.paid == 0:
+        elif day.paid_minutes == 0:
             notes.append('unpaid leave')
         reported_minutes = [day.reported[k].sum_labels() if k in day.reported else None for k in reportkeys]
         print(fmt % ((day.date.strftime('%a %_d %b %Y'),
                       format_duration_or_none(day.logged.minutes or None),
-                      format_duration_or_none(day.payable.minutes or None),
                       format_duration_or_none(day.reportable.minutes or None),
                       format_duration_or_none(sum(m or 0 for m in reported_minutes) or None)) +
                       tuple(format_duration_or_none(m) for m in reported_minutes) +
-                      ((format_duration_or_none(day.paid or None),) if paidkeys else ()) +
+                      (format_duration_or_none(day.payable.minutes or None),) +
+                      ((format_duration_or_none(day.paid_minutes or None),) if paidkeys else ()) +
                       (', '.join(notes)[:25],)))
     print(fmt % (('',) + (colrule,) * (4 + len(reportkeys) + len(paidkeys)) + ('',)))
     print(fmt % (('TOTAL',
                   Duration.format(result.logged.minutes),
-                  Duration.format(result.payable.minutes),
                   Duration.format(result.reportable.minutes)) +
                   ('',) * (1 + len(reportkeys)) +
-                  ((format_duration_or_none(result.paid),) if paidkeys else ()) +
+                  (Duration.format(result.payable.minutes),) +
+                  ((format_duration_or_none(result.paid_minutes),) if paidkeys else ()) +
                   ('',)))
     def print_average(days, called):
         if days:
             s = 's' if days != 1 else ''
-            print(avfmt % ('AVERAGE',
+            print(avfmt % ('AVG %u %s day%s' % (days, called, s),
                            Duration.format(result.logged.minutes / days),
                            Duration.format(result.payable.minutes / days),
-                           'per day over %u %s day%s' % (days, called, s)))
-    print_average(result.days_paid, 'paid')
-    print_average(result.days_working, 'working')
+                           Duration.format(result.paid_minutes / days),))
     print_average(result.days_logged, 'logged')
+    print_average(result.days_working, 'work')
+    print_average(result.days_paid, 'paid')
 
 def print_task_report(result):
     w = str(max(map(len, result.all_labels)))
@@ -392,7 +393,7 @@ class Day(object):
         self.is_pubhol = False
         self.is_personal_leave = False
         self.is_weekend = False
-        self.paid = None
+        self.paid_minutes = None
         self.logged = TotalMinutes()
         self.payable = TotalMinutes()
         self.reportable = TotalMinutes()
@@ -418,12 +419,12 @@ class Day(object):
         day.is_pubhol = 'public holiday' in comment
         day.is_personal_leave = 'sick' in comment or 'personal' in comment
         day.is_weekend = day.date.weekday() >= 5
-        day.paid = 0 if day.is_weekend or 'without pay' in comment or 'unpaid' in comment else None
+        day.paid_minutes = 0 if day.is_weekend or 'without pay' in comment or 'unpaid' in comment else None
         cursor.advance()
         for block in Block.parseiter(cursor):
             day.blocks.append(block)
             day.logged += block.totals
-            if block.pay is not None: day.paid = (day.paid or 0) + block.pay
+            if block.pay is not None: day.paid_minutes = (day.paid_minutes or 0) + block.pay
             for label in block.reports:
                 day.reported[label] += block.reports[label]
         return day
@@ -436,7 +437,7 @@ class Result(object):
         self.payable = TotalMinutes()
         self.reportable = TotalMinutes()
         self.reported = defaultdict(TotalMinutes)
-        self.paid = None
+        self.paid_minutes = None
         self.days_paid = 0
         self.days_working = 0
         self.days_logged = 0
@@ -448,7 +449,7 @@ class Result(object):
         self.reportable += other.reportable
         for label in other.reported:
             self.reported[label] += other.reported[label]
-        if other.paid is not None: self.paid = (self.paid or 0) + other.paid
+        if other.paid_minutes is not None: self.paid_minutes = (self.paid_minutes or 0) + other.paid_minutes
         self.days_paid += other.days_paid
         self.days_working += other.days_working
         self.days_logged += other.days_logged
@@ -461,9 +462,9 @@ class Result(object):
         self.reportable += day.reportable
         for label in day.reported:
             self.reported[label] += day.reported[label]
-        if day.paid is not None:
-            self.paid = (self.paid or 0) + day.paid
-        if day.paid:
+        if day.paid_minutes is not None:
+            self.paid_minutes = (self.paid_minutes or 0) + day.paid_minutes
+        if day.paid_minutes:
             self.days_paid += 1
         if not (day.is_pubhol or day.is_personal_leave or day.is_weekend):
             self.days_working += 1
