@@ -118,6 +118,8 @@ def print_calendar_report(result):
             notes.append('public holiday')
         elif day.is_weekend:
             notes.append('weekend')
+        elif day.is_annual_leave:
+            notes.append('annual leave')
         elif day.is_personal_leave:
             notes.append('personal leave')
         elif day.paid_minutes == 0:
@@ -391,6 +393,7 @@ class Day(object):
         self.date = date
         self.blocks = []
         self.is_pubhol = False
+        self.is_annual_leave = False
         self.is_personal_leave = False
         self.is_weekend = False
         self.paid_minutes = None
@@ -417,6 +420,7 @@ class Day(object):
         except ValueError as ex:
             raise ParseError('malformed date: %s' % (ex,), line=line)
         day.is_pubhol = 'public holiday' in comment
+        day.is_annual_leave = 'annual' in comment
         day.is_personal_leave = 'sick' in comment or 'personal' in comment
         day.is_weekend = day.date.weekday() >= 5
         day.paid_minutes = 0 if day.is_weekend or 'without pay' in comment or 'unpaid' in comment else None
@@ -466,7 +470,7 @@ class Result(object):
             self.paid_minutes = (self.paid_minutes or 0) + day.paid_minutes
         if day.paid_minutes:
             self.days_paid += 1
-        if not (day.is_pubhol or day.is_personal_leave or day.is_weekend):
+        if not (day.is_pubhol or day.is_annual_leave or day.is_personal_leave or day.is_weekend):
             self.days_working += 1
         if day.logged:
             self.days_logged += 1
