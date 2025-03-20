@@ -6,3 +6,7 @@ __shellboost_include libsh/searchpath.sh
 
 searchpath_prepend GROFF_TMAC_PATH "$ABO_HOME/tmac"
 export GROFF_TMAC_PATH
+
+# In March 2025, scanimage(1) started using the built-in webcam as its default
+# device, so this avoids having to pass the --device option to bin/scanletter.
+export SANE_DEFAULT_DEVICE='pixma:04A91912_493D23' # CanoScan LiDE 400
