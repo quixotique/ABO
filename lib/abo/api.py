@@ -176,7 +176,7 @@ class API_Account(object):
 
     @property
     def _entries(self):
-        for e in sorted(self._entries_unsorted, key=lambda e: (e.date, e.amount, e.account, e.description)):
+        for e in sorted(self._entries_unsorted, key=lambda e: (e.transaction.date, e.amount, e.account, e.description)):
             yield e
 
     def balance_at(self, date):
