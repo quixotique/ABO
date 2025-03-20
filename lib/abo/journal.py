@@ -456,7 +456,7 @@ class Journal(object):
         amount = self._parse_money(amt) if amt else None
         entries = []
         acc = keyline('acc', optional=True)
-        account = self._parse_account_label(acc.text)
+        account = self._parse_account_label(acc.text.rstrip())
         total = 0
         gst = keyline('gst', optional=True)
         gst_amount = self._parse_money(gst) if gst else None
@@ -502,9 +502,9 @@ class Journal(object):
     def _parse_remittance_receipt(self, firstline, kwargs, keyline, sign):
         amount = self._parse_money(keyline('amt'))
         acc = keyline('acc')
-        account = self._parse_account_label(acc.text)
+        account = self._parse_account_label(acc.text.rstrip())
         bank = keyline('bank')
-        bank_account = self._parse_account_label(bank.text)
+        bank_account = self._parse_account_label(bank.text.rstrip())
         entries = []
         entries.append({'line': acc, 'account': account, 'amount': amount * sign})
         entries.append({'line': bank, 'account': bank_account, 'amount': amount * -sign})
