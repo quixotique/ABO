@@ -187,6 +187,7 @@ class Config(object):
             assert maxw is None or minw <= maxw, 'minw=%r maxw=%r' % (minw, maxw)
             minimum += minw
             natural += natw
+        width = natural
         if self.width: # --width=N option
             if self.width < minimum:
                 raise InvalidOption('--width', 'minimum width is %d' % minimum)
@@ -201,8 +202,6 @@ class Config(object):
                         width = min(width, maxwidth)
             except (ValueError, KeyError):
                 pass
-        else:
-            width = natural
         surplus = width - minimum
         widths = [width]
         for minw, natw, maxw in args:
