@@ -10,15 +10,16 @@ import os
 import os.path
 import errno
 import pickle
+import concurrent.futures
 
 class Cache(object):
 
-    def __init__(self, config, ident, contentfunc, deppaths=(), force=False):
+    def __init__(self, config, opts, ident, deppaths=()):
         self.config = config
+        self.opts = opts
         self.ident = ident
         self.cpath = os.path.join(self.config.cache_dir_path, self.ident.replace('/', '%%'))
-        self.ctime = -1 if force else self.mtime(self.cpath)
-        self.contentfunc = contentfunc
+        self.ctime = -1 if self.opts and self.opts['--force'] else self.mtime(self.cpath)
         self.deppaths = list(deppaths)
         self.content = None
 
@@ -40,7 +41,7 @@ class Cache(object):
             except OSError as e:
                 if e.errno != errno.EEXIST:
                     raise
-            content = self.contentfunc()
+            content = self.make_content()
             pickle.dump(content, open(self.cpath, 'wb'), 2)
             self.ctime = self.mtime(self.cpath)
             self.content = content
@@ -63,58 +64,56 @@ class Cache(object):
 
 class FileCache(Cache):
 
-    def __init__(self, config, path, contentfunc, otherpaths=(), force=False):
+    def __init__(self, config, opts, path, otherpaths=()):
         self.path = os.path.abspath(path)
         super(FileCache, self).__init__(config,
+                                        opts,
                                         os.path.relpath(self.path, config.base_dir_path),
-                                        contentfunc,
-                                        [self.path] + list(otherpaths),
-                                        force=force)
+                                        [self.path] + list(otherpaths))
+
+class ChartCache(FileCache):
+
+    def __init__(self, config, opts):
+        FileCache.__init__(self, config, opts, path=config.chart_file_path, otherpaths=config.journal_file_paths)
+
+    def make_content(self):
+        logging.info("compile %r", self.config.chart_file_path)
+        import abo.account
+        chart = abo.account.Chart.from_file(self.config.open(self.config.chart_file_path))
+        if chart.has_wild_account():
+            # Iterate over all accounts named in all transactions, in order to
+            # instantiate all wild accounts.
+            for t in all_transactions(self.config, self.opts):
+                for e in t.entries:
+                    chart[e.account]
+        return chart
+
+_chart = None
+
+def chart(config, opts=None):
+    global _chart
+    if _chart is None:
+        _chart = ChartCache(config, opts).get()
+    return _chart
 
 class TransactionCache(FileCache):
 
-    def __init__(self, config, path, transaction_iterable, otherpaths=(), force=False):
-        super(TransactionCache, self).__init__(config, path, lambda: list(transaction_iterable), otherpaths, force=force)
+    def __init__(self, config, opts, path):
+        FileCache.__init__(self, config, opts, path, otherpaths=[config.chart_file_path])
 
-    def transactions(self):
-        return self.get()
-
-_chart_cache = None
-
-def chart_cache(config, opts=None):
-    global _chart_cache
-    if _chart_cache is None:
-        def compile_chart():
-            logging.info("compile %r", config.chart_file_path)
-            import abo.account
-            chart = abo.account.Chart.from_file(config.open(config.chart_file_path))
-            if chart.has_wild_account():
-                # Iterate over all accounts named in all transactions, in order to
-                # instantiate all wild accounts.
-                for tc in transaction_caches(chart, config, opts):
-                    for t in tc.transactions():
-                        for e in t.entries:
-                            chart[e.account]
-            return chart
-        _chart_cache = FileCache(config, config.chart_file_path, compile_chart, config.journal_file_paths, force=opts and opts['--force'])
-    return _chart_cache
-
-_transaction_caches = None
-
-def transaction_caches(chart, config, opts=None):
-    global _transaction_caches
-    if _transaction_caches is None:
+    def make_content(self):
         import abo.journal
-        logging.debug("populate transaction caches")
-        _transaction_caches = []
-        for path in config.journal_file_paths:
-            _transaction_caches.append(
-                    TransactionCache(
-                            config,
-                            path,
-                            abo.journal.Journal(config, config.open(path), chart=chart).transactions(),
-                            [config.chart_file_path],
-                            force=opts and opts['--force']
-                        )
-                )
-    return _transaction_caches
+        return list(abo.journal.Journal(self.config, self.config.open(self.path), chart=chart(self.config, self.opts)).transactions())
+
+_all_transactions = None
+
+def all_transactions(config, opts=None):
+    global _all_transactions
+    if _all_transactions is None:
+        logging.debug("instantiate transaction caches")
+        caches = [TransactionCache(config, opts, path) for path in config.journal_file_paths]
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            _all_transactions = []
+            for t in executor.map(Cache.get, caches):
+                _all_transactions += t
+    return _all_transactions

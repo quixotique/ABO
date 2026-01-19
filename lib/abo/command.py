@@ -754,15 +754,13 @@ def cmd_mako(config, opts):
     return ret
 
 def get_chart(config, opts):
-    return abo.cache.chart_cache(config, opts).get()
+    return abo.cache.chart(config, opts)
 
 def transaction_datekey(config, opts):
     return lambda t: (t.edate, t.date) if opts['--effective'] else (t.date, t.edate)
 
 def get_transactions(chart, config, opts):
-    transactions = []
-    for cache in abo.cache.transaction_caches(chart, config, opts):
-        transactions += cache.transactions()
+    transactions = abo.cache.all_transactions(config, opts)
     if opts['--projection']:
         transactions += pay_when_due(chart, transactions)
     else:

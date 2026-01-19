@@ -64,7 +64,7 @@ class API(object):
     def __init__(self, config, opts):
         self.config = config
         self.opts = opts
-        self._chart = abo.cache.chart_cache(self.config, self.opts).get()
+        self._chart = abo.cache.chart(self.config, self.opts)
         self._accounts = dict()
         self.root_account = API_Account(self, None)
         self._invoices = None
@@ -129,9 +129,7 @@ class API(object):
 
     @property
     def _all_transactions(self):
-        transactions = []
-        for cache in abo.cache.transaction_caches(self._chart, self.config, self.opts):
-            transactions += cache.transactions()
+        transactions = abo.cache.all_transactions(self.config, self.opts)
         transactions.sort(key=lambda t: (t.date, t.who or '', t.what or '', -t.amount()))
         return iter(transactions)
 
