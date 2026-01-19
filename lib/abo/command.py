@@ -94,6 +94,7 @@ def cmd_acc(config, opts):
     common_root_account = abo.account.common_root(accounts)
     logging.debug('common_root_account = %r' % common_root_account)
     all_transactions = get_transactions(chart, config, opts)
+    logging.debug(f'{len(all_transactions)} transactions')
     datekey = transaction_datekey(config, opts)
     range, bf, transactions = filter_period(chart, all_transactions, opts)
     if opts['--control']:

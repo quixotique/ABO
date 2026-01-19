@@ -105,15 +105,18 @@ class TransactionCache(FileCache):
         import abo.journal
         return list(abo.journal.Journal(self.config, self.config.open(self.path), chart=chart(self.config, self.opts)).transactions())
 
-_all_transactions = None
+_all_transactions = {}
 
 def all_transactions(config, opts=None):
     global _all_transactions
-    if _all_transactions is None:
-        logging.debug("instantiate transaction caches")
+    key = config.transaction_cache_key()
+    transactions = _all_transactions.get(key)
+    if transactions is None:
         caches = [TransactionCache(config, opts, path) for path in config.journal_file_paths]
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            _all_transactions = []
+            transactions = []
             for t in executor.map(Cache.get, caches):
-                _all_transactions += t
-    return _all_transactions
+                transactions += t
+        logging.debug(f"cache {len(transactions)} transactions")
+        _all_transactions[key] = transactions
+    return transactions

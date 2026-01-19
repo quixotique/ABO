@@ -85,6 +85,13 @@ class Config(object):
         clone.maximum_output_width = self.maximum_output_width.copy()
         return clone
 
+    def transaction_cache_key(self):
+        return (self.base_dir_path,
+                tuple(self.journal_file_paths),
+                tuple(self.checkpoint_file_paths),
+                self.chart_file_path,
+               )
+
     _regex_encoding = re.compile(r'coding[=:]\s*([-\w.]+)', re.MULTILINE)
 
     def detect_encoding(self, path, line_count=10):

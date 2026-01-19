@@ -74,6 +74,7 @@ import locale
 import os
 import os.path
 import shlex
+import multiprocessing
 
 try:
     import abo.config
@@ -106,26 +107,32 @@ def main():
             if len(sys.argv) >= 2 and sys.argv[1] == 'batch':
                 opts = docopt.docopt(__doc__, sys.argv[1:], version=version)
                 setup_debug(opts)
+                # Parse the commands.
+                commands = []
                 commandfile = opts['<commandfile>']
                 with open(commandfile) if commandfile != '-' else sys.stdin as cmdf:
                     for line in cmdf:
-                        line = line.rstrip('\n')
-                        parts = line.rsplit('>', 1)
-                        line = parts[0]
-                        outf = sys.stdout
-                        if len(parts) > 1:
-                            outf = open(parts[1], mode='w')
+                        parts = line.rstrip('\n').rsplit('>', 1)
+                        command = parts[0]
+                        out_path = parts[1] if len(parts) > 1 else None
+                        opts = docopt.docopt(__doc__, shlex.split(command), version=version)
+                        commands.append((command, opts, out_path))
+                # Prime the cache for all the commands.
+                import abo.cache
+                for command, opts, out_path in commands:
+                    abo.cache.all_transactions(config, opts)
+                # Execute the commands using a pool of worker processes.
+                with multiprocessing.Pool() as pool:
+                    for command, opts, out_path in commands:
                         if not opt_quiet:
-                            print(line, file=sys.stderr)
-                        argv = shlex.split(line)
-                        opts = docopt.docopt(__doc__, argv, version=version)
-                        printlines(command(config, opts), file=outf)
-                        if outf is not sys.stdout:
-                            outf.close()
+                            print(command, file=sys.stderr)
+                        pool.apply_async(run_command, (config, opts, out_path))
+                    pool.close()
+                    pool.join()
             else:
                 opts = docopt.docopt(__doc__, sys.argv[1:], version=version)
                 setup_debug(opts)
-                printlines(command(config, opts))
+                run_command(config, opts)
     except:
         if opts and opts['--debug']:
             raise
@@ -154,7 +161,7 @@ def setup_debug(opts):
     else:
         logging.disable(logging.DEBUG)
 
-def command(config, opts):
+def run_command(config, opts, output_path=None):
     import abo.command
     for word, value in opts.items():
         if type(value) is bool and value and hasattr(abo.command, 'cmd_' + word):
@@ -165,7 +172,10 @@ def command(config, opts):
     logging.debug("parsed options, func=%s", func.__name__)
     config = config.clone()
     config.apply_options(opts)
-    return func(config, opts)
+    outf = open(output_path, mode='w') if output_path else sys.stdout
+    printlines(func(config, opts), file=outf)
+    if outf is not sys.stdout:
+        outf.close()
 
 def printlines(output, file=sys.stdout):
     for line in output:
@@ -198,7 +208,7 @@ def compa(config, args):
 
 def compa_accounts(config, word):
     import abo.cache
-    chart = abo.cache.chart_cache(config).get()
+    chart = abo.cache.chart(config)
     for key in chart.keys():
         if key.startswith(word):
             comp = key[len(word):]
@@ -211,7 +221,7 @@ def compa_accounts(config, word):
 
 def compa_tags(config, word):
     import abo.cache
-    chart = abo.cache.chart_cache(config).get()
+    chart = abo.cache.chart(config)
     for tag in chart.tags():
         if tag.startswith(word):
             yield shlex.quote(tag) + ' '
