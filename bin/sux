@@ -21,10 +21,13 @@ run sudo --login --user="$user" rm -f "$home/.Xauthority"
 xauth extract - "$DISPLAY" | run sudo --login --user="$user" /bin/sh -c 'unset XAUTHORITY; xauth merge -'
 unset XAUTHORITY
 
+environment=()
+
 pulse_server=$(pactl info | sed -ne '/^Server String: /s///p')
 chmod_paths=()
 case $pulse_server in
 unix:/* | /*)
+    environment+=("PULSE_SERVER=$pulse_server")
     path="${pulse_server#unix:}"
     path="${path%/*}"
     while [[ -w $path ]]; do
@@ -34,5 +37,10 @@ unix:/* | /*)
     ;;
 esac
 
-run sudo --login --user="$user" "PULSE_SERVER=unix:$pulse_server"
+pipewire_socket=$(systemctl --user status pipewire.socket| sed -ne '/^ *Listen: /{s///; s/ *(.*//; p;}')
+if [[ -S $pipewire_socket ]]; then
+    environment+=("PIPEWIRE_RUNTIME_DIR=${pipewire_socket%/*}")
+fi
+
+run sudo --login --user="$user" "${environment[@]}"
 [[ ${chmod_paths[*]} ]] && run chmod o-x "${chmod_paths[@]}"
