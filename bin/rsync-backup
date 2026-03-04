@@ -7,21 +7,21 @@ set -e -u
 shopt -s extglob nullglob lastpipe
 
 usage() {
-    echo "Usage: Push: ${0##*/} [-n] [-q] [RSYNC-OPTS] [--] [[USER@]HOST:]DESTDIR              LABEL[=SOURCEDIR] ..."
-    echo "       Pull: ${0##*/} [-n] [-q] [RSYNC-OPTS] [--]               DESTDIR [[USER@]HOST:LABEL[=SOURCEDIR] ..."
+    echo "Usage: Push: ${0##*/} [-n] [-q] [-t] [RSYNC-OPTS] [--] [[USER@]HOST:]DESTDIR              LABEL[=SOURCEDIR] ..."
+    echo "       Pull: ${0##*/} [-n] [-q] [-t] [RSYNC-OPTS] [--]               DESTDIR [[USER@]HOST:LABEL[=SOURCEDIR] ..."
 }
 
 main() {
-    OPT_ECHO=true
+    OPT_QUIET=false
     OPT_TEST=false
     OPT_DRY_RUN=false
     OPTS_RSYNC=()
     while [[ $# -ne 0 ]]; do
         case $1 in
         -h|-\?|--help) usage; exit 0;;
-        -t) OPT_TEST=true;;
         -n) OPT_DRY_RUN=true;;
-        -q) OPT_ECHO=false;;
+        -q) OPT_QUIET=true;;
+        -t) OPT_TEST=true;;
         -*) OPTS_RSYNC+=("$1");;
         --) shift; break;;
         *) break;;
@@ -39,7 +39,6 @@ main() {
 
     DATEREXP='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
     DATE=`/bin/date '+%Y-%m-%d'` || exit 2
-    ERR="/tmp/${0##*/}-$$.err"
 
     local PASSWORD=
     if [[ $DESTHOSTFQ != $LOCAL_HOST_FQ ]]; then
@@ -48,7 +47,7 @@ main() {
     fi
 
     local -a SOURCES=()
-    local rsync_output=
+    local destdir_contents=
     local src
     for src; do
         local SRCUSER
@@ -88,11 +87,11 @@ main() {
                 popd >/dev/null
             fi
         else
-            if [[ -z $rsync_output ]]; then
-                rsync_output=$(runalways rsync --password-file - "$DESTUSER@$DESTHOSTFQ::$DESTDIR/" <<<"$PASSWORD") || fatal "rsync failed"
-                [[ -z $rsync_output ]] && rsync_output='empty'
+            if [[ -z $destdir_contents ]]; then
+                destdir_contents=$(runalways rsync --password-file - "$DESTUSER@$DESTHOSTFQ::$DESTDIR/" <<<"$PASSWORD") || fatal "rsync failed"
+                [[ -z $destdir_contents ]] && destdir_contents='empty'
             fi
-            LINK_DEST=$(sed -n -e "/-$DATE-/d;s/^.* \($SRCHOST-$DATEREXP-$SRCLABEL\)\$/\1/p" <<<"$rsync_output" |
+            LINK_DEST=$(sed -n -e "/-$DATE-/d;s/^.* \($SRCHOST-$DATEREXP-$SRCLABEL\)\$/\1/p" <<<"$destdir_contents" |
                          sort -r |
                          head -n 1)
         fi
@@ -112,44 +111,65 @@ main() {
         shift 6
         #echo "SRCUSER=$SRCUSER SRCHOST=$SRCHOST SRCHOSTFQ=$SRCHOSTFQ SRCLABEL=$SRCLABEL LINK_DEST=$LINK_DEST SRCPATH=$SRCPATH"
 
+        local log_filename="${0##*/}.log"
+        local existing_log_tmp="${TMPDIR:-/tmp}/${log_filename%.*}-$$-existing.tmp"
+        local new_log_tmp="${TMPDIR:-/tmp}/${log_filename%.*}-$$-new.tmp"
         local src
         local dst
         local -a opts
+        local -a pw_opts
+
+        rm -f "$existing_log_tmp" "$new_log_tmp"
 
         opts=()
         if $OPT_DRY_RUN; then
             opts+=("--dry-run")
         fi
-
-        src=$SRCPATH
-        if [[ $SRCHOSTFQ != $LOCAL_HOST_FQ ]]; then
-            src=$SRCUSER@$SRCHOSTFQ::$src
+        if $OPT_QUIET; then
+            opts+=("--quiet")
+        else
+            opts+=("--verbose")
         fi
 
-        dst=$DESTDIR/$SRCHOST-$DATE-$SRCLABEL
+        src="$SRCPATH"
+        if [[ $SRCHOSTFQ != $LOCAL_HOST_FQ ]]; then
+            src="$SRCUSER@$SRCHOSTFQ::$src"
+        fi
+
+        dst="$DESTDIR/$SRCHOST-$DATE-$SRCLABEL"
+        pw_opts=()
         if [[ $DESTHOSTFQ != $LOCAL_HOST_FQ ]]; then
-            dst=$DESTUSER@$DESTHOSTFQ::$dst
-            opts+=("--password-file" "-")
+            dst="$DESTUSER@$DESTHOSTFQ::$dst"
+            pw_opts=("--password-file" "-")
+            if grep --quiet "^.* $SRCHOST-$DATE-$SRCLABEL\$" <<<"$destdir_contents"; then
+                runalways rsync --quiet --inplace --ignore-missing-args --password-file - "$dst/$log_filename" "$existing_log_tmp" <<<"$PASSWORD"
+            fi
+        elif [[ -e $dst/$log_filename ]]; then
+            runalways cp "$dst/$log_filename" "$existing_log_tmp"
         fi
 
         if [[ $LINK_DEST ]]; then
             opts+=("--link-dest=../$LINK_DEST/")
         fi
 
-        if ! run rsync --verbose --human-readable \
-                --one-file-system --archive --hard-links --inplace --delete \
-                --exclude '/lost+found' --delete-excluded \
+        if ! run rsync --human-readable \
+                --one-file-system --archive --hard-links --inplace \
+                --log-file="$new_log_tmp" \
+                --exclude '/lost+found' \
                 --filter="dir-merge,- .rsync-backup-exclude" \
-                "${opts[@]}" "${OPTS_RSYNC[@]}" "$src/" "$dst/" \
-                2>"$ERR" <<<"$PASSWORD"
+                --delete --delete-excluded \
+                "${opts[@]}" "${pw_opts[@]}" "${OPTS_RSYNC[@]}" "$src/" "$dst/" \
+                <<<"$PASSWORD"
         then
             rsync_stat=$?
             echo "exit status $rsync_stat"
             return $rsync_stat
         fi
 
-        cat "$ERR" >&2
-        echo
+        [[ -e $new_log_tmp ]] && cat "$new_log_tmp" >>"$existing_log_tmp"
+        if $OPT_TEST || [[ -e $existing_log_tmp ]]; then
+            run rsync --quiet --inplace "${pw_opts[@]}" "$existing_log_tmp" "$dst/$log_filename" <<<"$PASSWORD"
+        fi
     done
 }
 
@@ -206,12 +226,12 @@ fatal_usage() {
 }
 
 runalways() {
-    $OPT_ECHO && log "$@"
+    $OPT_QUIET || log "$@"
     "$@"
 }
 
 run() {
-    $OPT_ECHO && log "$@"
+    $OPT_QUIET || log "$@"
     if ! $OPT_TEST; then
         "$@"
     fi
