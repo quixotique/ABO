@@ -73,8 +73,9 @@ main() {
         root)   SRCPATH=/;;
         home)   SRCPATH=/home;;
         bulk)   SRCPATH=/bulk;;
-        music)  SRCPATH=/bulk/media/Music;;
-        photos) SRCPATH=/bulk/media/Photos;;
+        media)  SRCPATH="$HOME/Media";;
+        music)  SRCPATH="$HOME/Media/Music";;
+        photos) SRCPATH="$HOME/Media/Photos";;
         *)      fatal "unsupported label: $SRCDIR";;
         esac
 
