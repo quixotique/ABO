@@ -616,7 +616,7 @@ class Journal(object):
 
     def _parse_dbcr(self, line):
         entry = {'line': line}
-        word, text = self._popword(str(line.text))
+        word, text = self._popword(line.text)
         assert word, "line.text=%r word=%r" % (line.text, word,)
         entry['account'] = self._parse_account_label(word)
         money = None
@@ -641,7 +641,7 @@ class Journal(object):
         m = cls._regex_word.match(text)
         if m:
             remain = text[m.end(0):].lstrip()
-            return (m.group(1), remain) if m.group(1) else (m.group(2) or '', remain)
+            return (text[m.start(1):m.end(1)], remain) if m.group(1) else (text[m.start(2):m.end(2)] or '', remain)
         return ('', '')
 
     _regex_amount = re.compile(r'\d*\.\d+|\d+')
