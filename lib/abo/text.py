@@ -166,8 +166,12 @@ class numbered_line(str):
 class LineError(ValueError):
 
     def __init__(self, msg, line=None):
-        super(LineError, self).__init__(context_prefix(line) + msg)
         self.line = line
+        self.msg = msg
+        super().__init__(context_prefix(line) + msg)
+
+    def __reduce__(self):
+        return (self.__class__, (self.msg, self.line))
 
 def context_prefix(line, suffix=': '):
     r = []

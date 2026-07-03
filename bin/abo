@@ -136,13 +136,10 @@ def main():
     except:
         if opts and opts['--debug']:
             raise
-        import abo.text
-        import abo.command
+        import abo.cache
         try:
             raise
-        except abo.config.InvalidInput as e:
-            fatal(str(e))
-        except abo.text.LineError as e:
+        except abo.cache.ContentError as e:
             fatal(str(e))
     sys.exit(0)
 

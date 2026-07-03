@@ -131,8 +131,12 @@ import abo.text
 from abo.types import struct
 
 class ParseException(abo.text.LineError):
+
     def __init__(self, source, message):
-        abo.text.LineError.__init__(self, str(message), line=source)
+        super().__init__(str(message), line=source)
+
+    def __reduce__(self):
+        return (self.__class__, (self.line, self.message))
 
 class Journal(object):
 

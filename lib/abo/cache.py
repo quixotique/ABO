@@ -11,6 +11,11 @@ import os.path
 import errno
 import pickle
 import concurrent.futures
+import abo.config
+import abo.text
+
+class ContentError(Exception):
+    pass
 
 class Cache(object):
 
@@ -34,24 +39,29 @@ class Cache(object):
         return self.ctime < self.source_mtime()
 
     def get(self):
-        if self.is_dirty():
-            logging.debug("compile %r" % self.ident)
-            try:
-                os.makedirs(os.path.dirname(self.cpath))
-            except OSError as e:
-                if e.errno != errno.EEXIST:
-                    raise
-            content = self.make_content()
-            pickle.dump(content, open(self.cpath, 'wb'), 2)
-            self.ctime = self.mtime(self.cpath)
-            self.content = content
-        elif self.content is None:
-            try:
-                logging.debug("load %r" % self.cpath)
-                self.content = pickle.load(open(self.cpath, 'rb'))
-            except (pickle.UnpicklingError, UnicodeDecodeError):
-                pass
-        return self.content
+        try:
+            if self.is_dirty():
+                logging.debug("compile %r" % self.ident)
+                try:
+                    os.makedirs(os.path.dirname(self.cpath))
+                except OSError as e:
+                    if e.errno != errno.EEXIST:
+                        raise
+                content = self.make_content()
+                pickle.dump(content, open(self.cpath, 'wb'), 2)
+                self.ctime = self.mtime(self.cpath)
+                self.content = content
+            elif self.content is None:
+                try:
+                    logging.debug("load %r" % self.cpath)
+                    self.content = pickle.load(open(self.cpath, 'rb'))
+                except (pickle.UnpicklingError, UnicodeDecodeError):
+                    pass
+            return self.content
+        except (abo.config.InvalidInput, abo.text.LineError) as e:
+            return ContentError(str(e))
+        except Exception as e:
+            return e
 
     @staticmethod
     def mtime(path):
@@ -115,8 +125,11 @@ def all_transactions(config, opts=None):
         caches = [TransactionCache(config, opts, path) for path in config.journal_file_paths]
         with concurrent.futures.ProcessPoolExecutor() as executor:
             transactions = []
-            for t in executor.map(Cache.get, caches):
-                transactions += t
+            for content in executor.map(Cache.get, caches):
+                if isinstance(content, Exception):
+                    raise content
+                else:
+                    transactions += content
         logging.debug(f"cache {len(transactions)} transactions")
         _all_transactions[key] = transactions
     return transactions
