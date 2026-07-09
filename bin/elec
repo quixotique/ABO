@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+# vim:sw=4 sts=4 et
+# Copyright 2026 Andrew Bettison, All rights reserved
+
+import sys
+import os.path
+import getopt
+import re
+import math
+import datetime
+
+class Cell(object):
+
+    def __init__(self, text, align, hspan):
+        assert isinstance(text, str)
+        assert align in ('<', '>', '^')
+        assert hspan >= 1
+        self.text = text
+        self.align = align
+        self.hspan = hspan
+
+Cell.empty = Cell('', align='<', hspan=1)
+
+class Span(object):
+
+    def __init__(self, row, column):
+        self.row = row
+        self.column = row
+
+class Grid(object):
+
+    def __init__(self):
+        self.cells = {}
+        self.row = 0
+        self.column = 0
+        self.max_row = 0
+        self.max_column = 0
+
+    def down(self):
+        self.row += 1
+        return self
+
+    def new_column(self):
+        if self.row != 0:
+            self.column += 1
+            self.row = 0
+        return self
+
+    def pack(self, text, align='<', hspan=1):
+        for col in range(hspan):
+            self._set_cell(self.row, self.column + col, Cell(text, align, hspan) if col == 0 else Span(self.row, self.column))
+        return self
+
+    def _get_cell(self, row, column):
+        return self.cells.get((row, column), Cell.empty)
+
+    def _set_cell(self, row, column, cell):
+        assert isinstance(cell, (Cell, Span))
+        key = (row, column)
+        assert key not in self.cells
+        self.cells[key] = cell
+        self.max_row = max(self.max_row, row)
+        self.max_column = max(self.max_column, column)
+
+    def print(self):
+        colwid = [0] * (self.max_column + 1)
+        for row in range(0, self.max_row + 1):
+            hspan_cells_remaining = 0
+            hspan_width_remaining = 0
+            for column in range(0, self.max_column + 1):
+                cell = self._get_cell(row, column)
+                if isinstance(cell, Cell):
+                    assert hspan_cells_remaining == 0
+                    hspan_cells_remaining = cell.hspan
+                    hspan_width_remaining = len(cell.text)
+                else:
+                    assert isinstance(cell, Span)
+                    assert hspan_cells_remaining > 0
+                wid = hspan_width_remaining // hspan_cells_remaining
+                hspan_width_remaining -= wid
+                hspan_cells_remaining -= 1
+                colwid[column] = max(colwid[column], wid)
+        def fmt(row, column):
+            cell = self._get_cell(row, column)
+            if isinstance(cell, Span):
+                return ''
+            w = 0
+            for col in range(cell.hspan):
+                w += colwid[column + col]
+            return ("{:" + cell.align + "{}.{}}").format(cell.text, w, w)
+        for row in range(self.max_row + 1):
+            print('  '.join(fmt(row, column) for column in range(0, self.max_column + 1)))
+
+class Tariff(object):
+
+    def __init__(self, title, daily, peak, off_peak, shoulder, feed_in, discount_percent):
+        self.title = title
+        self.daily = daily
+        self.peak = peak
+        self.off_peak = off_peak
+        self.shoulder = shoulder
+        self.feed_in = feed_in
+        self.discount_percent = discount_percent
+
+class Bill(object):
+
+    def __init__(self, title, days, peak_kwh, off_peak_kwh, shoulder_kwh, feed_in_kwh):
+        self.title = title
+        self.days = days
+        self.peak_kwh = peak_kwh
+        self.off_peak_kwh = off_peak_kwh
+        self.shoulder_kwh = shoulder_kwh
+        self.feed_in_kwh = feed_in_kwh
+
+    def adjusted(self, title=None, days=None, peak_kwh=None, off_peak_kwh=None, shoulder_kwh=None, feed_in_kwh=None):
+        return self.__class__(title=title or self.title,
+                              days=self.days + (days or 0),
+                              peak_kwh=self.peak_kwh + (peak_kwh or 0),
+                              off_peak_kwh=self.off_peak_kwh + (off_peak_kwh or 0),
+                              shoulder_kwh=self.shoulder_kwh + (shoulder_kwh or 0),
+                              feed_in_kwh=self.feed_in_kwh + (feed_in_kwh or 0),
+                              )
+
+    def print_labels(self, grid):
+        grid.pack(self.title, align='<', hspan=2).down()
+        grid.pack('Service', align='>').down()
+        grid.pack('Peak', align='>').down()
+        grid.pack('Off-Peak', align='>').down()
+        grid.pack('Shoulder', align='>').down()
+        grid.pack('Feed-in', align='>').down()
+        grid.pack('Discount', align='>').down()
+        grid.pack('TOTAL', align='>').down()
+
+    def print_amounts(self, grid):
+        grid.down()
+        grid.pack(f"{self.days} days", align='>').down()
+        grid.pack(f"{self.peak_kwh:.0f} kWh", align='>').down()
+        grid.pack(f"{self.off_peak_kwh:.0f} kWh", align='>').down()
+        grid.pack(f"{self.shoulder_kwh:.0f} kWh", align='>').down()
+        grid.pack(f"{-self.feed_in_kwh:.0f} kWh", align='>').down()
+        grid.down()
+        grid.down()
+
+    def print(self, grid, tariff):
+        service = tariff.daily * self.days
+        peak = tariff.peak * self.peak_kwh
+        off_peak = tariff.off_peak * self.off_peak_kwh
+        shoulder = tariff.shoulder * self.shoulder_kwh
+        feed_in = tariff.feed_in * self.feed_in_kwh
+        sub_total = service + peak + off_peak + shoulder - feed_in
+        discount = sub_total * tariff.discount_percent / 100.
+        total = sub_total - discount
+        grid.pack(tariff.title, align='>').down()
+        grid.pack('%.2f' % service, align='>').down()
+        grid.pack('%.2f' % peak, align='>').down()
+        grid.pack('%.2f' % off_peak, align='>').down()
+        grid.pack('%.2f' % shoulder, align='>').down()
+        grid.pack('%.2f' % -feed_in, align='>').down()
+        grid.pack('%.2f' % -discount, align='>').down()
+        grid.pack('%.2f' % total, align='>').down()
+
+def main():
+    grid = Grid()
+
+    tariffs = [
+        #                     daily       peak  off-peak  shoulder  feed-in  discount
+        Tariff("Diamond old", 1.094,    0.5445,   0.4015,   0.2738,    0,           2),
+        Tariff("Diamond new", 1.7887,   0.5609,   0.3162,   0.1429,    0,           2),
+        Tariff("Kogan Energy",1.0305,   0.5361,   0.3104,   0.1625,    0.01,        0),
+        Tariff("Lumo Basic",  1.0096,   0.5120,   0.2928,   0.2264,    0.01,        0),
+    ]
+
+    car_off_peak_kwh = 9 * 2.2 * 6
+    car_total_kwh = 149
+
+    bill_q2_2026 = Bill("Winter 1 (total)", 91, 135.79, 153.7, 278.71, 145)
+
+    bill_q2_2026_adjusted = bill_q2_2026.adjusted(
+            title='Winter 1 (household)',
+            off_peak_kwh=-car_off_peak_kwh,
+            shoulder_kwh=-(car_total_kwh - car_off_peak_kwh),
+        )
+
+    bills = [
+        #                          days peak off-peak shoulder  feed-in
+        Bill("Summer",               91,  15,      30,      30,    1880),
+        bill_q2_2026,
+        bill_q2_2026_adjusted,
+        Bill("Winter 2 (projected)", 91,  30,      40,     400,     145),
+        Bill("Winter 3 (projected)", 91,   0,      30,     440,     145),
+    ]
+
+    for bill in bills:
+        bill.print_labels(grid)
+        grid.down()
+
+    grid.new_column()
+    for bill in bills:
+        bill.print_amounts(grid)
+        grid.down()
+
+    for tariff in tariffs:
+        grid.new_column()
+        for bill in bills:
+            bill.print(grid, tariff)
+            grid.down()
+
+    grid.print()
+
+if __name__ == '__main__':
+    main()
