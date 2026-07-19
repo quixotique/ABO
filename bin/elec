@@ -132,6 +132,7 @@ class Bill(object):
         grid.pack('TOTAL', align='>').down()
 
     def print_amounts(self, grid):
+        total_kwh = self.peak_kwh + self.off_peak_kwh + self.shoulder_kwh - self.feed_in_kwh;
         grid.down()
         grid.pack(f"{self.days} days", align='>').down()
         grid.pack(f"{self.peak_kwh:.0f} kWh", align='>').down()
@@ -139,7 +140,7 @@ class Bill(object):
         grid.pack(f"{self.shoulder_kwh:.0f} kWh", align='>').down()
         grid.pack(f"{-self.feed_in_kwh:.0f} kWh", align='>').down()
         grid.down()
-        grid.down()
+        grid.pack(f"{total_kwh:.0f} kWh", align='>').down()
 
     def print(self, grid, tariff):
         service = tariff.daily * self.days
